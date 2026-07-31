@@ -1,0 +1,41 @@
+require('dotenv').config();
+const path = require('path');
+const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
+
+const authRoutes = require('./routes/auth');
+const boardRoutes = require('./routes/board');
+const columnRoutes = require('./routes/columns');
+const cardRoutes = require('./routes/cards');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_consorcio';
+
+app.use(cors());
+app.use(express.json());
+
+// API (auth é pública; as outras exigem login dentro de cada rota)
+app.use('/api/auth', authRoutes);
+app.use('/api/board', boardRoutes);
+app.use('/api/columns', columnRoutes);
+app.use('/api/cards', cardRoutes);
+
+// front-end estático (a pasta public com index.html, css e js)
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+async function start() {
+  try {
+    await mongoose.connect(MONGODB_URI);
+    console.log('Conectado ao MongoDB.');
+    app.listen(PORT, () => {
+      console.log(`Servidor rodando em http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error('Falha ao conectar no MongoDB:', err.message);
+    process.exit(1);
+  }
+}
+
+start();
