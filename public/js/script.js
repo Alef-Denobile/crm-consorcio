@@ -7,7 +7,7 @@
 const API_BASE = '/api';
 
 /* ---------- helpers ---------- */
-const fmtBRL = (n) => new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL', maximumFractionDigits:0 }).format(n || 0);
+const fmtBRL = (n) => new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits:2, maximumFractionDigits:2 }).format(n || 0);
 const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const MESES_CHEIO = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const currentMonthKey = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
@@ -45,9 +45,18 @@ const TEMPS = {
 };
 const TIPOS = {
   aberto:  { label:'Em aberto', color:'var(--ink-soft)', bg:'#EFEFEF' },
-  ganho:   { label:'Ganho',     color:'#FFFFFF',         bg:'var(--green)' },
+  ganho:   { label:'Ganho',     color:'#FFFFFF',         bg:'var(--accent)' },
   perdido: { label:'Perdido',   color:'var(--ink-soft)', bg:'#F0F0F0', strike:true },
 };
+
+/* ---------- cor de destaque personalizável ---------- */
+const ACCENT_PRESETS = ['#141414', '#1D4E89', '#1F4D3A', '#6E1E2B', '#33363B', '#4A2E6F'];
+function getAccentColor(){ return localStorage.getItem('accentColor') || ACCENT_PRESETS[0]; }
+function setAccentColor(cor){
+  localStorage.setItem('accentColor', cor);
+  document.documentElement.style.setProperty('--accent', cor);
+}
+document.documentElement.style.setProperty('--accent', getAccentColor());
 
 /* ---------- sessão / login ---------- */
 function getToken(){ return localStorage.getItem('token'); }
@@ -77,6 +86,7 @@ let newColNameVal = '';
 let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
+let themePanelOpen = false;
 let modalForm = null;        // objeto do cliente sendo editado/criado
 let confirmState = null;     // { message, onConfirm }
 
@@ -271,6 +281,21 @@ function renderApp(){
       <span>seu funil, carta por carta</span>
       <div class="header-user">
         ${currentUser && currentUser.nome ? `<span class="user-name">${esc(currentUser.nome)}</span>` : ''}
+        <div class="theme-wrap">
+          <button class="theme-btn" data-action="toggle-theme-panel" style="background:${getAccentColor()}" title="Personalizar cor do painel"></button>
+          ${themePanelOpen ? `
+            <div class="theme-panel">
+              <div class="theme-panel-title">Cor do painel</div>
+              <div class="theme-swatches">
+                ${ACCENT_PRESETS.map(cor=>`<button class="theme-swatch ${getAccentColor().toLowerCase()===cor.toLowerCase()?'active':''}" data-action="set-accent" data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).join('')}
+              </div>
+              <label class="theme-custom-label">
+                Outra cor
+                <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
+              </label>
+            </div>
+          ` : ''}
+        </div>
         <button class="btn-outline" data-action="logout">Sair</button>
       </div>
     </div>
@@ -419,6 +444,22 @@ function bindAppEvents(){
   const logoutBtn = app.querySelector('[data-action="logout"]');
   if(logoutBtn) logoutBtn.addEventListener('click', logout);
 
+  const themeBtn = app.querySelector('[data-action="toggle-theme-panel"]');
+  if(themeBtn) themeBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    themePanelOpen = !themePanelOpen;
+    renderApp();
+  });
+  app.querySelectorAll('[data-action="set-accent"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      setAccentColor(btn.dataset.color);
+      themePanelOpen = false;
+      renderApp();
+    });
+  });
+  const themeCustomInput = document.getElementById('theme-custom-input');
+  if(themeCustomInput) themeCustomInput.addEventListener('input', (e)=> setAccentColor(e.target.value));
+
   app.querySelectorAll('[data-action="set-month"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ filterMonth = btn.dataset.month || null; renderApp(); });
   });
@@ -514,6 +555,9 @@ function bindAppEvents(){
 function closeMenusOnOutsideClick(e){
   if(openMenuColId && !e.target.closest('.col-menu') && !e.target.closest('[data-action="toggle-col-menu"]')){
     openMenuColId = null; renderApp();
+  }
+  if(themePanelOpen && !e.target.closest('.theme-panel') && !e.target.closest('[data-action="toggle-theme-panel"]')){
+    themePanelOpen = false; renderApp();
   }
 }
 

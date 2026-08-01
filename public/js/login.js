@@ -4,6 +4,9 @@
 const API_BASE = '/api';
 let modo = 'login'; // ou 'register'
 
+// mesma cor de destaque escolhida no painel (guardada no navegador)
+document.documentElement.style.setProperty('--accent', localStorage.getItem('accentColor') || '#141414');
+
 const form = document.getElementById('auth-form');
 const errorBox = document.getElementById('auth-error');
 const submitBtn = document.getElementById('auth-submit');
