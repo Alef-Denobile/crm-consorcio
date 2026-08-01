@@ -87,6 +87,7 @@ let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
 let themePanelOpen = false;
+let dateMenuOpen = false;
 let modalForm = null;        // objeto do cliente sendo editado/criado
 let confirmState = null;     // { message, onConfirm }
 
@@ -304,10 +305,25 @@ function renderApp(){
 
     <div class="tabs">
       <button class="tab-btn ${filterMonth===null?'active':''}" data-action="set-month" data-month="">Geral</button>
-      ${months.map(m=>`<button class="tab-btn ${filterMonth===m?'active':''}" data-action="set-month" data-month="${m}">${monthLabel(m)}</button>`).join('')}
-      <div class="goto-month">
-        <span>Ir para mês:</span>
-        <input type="month" id="goto-month-input" value="${filterMonth||''}" />
+      <div class="date-wrap">
+        <button class="tab-btn ${filterMonth?'active':''}" data-action="toggle-date-menu">
+          📅 ${filterMonth ? monthLabel(filterMonth) : 'Escolher data'}
+        </button>
+        ${dateMenuOpen ? `
+          <div class="date-menu">
+            <div class="date-menu-title">Meses com dados</div>
+            ${months.length ? `
+              <div class="date-menu-list">
+                ${months.map(m=>`<button class="date-menu-item ${filterMonth===m?'active':''}" data-action="set-month" data-month="${m}">${monthLabel(m, true)}</button>`).join('')}
+              </div>
+            ` : `<p class="date-menu-empty">Nenhum mês com dados ainda.</p>`}
+            <div class="date-menu-sep"></div>
+            <label class="date-menu-custom-label">
+              Ir para outro mês
+              <input type="month" id="goto-month-input" value="${filterMonth||''}" />
+            </label>
+          </div>
+        ` : ''}
       </div>
     </div>
 
@@ -460,11 +476,17 @@ function bindAppEvents(){
   const themeCustomInput = document.getElementById('theme-custom-input');
   if(themeCustomInput) themeCustomInput.addEventListener('input', (e)=> setAccentColor(e.target.value));
 
+  const dateMenuBtn = app.querySelector('[data-action="toggle-date-menu"]');
+  if(dateMenuBtn) dateMenuBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    dateMenuOpen = !dateMenuOpen;
+    renderApp();
+  });
   app.querySelectorAll('[data-action="set-month"]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ filterMonth = btn.dataset.month || null; renderApp(); });
+    btn.addEventListener('click', ()=>{ filterMonth = btn.dataset.month || null; dateMenuOpen = false; renderApp(); });
   });
   const gotoInput = document.getElementById('goto-month-input');
-  if(gotoInput) gotoInput.addEventListener('change', (e)=>{ if(e.target.value){ filterMonth = e.target.value; renderApp(); } });
+  if(gotoInput) gotoInput.addEventListener('change', (e)=>{ if(e.target.value){ filterMonth = e.target.value; dateMenuOpen = false; renderApp(); } });
 
   app.querySelectorAll('[data-action="edit-col-name"]').forEach(el=>{
     el.addEventListener('click', ()=>{
@@ -558,6 +580,9 @@ function closeMenusOnOutsideClick(e){
   }
   if(themePanelOpen && !e.target.closest('.theme-panel') && !e.target.closest('[data-action="toggle-theme-panel"]')){
     themePanelOpen = false; renderApp();
+  }
+  if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
+    dateMenuOpen = false; renderApp();
   }
 }
 
