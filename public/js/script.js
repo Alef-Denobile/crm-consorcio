@@ -39,24 +39,32 @@ function abrirWhatsapp(telefone){
 const WA_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.36 2 11.75c0 1.87.52 3.62 1.42 5.12L2 22l5.3-1.38a10.4 10.4 0 0 0 4.7 1.13c5.52 0 10-4.36 10-9.75S17.52 2 12 2Zm5.3 13.88c-.23.62-1.32 1.2-1.82 1.24-.47.05-.9.22-3.02-.63-2.56-1.03-4.2-3.63-4.33-3.8-.13-.17-1.03-1.34-1.03-2.56 0-1.21.65-1.8.88-2.05.23-.24.5-.3.67-.3.17 0 .33 0 .48.01.16.01.36-.06.56.42.23.55.77 1.9.84 2.04.07.14.11.3.02.48-.09.17-.14.28-.27.43-.13.15-.28.33-.4.45-.13.13-.27.27-.12.53.16.27.7 1.13 1.5 1.83 1.03.9 1.9 1.18 2.17 1.31.27.13.43.11.59-.07.16-.18.68-.77.87-1.03.18-.27.36-.22.6-.13.24.09 1.55.72 1.82.85.27.13.45.2.51.31.07.12.07.65-.16 1.27Z"/></svg>`;
 
 const TEMPS = {
-  quente: { label:'Quente', emoji:'🔥', color:'#FFFFFF',      bg:'var(--gold)' },
-  morno:  { label:'Morno',  emoji:'☀️', color:'var(--warm)',  bg:'var(--warm-soft)' },
-  frio:   { label:'Frio',   emoji:'❄️', color:'var(--cold)',  bg:'var(--cold-soft)' },
+  quente: { label:'Quente', emoji:'🔥', color:'var(--gold-text)', bg:'var(--gold)' },
+  morno:  { label:'Morno',  emoji:'☀️', color:'var(--warm)',      bg:'var(--warm-soft)' },
+  frio:   { label:'Frio',   emoji:'❄️', color:'var(--cold)',      bg:'var(--cold-soft)' },
 };
 const TIPOS = {
-  aberto:  { label:'Em aberto', color:'var(--ink-soft)', bg:'#EFEFEF' },
+  aberto:  { label:'Em aberto', color:'var(--ink-soft)', bg:'var(--badge-neutral-bg)' },
   ganho:   { label:'Ganho',     color:'#FFFFFF',         bg:'var(--accent)' },
-  perdido: { label:'Perdido',   color:'var(--ink-soft)', bg:'#F0F0F0', strike:true },
+  perdido: { label:'Perdido',   color:'var(--ink-soft)', bg:'var(--badge-neutral-bg)', strike:true },
 };
 
 /* ---------- cor de destaque personalizável ---------- */
-const ACCENT_PRESETS = ['#141414', '#1D4E89', '#1F4D3A', '#6E1E2B', '#33363B', '#4A2E6F'];
+const ACCENT_PRESETS = ['#141414', '#1D4E89', '#1F4D3A', '#6E1E2B', '#9C6B12', '#4A2E6F'];
 function getAccentColor(){ return localStorage.getItem('accentColor') || ACCENT_PRESETS[0]; }
 function setAccentColor(cor){
   localStorage.setItem('accentColor', cor);
   document.documentElement.style.setProperty('--accent', cor);
 }
 document.documentElement.style.setProperty('--accent', getAccentColor());
+
+/* ---------- modo noturno ---------- */
+function getDarkMode(){ return localStorage.getItem('darkMode') === '1'; }
+function setDarkMode(ligado){
+  localStorage.setItem('darkMode', ligado ? '1' : '0');
+  document.documentElement.setAttribute('data-theme', ligado ? 'dark' : 'light');
+}
+setDarkMode(getDarkMode());
 
 /* ---------- sessão / login ---------- */
 function getToken(){ return localStorage.getItem('token'); }
@@ -86,7 +94,7 @@ let newColNameVal = '';
 let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
-let themePanelOpen = false;
+let settingsPanelOpen = false;
 let dateMenuOpen = false;
 let modalForm = null;        // objeto do cliente sendo editado/criado
 let confirmState = null;     // { message, onConfirm }
@@ -282,18 +290,35 @@ function renderApp(){
       <span>seu funil, carta por carta</span>
       <div class="header-user">
         ${currentUser && currentUser.nome ? `<span class="user-name">${esc(currentUser.nome)}</span>` : ''}
-        <div class="theme-wrap">
-          <button class="theme-btn" data-action="toggle-theme-panel" style="background:${getAccentColor()}" title="Personalizar cor do painel"></button>
-          ${themePanelOpen ? `
-            <div class="theme-panel">
-              <div class="theme-panel-title">Cor do painel</div>
-              <div class="theme-swatches">
-                ${ACCENT_PRESETS.map(cor=>`<button class="theme-swatch ${getAccentColor().toLowerCase()===cor.toLowerCase()?'active':''}" data-action="set-accent" data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).join('')}
+        <div class="settings-wrap">
+          <button class="settings-btn" data-action="toggle-settings-panel" title="Configurações">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
+            </svg>
+          </button>
+          ${settingsPanelOpen ? `
+            <div class="settings-panel">
+              <div class="settings-section">
+                <div class="settings-section-title">Aparência</div>
+                <label class="settings-toggle-row">
+                  <span>Modo noturno</span>
+                  <span class="switch ${getDarkMode()?'on':''}" data-action="toggle-dark-mode">
+                    <span class="switch-knob"></span>
+                  </span>
+                </label>
               </div>
-              <label class="theme-custom-label">
-                Outra cor
-                <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
-              </label>
+              <div class="settings-sep"></div>
+              <div class="settings-section">
+                <div class="settings-section-title">Cor de destaque</div>
+                <div class="theme-swatches">
+                  ${ACCENT_PRESETS.map(cor=>`<button class="theme-swatch ${getAccentColor().toLowerCase()===cor.toLowerCase()?'active':''}" data-action="set-accent" data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).join('')}
+                </div>
+                <label class="theme-custom-label">
+                  Outra cor
+                  <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
+                </label>
+              </div>
             </div>
           ` : ''}
         </div>
@@ -460,16 +485,20 @@ function bindAppEvents(){
   const logoutBtn = app.querySelector('[data-action="logout"]');
   if(logoutBtn) logoutBtn.addEventListener('click', logout);
 
-  const themeBtn = app.querySelector('[data-action="toggle-theme-panel"]');
-  if(themeBtn) themeBtn.addEventListener('click', (e)=>{
+  const settingsBtn = app.querySelector('[data-action="toggle-settings-panel"]');
+  if(settingsBtn) settingsBtn.addEventListener('click', (e)=>{
     e.stopPropagation();
-    themePanelOpen = !themePanelOpen;
+    settingsPanelOpen = !settingsPanelOpen;
+    renderApp();
+  });
+  const darkModeSwitch = app.querySelector('[data-action="toggle-dark-mode"]');
+  if(darkModeSwitch) darkModeSwitch.addEventListener('click', ()=>{
+    setDarkMode(!getDarkMode());
     renderApp();
   });
   app.querySelectorAll('[data-action="set-accent"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       setAccentColor(btn.dataset.color);
-      themePanelOpen = false;
       renderApp();
     });
   });
@@ -578,8 +607,8 @@ function closeMenusOnOutsideClick(e){
   if(openMenuColId && !e.target.closest('.col-menu') && !e.target.closest('[data-action="toggle-col-menu"]')){
     openMenuColId = null; renderApp();
   }
-  if(themePanelOpen && !e.target.closest('.theme-panel') && !e.target.closest('[data-action="toggle-theme-panel"]')){
-    themePanelOpen = false; renderApp();
+  if(settingsPanelOpen && !e.target.closest('.settings-panel') && !e.target.closest('[data-action="toggle-settings-panel"]')){
+    settingsPanelOpen = false; renderApp();
   }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
