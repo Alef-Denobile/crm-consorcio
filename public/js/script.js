@@ -401,6 +401,24 @@ async function deleteColumnById(id){
   }
 }
 
+async function reorderColumns(draggedId, targetId){
+  if(draggedId === targetId) return;
+  const fromIdx = board.columns.findIndex(c=>c.id===draggedId);
+  const toIdx = board.columns.findIndex(c=>c.id===targetId);
+  if(fromIdx===-1 || toIdx===-1) return;
+  const anterior = [...board.columns];
+  const [movida] = board.columns.splice(fromIdx,1);
+  board.columns.splice(toIdx,0,movida);
+  renderApp();
+  try{
+    await Promise.all(board.columns.map((col,idx)=> apiRequest('PUT', `/columns/${col.id}`, { ordem: idx })));
+  }catch(e){
+    board.columns = anterior;
+    errorMsg = 'Não foi possível reordenar as colunas.';
+    renderApp();
+  }
+}
+
 async function addColumn(){
   const nome = newColNameVal.trim();
   addingCol = false;
@@ -730,11 +748,12 @@ function renderColumn(col){
     <div class="column" data-col-id="${col.id}" data-action="col-dropzone">
       <div class="col-head">
         <div class="col-head-top">
-          <span class="grip">⠿</span>
+          <span class="grip" draggable="true" data-action="drag-col-handle" data-col-id="${col.id}" title="Arraste para reordenar">⠿</span>
           ${isEditing
             ? `<input class="col-name-input" id="col-rename-${col.id}" value="${esc(editingColName)}" />`
             : `<span class="col-name" data-action="edit-col-name" data-col-id="${col.id}" title="Clique para renomear">${esc(col.nome)}</span>`
           }
+          <button class="col-add-btn" data-action="open-new-card" data-col-id="${col.id}" title="Adicionar cliente">+</button>
           <button class="col-menu-btn" data-action="toggle-col-menu" data-col-id="${col.id}">▾</button>
         </div>
         <div class="col-meta">
@@ -759,8 +778,6 @@ function renderColumn(col){
       <div class="cards">
         ${cards.length===0 ? '<p class="empty-col">Nenhum cliente aqui ainda</p>' : cards.map(card=>renderCard(card)).join('')}
       </div>
-
-      <button class="add-card-btn" data-action="open-new-card" data-col-id="${col.id}">+ Adicionar cliente</button>
     </div>
   `;
 }
@@ -1072,17 +1089,32 @@ function bindAppEvents(){
   /* drag and drop */
   app.querySelectorAll('.card').forEach(cardEl=>{
     cardEl.addEventListener('dragstart', (e)=>{
-      e.dataTransfer.setData('text/plain', cardEl.dataset.cardId);
+      e.dataTransfer.setData('text/x-crm-card', cardEl.dataset.cardId);
       cardEl.classList.add('dragging');
     });
     cardEl.addEventListener('dragend', ()=> cardEl.classList.remove('dragging'));
+  });
+  app.querySelectorAll('[data-action="drag-col-handle"]').forEach(gripEl=>{
+    gripEl.addEventListener('dragstart', (e)=>{
+      e.stopPropagation();
+      e.dataTransfer.setData('text/x-crm-column', gripEl.dataset.colId);
+      const colEl = gripEl.closest('.column');
+      if(colEl) colEl.classList.add('dragging-col');
+    });
+    gripEl.addEventListener('dragend', (e)=>{
+      e.stopPropagation();
+      const colEl = gripEl.closest('.column');
+      if(colEl) colEl.classList.remove('dragging-col');
+    });
   });
   app.querySelectorAll('.column').forEach(colEl=>{
     colEl.addEventListener('dragover', (e)=> e.preventDefault());
     colEl.addEventListener('drop', (e)=>{
       e.preventDefault();
-      const id = e.dataTransfer.getData('text/plain');
-      if(id) moveCard(id, colEl.dataset.colId);
+      const colId = e.dataTransfer.getData('text/x-crm-column');
+      const cardId = e.dataTransfer.getData('text/x-crm-card');
+      if(colId) reorderColumns(colId, colEl.dataset.colId);
+      else if(cardId) moveCard(cardId, colEl.dataset.colId);
     });
   });
 

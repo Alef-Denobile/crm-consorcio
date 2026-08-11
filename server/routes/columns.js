@@ -27,7 +27,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/columns/:id -> renomeia e/ou muda o tipo (só se for do usuário logado)
+// PUT /api/columns/:id -> renomeia, muda o tipo e/ou a ordem (só se for do usuário logado)
 router.put('/:id', async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
@@ -36,6 +36,7 @@ router.put('/:id', async (req, res) => {
     const updates = {};
     if (typeof req.body.nome === 'string') updates.nome = req.body.nome.trim();
     if (typeof req.body.tipo === 'string') updates.tipo = req.body.tipo;
+    if (typeof req.body.ordem === 'number') updates.ordem = req.body.ordem;
 
     const coluna = await Column.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },
