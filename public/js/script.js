@@ -1,7 +1,8 @@
 /* ================================================================
    Painel do Consórcio — front-end
-   Agora conversa com a API REST (Node/Express + MongoDB) em vez
-   de usar armazenamento local. Toda a UI foi mantida igual.
+   Estrutura com barra lateral (Dashboard / Pipeline / Leads / Tarefas),
+   inspirada no CRM Foco, mantendo tudo que já existia (MongoDB via
+   API REST, modo noturno, cor de destaque, WhatsApp, arraste de cards).
 ================================================================ */
 
 const API_BASE = '/api';
@@ -24,6 +25,12 @@ const maskInteiro = (raw) => {
   return { numero, texto: numero.toLocaleString('pt-BR') };
 };
 const esc = (s='') => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+function formatDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('pt-BR', { timeZone:'UTC' });
+}
 
 // Monta o link wa.me a partir do telefone digitado (aceita com ou sem DDI 55)
 function waLink(telefone){
@@ -38,6 +45,20 @@ function abrirWhatsapp(telefone){
 }
 const WA_ICON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.36 2 11.75c0 1.87.52 3.62 1.42 5.12L2 22l5.3-1.38a10.4 10.4 0 0 0 4.7 1.13c5.52 0 10-4.36 10-9.75S17.52 2 12 2Zm5.3 13.88c-.23.62-1.32 1.2-1.82 1.24-.47.05-.9.22-3.02-.63-2.56-1.03-4.2-3.63-4.33-3.8-.13-.17-1.03-1.34-1.03-2.56 0-1.21.65-1.8.88-2.05.23-.24.5-.3.67-.3.17 0 .33 0 .48.01.16.01.36-.06.56.42.23.55.77 1.9.84 2.04.07.14.11.3.02.48-.09.17-.14.28-.27.43-.13.15-.28.33-.4.45-.13.13-.27.27-.12.53.16.27.7 1.13 1.5 1.83 1.03.9 1.9 1.18 2.17 1.31.27.13.43.11.59-.07.16-.18.68-.77.87-1.03.18-.27.36-.22.6-.13.24.09 1.55.72 1.82.85.27.13.45.2.51.31.07.12.07.65-.16 1.27Z"/></svg>`;
 
+/* ---------- ícones da interface (genéricos, estilo linha) ---------- */
+const ICON_DASHBOARD = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>`;
+const ICON_PIPELINE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="4.5" height="16" rx="1"/><rect x="9.75" y="4" width="4.5" height="10" rx="1"/><rect x="16.5" y="4" width="4.5" height="13" rx="1"/></svg>`;
+const ICON_LEADS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
+const ICON_TASKS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
+const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
+const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
+const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+const ICON_CHECK = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
+const ICON_USERS = ICON_LEADS;
+const ICON_DOLLAR = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
+const ICON_TROPHY = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M17 6h2a2 2 0 0 1 0 4h-2"/><path d="M7 6H5a2 2 0 0 0 0 4h2"/></svg>`;
+const ICON_TREND = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
+
 const TEMPS = {
   quente: { label:'Quente', emoji:'🔥', color:'var(--gold-text)', bg:'var(--gold)' },
   morno:  { label:'Morno',  emoji:'☀️', color:'var(--warm)',      bg:'var(--warm-soft)' },
@@ -47,6 +68,11 @@ const TIPOS = {
   aberto:  { label:'Em aberto', color:'var(--ink-soft)', bg:'var(--badge-neutral-bg)' },
   ganho:   { label:'Ganho',     color:'#FFFFFF',         bg:'var(--accent)' },
   perdido: { label:'Perdido',   color:'var(--ink-soft)', bg:'var(--badge-neutral-bg)', strike:true },
+};
+const PRIORIDADES = {
+  alta:  { label:'Alta',  color:'var(--gold-text)', bg:'var(--gold)' },
+  media: { label:'Média', color:'var(--warm)',       bg:'var(--warm-soft)' },
+  baixa: { label:'Baixa', color:'var(--cold)',       bg:'var(--cold-soft)' },
 };
 
 /* ---------- cor de destaque personalizável ---------- */
@@ -86,9 +112,13 @@ if(!getToken()){
 /* ---------- estado ---------- */
 let currentUser = getCurrentUser();
 let board = { columns: [], cards: [] };
+let tasks = [];
 let loaded = false;
+let tasksLoaded = false;
 let errorMsg = null;
-let filterMonth = null;      // null = Geral
+let currentPage = 'dashboard';   // 'dashboard' | 'pipeline' | 'leads' | 'tarefas'
+let filterMonth = null;          // null = Geral (página Pipeline)
+let dashboardPeriod = 'mes';     // '7dias' | 'mes' | 'trimestre' | 'ano'
 let addingCol = false;
 let newColNameVal = '';
 let editingColId = null;
@@ -96,8 +126,12 @@ let editingColName = '';
 let openMenuColId = null;
 let settingsPanelOpen = false;
 let dateMenuOpen = false;
-let modalForm = null;        // objeto do cliente sendo editado/criado
-let confirmState = null;     // { message, onConfirm }
+let leadsSearch = '';
+let leadsStatusFilter = '';
+let tarefasShowConcluidas = false;
+let modalForm = null;            // objeto do cliente sendo editado/criado
+let taskModalForm = null;        // objeto da tarefa sendo editada/criada
+let confirmState = null;         // { message, onConfirm }
 
 /* ---------- comunicação com a API ---------- */
 async function apiRequest(method, path, body){
@@ -135,8 +169,18 @@ async function loadBoard(){
   loaded = true;
   renderApp();
 }
+async function loadTasks(){
+  try{
+    const data = await apiRequest('GET', '/tasks');
+    tasks = data.tasks;
+  }catch(e){
+    tasks = [];
+  }
+  tasksLoaded = true;
+  renderApp();
+}
 
-/* ---------- derivações ---------- */
+/* ---------- derivações (Pipeline) ---------- */
 function monthsList(){
   const set = new Set([currentMonthKey(), ...board.cards.map(c=>c.mes).filter(Boolean)]);
   return Array.from(set).sort((a,b)=> a<b?1:-1);
@@ -164,7 +208,120 @@ function quentesAtivos(){
   }).length;
 }
 
-/* ---------- mutações (cada uma fala com a API) ---------- */
+/* ---------- derivações (Dashboard) ---------- */
+function periodRange(period){
+  const end = new Date();
+  const start = new Date();
+  if(period === '7dias') start.setDate(start.getDate() - 6);
+  else if(period === 'mes') start.setDate(start.getDate() - 29);
+  else if(period === 'trimestre') start.setDate(start.getDate() - 89);
+  else start.setDate(start.getDate() - 364); // ano
+  start.setHours(0,0,0,0);
+  return { start, end };
+}
+function cardsInPeriod(){
+  const { start, end } = periodRange(dashboardPeriod);
+  return board.cards.filter(c=>{
+    if(!c.createdAt) return false;
+    const d = new Date(c.createdAt);
+    return d >= start && d <= end;
+  });
+}
+function dashMetrics(){
+  const cards = cardsInPeriod();
+  let emNegociacaoValor=0, emNegociacaoCount=0, ganhoValor=0, ganhoCount=0, perdidoCount=0;
+  cards.forEach(c=>{
+    const col = board.columns.find(k=>k.id===c.columnId);
+    if(!col) return;
+    if(col.tipo === 'aberto'){ emNegociacaoValor += Number(c.valor)||0; emNegociacaoCount++; }
+    else if(col.tipo === 'ganho'){ ganhoValor += Number(c.valor)||0; ganhoCount++; }
+    else if(col.tipo === 'perdido'){ perdidoCount++; }
+  });
+  const fechados = ganhoCount + perdidoCount;
+  const conversao = fechados > 0 ? Math.round((ganhoCount/fechados)*100) : 0;
+  return { novosLeads: cards.length, emNegociacaoValor, emNegociacaoCount, ganhoValor, ganhoCount, conversao };
+}
+function stageTotals(){
+  return board.columns.map(col=>{
+    const total = board.cards.filter(c=>c.columnId===col.id).reduce((s,c)=> s+(Number(c.valor)||0), 0);
+    return { col, total };
+  });
+}
+function leadsPorPeriodoBuckets(){
+  const { start, end } = periodRange(dashboardPeriod);
+  const cards = cardsInPeriod();
+  const totalDays = Math.max(1, Math.round((end-start)/86400000)+1);
+  const bucketDays = totalDays > 40 ? 7 : 1;
+  const buckets = [];
+  for(let t=new Date(start); t<=end; t.setDate(t.getDate()+bucketDays)){
+    buckets.push({ date:new Date(t), count:0 });
+  }
+  if(!buckets.length) buckets.push({ date:new Date(start), count:0 });
+  cards.forEach(c=>{
+    const d = new Date(c.createdAt);
+    for(let i=buckets.length-1;i>=0;i--){
+      if(d >= buckets[i].date){ buckets[i].count++; break; }
+    }
+  });
+  return buckets;
+}
+function renderLeadsChart(){
+  const buckets = leadsPorPeriodoBuckets();
+  if(!buckets.some(b=>b.count>0)){
+    return `<p class="chart-empty">Nenhum lead captado nesse período ainda.</p>`;
+  }
+  const w=720, h=220, padL=32, padR=12, padT=12, padB=26;
+  const innerW = w-padL-padR, innerH = h-padT-padB;
+  const maxCount = Math.max(4, ...buckets.map(b=>b.count));
+  const stepX = buckets.length>1 ? innerW/(buckets.length-1) : 0;
+  const points = buckets.map((b,i)=>({
+    x: padL + stepX*i,
+    y: padT + innerH - (b.count/maxCount)*innerH,
+    b,
+  }));
+  const path = points.map((p,i)=> (i===0?'M':'L')+p.x.toFixed(1)+' '+p.y.toFixed(1)).join(' ');
+  const yTicks = 4;
+  const yLabels = Array.from({length:yTicks+1}, (_,i)=> Math.round(maxCount - (maxCount/yTicks)*i));
+  const xLabelEvery = Math.max(1, Math.ceil(buckets.length/8));
+  return `
+    <div class="chart-wrap">
+      <svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
+        ${yLabels.map((v,i)=>{
+          const y = padT + (innerH/yTicks)*i;
+          return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="var(--line)" stroke-width="1"/><text x="${padL-8}" y="${y+4}" font-size="10" fill="var(--ink-soft)" text-anchor="end">${v}</text>`;
+        }).join('')}
+        <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        ${points.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="var(--accent)"/>`).join('')}
+        ${points.map((p,i)=> i % xLabelEvery === 0 ? `<text x="${p.x.toFixed(1)}" y="${h-6}" font-size="9" fill="var(--ink-soft)" text-anchor="middle">${p.b.date.getDate()}/${p.b.date.getMonth()+1}</text>` : '').join('')}
+      </svg>
+    </div>
+  `;
+}
+
+/* ---------- derivações (Leads) ---------- */
+function filteredLeads(){
+  let list = board.cards;
+  if(leadsStatusFilter) list = list.filter(c=>c.columnId===leadsStatusFilter);
+  if(leadsSearch.trim()){
+    const q = leadsSearch.trim().toLowerCase();
+    list = list.filter(c=> (c.cliente||'').toLowerCase().includes(q) || (c.telefone||'').toLowerCase().includes(q));
+  }
+  return list;
+}
+
+/* ---------- navegação entre páginas ---------- */
+function goToPage(page){
+  if(currentPage === page) return;
+  currentPage = page;
+  settingsPanelOpen = false;
+  dateMenuOpen = false;
+  openMenuColId = null;
+  addingCol = false;
+  editingColId = null;
+  renderApp();
+}
+
+/* ---------- mutações: colunas e cards (cada uma fala com a API) ---------- */
 async function moveCard(cardId, columnId){
   const card = board.cards.find(c=>c.id===cardId);
   if(!card || card.columnId===columnId) return;
@@ -277,25 +434,108 @@ async function saveCardFromModal(){
   renderApp();
 }
 
-/* ---------- render: app (colunas, estatísticas, abas) ---------- */
+/* ---------- mutações: tarefas ---------- */
+async function saveTaskFromModal(){
+  if(!taskModalForm.titulo.trim()) return;
+  const { __isNew, id, ...dados } = taskModalForm;
+  if(!dados.leadId) dados.leadId = null;
+  try{
+    if(__isNew){
+      const nova = await apiRequest('POST', '/tasks', dados);
+      tasks.push(nova);
+    } else {
+      const atualizada = await apiRequest('PUT', `/tasks/${id}`, dados);
+      const idx = tasks.findIndex(t=>t.id===id);
+      if(idx>-1) tasks[idx] = atualizada;
+    }
+    closeTaskModal();
+  }catch(e){
+    errorMsg = 'Não foi possível salvar a tarefa.';
+  }
+  renderApp();
+}
+
+async function deleteTaskById(id){
+  const idx = tasks.findIndex(t=>t.id===id);
+  if(idx===-1) return;
+  const [removida] = tasks.splice(idx,1);
+  renderApp();
+  try{
+    await apiRequest('DELETE', `/tasks/${id}`);
+  }catch(e){
+    tasks.splice(idx,0,removida);
+    errorMsg = 'Não foi possível excluir a tarefa.';
+    renderApp();
+  }
+}
+
+async function toggleTaskConcluida(id){
+  const task = tasks.find(t=>t.id===id);
+  if(!task) return;
+  task.concluida = !task.concluida; // otimista
+  renderApp();
+  try{
+    const atualizada = await apiRequest('PUT', `/tasks/${id}/toggle`);
+    const idx = tasks.findIndex(t=>t.id===id);
+    if(idx>-1) tasks[idx] = atualizada;
+  }catch(e){
+    task.concluida = !task.concluida;
+    errorMsg = 'Não foi possível atualizar a tarefa.';
+    renderApp();
+  }
+}
+
+/* ---------- render: shell (barra lateral + página atual) ---------- */
 function renderApp(){
   const app = document.getElementById('app');
   if(!loaded){ app.innerHTML = '<div class="loading">Carregando painel…</div>'; return; }
 
-  const months = monthsList();
+  let pageHtml = '';
+  if(currentPage === 'dashboard') pageHtml = renderDashboardPage();
+  else if(currentPage === 'pipeline') pageHtml = renderPipelinePage();
+  else if(currentPage === 'leads') pageHtml = renderLeadsPage();
+  else if(currentPage === 'tarefas') pageHtml = renderTarefasPage();
 
   app.innerHTML = `
-    <div class="header">
-      <h1>Painel do Consórcio</h1>
-      <span>seu funil, carta por carta</span>
-      <div class="header-user">
+    <div class="app-shell">
+      ${renderSidebar()}
+      <div class="main-area">
+        ${errorMsg ? `<div class="error-banner" data-action="dismiss-error" title="Clique para fechar">⚠ ${esc(errorMsg)}</div>` : ''}
+        ${pageHtml}
+      </div>
+    </div>
+  `;
+
+  bindAppEvents();
+}
+
+function renderSidebar(){
+  const NAV = [
+    ['dashboard', 'Dashboard', ICON_DASHBOARD],
+    ['pipeline', 'Pipeline', ICON_PIPELINE],
+    ['leads', 'Leads', ICON_LEADS],
+    ['tarefas', 'Tarefas', ICON_TASKS],
+  ];
+  return `
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="sidebar-logo">◎</span>
+        <span class="sidebar-brand-name">Painel do Consórcio</span>
+      </div>
+      <nav class="sidebar-nav">
+        ${NAV.map(([key,label,icon])=>`
+          <button class="nav-item ${currentPage===key?'active':''}" data-action="nav" data-page="${key}">${icon}<span>${label}</span></button>
+        `).join('')}
+      </nav>
+      <div class="sidebar-footer">
         ${currentUser && currentUser.nome ? `<span class="user-name">${esc(currentUser.nome)}</span>` : ''}
         <div class="settings-wrap">
           <button class="settings-btn" data-action="toggle-settings-panel" title="Configurações">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="3"/>
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
             </svg>
+            <span>Configurações</span>
           </button>
           ${settingsPanelOpen ? `
             <div class="settings-panel">
@@ -322,11 +562,105 @@ function renderApp(){
             </div>
           ` : ''}
         </div>
-        <button class="btn-outline" data-action="logout">Sair</button>
+        <button class="nav-item logout-item" data-action="logout">${ICON_LOGOUT}<span>Sair</span></button>
+      </div>
+    </aside>
+  `;
+}
+
+/* ---------- página: Dashboard ---------- */
+function renderDashboardPage(){
+  const m = dashMetrics();
+  const stages = stageTotals();
+  const maxStage = Math.max(1, ...stages.map(s=>s.total));
+  const recentes = [...cardsInPeriod()].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0)).slice(0,5);
+  const abertas = tasksLoaded ? tasks.filter(t=>!t.concluida).sort((a,b)=> new Date(a.vencimento||'2999-01-01') - new Date(b.vencimento||'2999-01-01')).slice(0,5) : [];
+
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Dashboard</h1>
+        <p>Visão geral do seu funil de vendas</p>
+      </div>
+      <div class="period-toggle">
+        ${[['7dias','7 dias'],['mes','Mês'],['trimestre','Trimestre'],['ano','Ano']].map(([key,label])=>`
+          <button class="tab-btn ${dashboardPeriod===key?'active':''}" data-action="set-dash-period" data-period="${key}">${label}</button>
+        `).join('')}
       </div>
     </div>
 
-    ${errorMsg ? `<div class="error-banner" data-action="dismiss-error" title="Clique para fechar">⚠ ${esc(errorMsg)}</div>` : ''}
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-card-top"><span>Novos leads</span><span class="metric-icon">${ICON_USERS}</span></div>
+        <div class="metric-value">${m.novosLeads}</div>
+        <div class="metric-sub">no período</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-top"><span>Em negociação</span><span class="metric-icon">${ICON_DOLLAR}</span></div>
+        <div class="metric-value">${fmtBRL(m.emNegociacaoValor)}</div>
+        <div class="metric-sub">${m.emNegociacaoCount} ${m.emNegociacaoCount===1?'negócio':'negócios'}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-top"><span>Ganho</span><span class="metric-icon">${ICON_TROPHY}</span></div>
+        <div class="metric-value">${fmtBRL(m.ganhoValor)}</div>
+        <div class="metric-sub">${m.ganhoCount} fechados</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-top"><span>Conversão</span><span class="metric-icon">${ICON_TREND}</span></div>
+        <div class="metric-value">${m.conversao}%</div>
+        <div class="metric-sub">ganhos / fechados</div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="dash-panel">
+        <div class="dash-panel-title">Leads captados</div>
+        ${renderLeadsChart()}
+      </div>
+      <div class="dash-panel">
+        <div class="dash-panel-title">Pipeline por etapa</div>
+        <div class="stage-list">
+          ${stages.length ? stages.map(s=>`
+            <div class="stage-row">
+              <div class="stage-row-top"><span>${esc(s.col.nome)}</span><span>${fmtBRL(s.total)}</span></div>
+              <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${maxStage ? (s.total/maxStage*100) : 0}%"></div></div>
+            </div>
+          `).join('') : '<p class="dash-empty">Nenhuma coluna criada ainda.</p>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="dash-panel">
+        <div class="dash-panel-title">Últimos leads</div>
+        ${recentes.length ? `<div class="recent-list">${recentes.map(c=>`
+          <div class="recent-item"><span class="recent-name">${esc(c.cliente) || 'Sem nome'}</span><span class="recent-value">${fmtBRL(c.valor)}</span></div>
+        `).join('')}</div>` : '<p class="dash-empty">Nenhum lead neste período.</p>'}
+      </div>
+      <div class="dash-panel">
+        <div class="dash-panel-title">Tarefas abertas</div>
+        ${abertas.length ? `<div class="recent-list">${abertas.map(t=>`
+          <div class="task-mini-item">
+            <span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>
+            <span class="task-mini-title">${esc(t.titulo)}</span>
+            ${t.vencimento ? `<span class="metric-sub">${formatDate(t.vencimento)}</span>` : ''}
+          </div>
+        `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>'}
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- página: Pipeline (o quadro kanban, como já era) ---------- */
+function renderPipelinePage(){
+  const months = monthsList();
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Pipeline</h1>
+        <p>Arraste os clientes para mudar de coluna</p>
+      </div>
+    </div>
 
     <div class="tabs">
       <button class="tab-btn ${filterMonth===null?'active':''}" data-action="set-month" data-month="">Geral</button>
@@ -383,8 +717,6 @@ function renderApp(){
       </div>
     </main>
   `;
-
-  bindAppEvents();
 }
 
 function renderColumn(col){
@@ -475,7 +807,113 @@ function renderCard(card){
   `;
 }
 
-/* ---------- eventos do board ---------- */
+/* ---------- página: Leads ---------- */
+function renderLeadsPage(){
+  const leads = filteredLeads();
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Leads</h1>
+        <p>${board.cards.length} ${board.cards.length===1?'contato':'contatos'} na sua base</p>
+      </div>
+      <button class="btn-primary" data-action="open-new-lead">+ Novo lead</button>
+    </div>
+
+    <div class="leads-toolbar">
+      <input type="text" class="leads-search" id="leads-search-input" placeholder="Buscar por nome ou telefone" value="${esc(leadsSearch)}" />
+      <select class="leads-filter" id="leads-status-filter">
+        <option value="">Todos os status</option>
+        ${board.columns.map(c=>`<option value="${c.id}" ${leadsStatusFilter===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+      </select>
+    </div>
+
+    <div class="leads-table-wrap">
+      <table class="leads-table">
+        <thead>
+          <tr><th>Nome</th><th>Contato</th><th>Etapa</th><th>Valor</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${leads.length ? leads.map(c=>{
+            const col = board.columns.find(k=>k.id===c.columnId);
+            const tipo = col ? (TIPOS[col.tipo] || TIPOS.aberto) : TIPOS.aberto;
+            return `
+              <tr class="clickable" data-action="open-edit-card" data-card-id="${c.id}">
+                <td>${esc(c.cliente) || 'Sem nome'}</td>
+                <td>${c.telefone ? esc(c.telefone) : '—'}</td>
+                <td><span class="badge" style="color:${tipo.color};background:${tipo.bg};${tipo.strike?'text-decoration:line-through;':''}">${col ? esc(col.nome) : '—'}</span></td>
+                <td>${fmtBRL(c.valor)}</td>
+                <td>
+                  <div class="leads-row-actions">
+                    ${c.telefone ? `<button class="icon-btn" data-action="open-whatsapp" data-phone="${esc(c.telefone)}" title="WhatsApp">${WA_ICON}</button>` : ''}
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('') : `<tr class="leads-empty-row"><td colspan="5">Nenhum lead encontrado. Cadastre o primeiro no botão "Novo lead".</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+/* ---------- página: Tarefas ---------- */
+function renderTarefasPage(){
+  if(!tasksLoaded){
+    return `<div class="page-head"><div><h1>Tarefas</h1><p>Carregando…</p></div></div>`;
+  }
+  const list = tasks
+    .filter(t=> tarefasShowConcluidas ? true : !t.concluida)
+    .sort((a,b)=>{
+      if(a.concluida !== b.concluida) return a.concluida ? 1 : -1;
+      return new Date(a.vencimento||'2999-01-01') - new Date(b.vencimento||'2999-01-01');
+    });
+  const pendentes = tasks.filter(t=>!t.concluida).length;
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Tarefas</h1>
+        <p>${pendentes} pendente${pendentes===1?'':'s'}</p>
+      </div>
+      <button class="btn-primary" data-action="open-new-task">+ Nova tarefa</button>
+    </div>
+
+    <label class="tasks-toolbar">
+      <span class="check-circle ${tarefasShowConcluidas?'checked':''}" data-action="toggle-show-concluidas">${tarefasShowConcluidas?ICON_CHECK:''}</span>
+      Mostrar concluídas
+    </label>
+
+    ${list.length ? `
+      <div class="tasks-list">
+        ${list.map(t=>{
+          const p = PRIORIDADES[t.prioridade] || PRIORIDADES.media;
+          const lead = t.leadId ? board.cards.find(c=>c.id===t.leadId) : null;
+          return `
+            <div class="task-row ${t.concluida?'done':''}">
+              <span class="check-circle ${t.concluida?'checked':''}" data-action="toggle-task" data-task-id="${t.id}">${t.concluida?ICON_CHECK:''}</span>
+              <div class="task-row-body">
+                <div class="task-row-top">
+                  <span class="task-row-title">${esc(t.titulo)}</span>
+                  <span class="badge" style="color:${p.color};background:${p.bg}">${p.label}</span>
+                </div>
+                <div class="task-row-meta">
+                  ${t.vencimento ? `<span>📅 ${formatDate(t.vencimento)}</span>` : ''}
+                  ${lead ? `<span>👤 ${esc(lead.cliente)}</span>` : ''}
+                </div>
+                ${t.descricao ? `<div class="task-row-desc">${esc(t.descricao)}</div>` : ''}
+              </div>
+              <div class="task-row-actions">
+                <button class="icon-btn" data-action="open-edit-task" data-task-id="${t.id}" title="Editar">${ICON_EDIT}</button>
+                <button class="icon-btn" data-action="delete-task" data-task-id="${t.id}" title="Excluir">${ICON_TRASH}</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : `<div class="tasks-empty">Nenhuma tarefa por aqui.</div>`}
+  `;
+}
+
+/* ---------- eventos ---------- */
 function bindAppEvents(){
   const app = document.getElementById('app');
 
@@ -484,6 +922,10 @@ function bindAppEvents(){
 
   const logoutBtn = app.querySelector('[data-action="logout"]');
   if(logoutBtn) logoutBtn.addEventListener('click', logout);
+
+  app.querySelectorAll('[data-action="nav"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> goToPage(btn.dataset.page));
+  });
 
   const settingsBtn = app.querySelector('[data-action="toggle-settings-panel"]');
   if(settingsBtn) settingsBtn.addEventListener('click', (e)=>{
@@ -505,6 +947,47 @@ function bindAppEvents(){
   const themeCustomInput = document.getElementById('theme-custom-input');
   if(themeCustomInput) themeCustomInput.addEventListener('input', (e)=> setAccentColor(e.target.value));
 
+  /* -- Dashboard -- */
+  app.querySelectorAll('[data-action="set-dash-period"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ dashboardPeriod = btn.dataset.period; renderApp(); });
+  });
+
+  /* -- tarefas (usado no Dashboard e na página Tarefas) -- */
+  app.querySelectorAll('[data-action="toggle-task"]').forEach(el=>{
+    el.addEventListener('click', ()=> toggleTaskConcluida(el.dataset.taskId));
+  });
+  const openNewTaskBtn = app.querySelector('[data-action="open-new-task"]');
+  if(openNewTaskBtn) openNewTaskBtn.addEventListener('click', openNewTask);
+  app.querySelectorAll('[data-action="open-edit-task"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openEditTask(btn.dataset.taskId));
+  });
+  app.querySelectorAll('[data-action="delete-task"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.taskId;
+      showConfirm({
+        message: 'Excluir esta tarefa? Essa ação não pode ser desfeita.',
+        onConfirm: ()=>{ deleteTaskById(id); closeConfirm(); },
+      });
+    });
+  });
+  const toggleConcluidasEl = app.querySelector('[data-action="toggle-show-concluidas"]');
+  if(toggleConcluidasEl) toggleConcluidasEl.addEventListener('click', ()=>{ tarefasShowConcluidas = !tarefasShowConcluidas; renderApp(); });
+
+  /* -- Leads -- */
+  const openNewLeadBtn = app.querySelector('[data-action="open-new-lead"]');
+  if(openNewLeadBtn) openNewLeadBtn.addEventListener('click', ()=> openNewCard());
+  const leadsSearchInput = document.getElementById('leads-search-input');
+  if(leadsSearchInput) leadsSearchInput.addEventListener('input', (e)=>{
+    const cursorPos = e.target.selectionStart;
+    leadsSearch = e.target.value;
+    renderApp();
+    const novoInput = document.getElementById('leads-search-input');
+    if(novoInput){ novoInput.focus(); novoInput.setSelectionRange(cursorPos, cursorPos); }
+  });
+  const leadsFilterSelect = document.getElementById('leads-status-filter');
+  if(leadsFilterSelect) leadsFilterSelect.addEventListener('change', (e)=>{ leadsStatusFilter = e.target.value; renderApp(); });
+
+  /* -- Pipeline: filtro de data -- */
   const dateMenuBtn = app.querySelector('[data-action="toggle-date-menu"]');
   if(dateMenuBtn) dateMenuBtn.addEventListener('click', (e)=>{
     e.stopPropagation();
@@ -517,6 +1000,7 @@ function bindAppEvents(){
   const gotoInput = document.getElementById('goto-month-input');
   if(gotoInput) gotoInput.addEventListener('change', (e)=>{ if(e.target.value){ filterMonth = e.target.value; dateMenuOpen = false; renderApp(); } });
 
+  /* -- Pipeline: colunas -- */
   app.querySelectorAll('[data-action="edit-col-name"]').forEach(el=>{
     el.addEventListener('click', ()=>{
       editingColId = el.dataset.colId;
@@ -558,6 +1042,7 @@ function bindAppEvents(){
     });
   });
 
+  /* -- Pipeline / Leads: cards -- */
   app.querySelectorAll('[data-action="open-new-card"]').forEach(btn=>{
     btn.addEventListener('click', ()=> openNewCard(btn.dataset.colId));
   });
@@ -617,8 +1102,9 @@ function closeMenusOnOutsideClick(e){
 
 /* ---------- modal do cliente ---------- */
 function openNewCard(columnId){
+  const colId = columnId || ((board.columns.find(c=>c.tipo==='aberto') || board.columns[0] || {}).id);
   modalForm = {
-    __isNew: true, id:null, columnId,
+    __isNew: true, id:null, columnId: colId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
     mes: filterMonth || currentMonthKey(),
   };
@@ -742,6 +1228,92 @@ function renderModal(){
   }
 }
 
+/* ---------- modal da tarefa ---------- */
+function openNewTask(){
+  taskModalForm = { __isNew:true, id:null, titulo:'', vencimento:'', prioridade:'media', leadId:'', descricao:'' };
+  renderTaskModal();
+}
+function openEditTask(id){
+  const t = tasks.find(x=>x.id===id);
+  if(!t) return;
+  taskModalForm = { ...t, __isNew:false, vencimento: t.vencimento ? t.vencimento.slice(0,10) : '', leadId: t.leadId || '' };
+  renderTaskModal();
+}
+function closeTaskModal(){ taskModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+
+function renderTaskModal(){
+  const root = document.getElementById('modal-root');
+  if(!taskModalForm){ root.innerHTML=''; return; }
+  const f = taskModalForm;
+
+  root.innerHTML = `
+    <div class="overlay" id="task-modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>${f.__isNew ? 'Nova tarefa' : 'Editar tarefa'}</h3>
+          <button id="task-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Título</label>
+            <input type="text" id="t-titulo" value="${esc(f.titulo)}" placeholder="Ex: Ligar para cliente" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Vencimento</label>
+              <input type="date" id="t-vencimento" value="${f.vencimento||''}" />
+            </div>
+            <div class="field">
+              <label>Prioridade</label>
+              <select id="t-prioridade">
+                ${Object.entries(PRIORIDADES).map(([key,p])=>`<option value="${key}" ${f.prioridade===key?'selected':''}>${p.label}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Lead relacionado</label>
+            <select id="t-lead">
+              <option value="">Sem lead</option>
+              ${board.cards.map(c=>`<option value="${c.id}" ${f.leadId===c.id?'selected':''}>${esc(c.cliente) || 'Sem nome'}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Descrição</label>
+            <textarea id="t-descricao" rows="3" placeholder="Detalhes da tarefa...">${esc(f.descricao||'')}</textarea>
+          </div>
+        </div>
+        <div class="modal-foot">
+          ${!f.__isNew ? `<button class="delete-link" id="t-delete">🗑 Excluir</button>` : '<span></span>'}
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="t-cancel">Cancelar</button>
+            <button class="btn-save" id="t-save">Salvar tarefa</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('task-modal-close').addEventListener('click', closeTaskModal);
+  document.getElementById('t-cancel').addEventListener('click', closeTaskModal);
+  document.getElementById('task-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='task-modal-overlay') closeTaskModal(); });
+
+  document.getElementById('t-titulo').addEventListener('input', (e)=> taskModalForm.titulo = e.target.value);
+  document.getElementById('t-vencimento').addEventListener('change', (e)=> taskModalForm.vencimento = e.target.value);
+  document.getElementById('t-prioridade').addEventListener('change', (e)=> taskModalForm.prioridade = e.target.value);
+  document.getElementById('t-lead').addEventListener('change', (e)=> taskModalForm.leadId = e.target.value);
+  document.getElementById('t-descricao').addEventListener('input', (e)=> taskModalForm.descricao = e.target.value);
+
+  document.getElementById('t-save').addEventListener('click', saveTaskFromModal);
+  if(!f.__isNew){
+    document.getElementById('t-delete').addEventListener('click', ()=>{
+      showConfirm({
+        message: 'Excluir esta tarefa? Essa ação não pode ser desfeita.',
+        onConfirm: ()=>{ deleteTaskById(f.id); closeTaskModal(); closeConfirm(); },
+      });
+    });
+  }
+}
+
 /* ---------- confirmação genérica ---------- */
 function showConfirm({ message, onConfirm }){
   confirmState = { message, onConfirm };
@@ -764,4 +1336,7 @@ function showConfirm({ message, onConfirm }){
 function closeConfirm(){ confirmState = null; document.getElementById('confirm-root').innerHTML=''; }
 
 /* ---------- start ---------- */
-if(getToken()) loadBoard();
+if(getToken()){
+  loadBoard();
+  loadTasks();
+}
