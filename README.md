@@ -67,11 +67,50 @@ crm-consorcio/
   aparecem para outro.
 - O botão "Sair" no painel apaga o token e volta pra tela de login.
 
+## Configurar o "Continuar com Google" (opcional)
+
+O botão já está pronto no código, mas precisa de um Client ID seu pra
+funcionar — sem isso, ele mostra uma mensagem discreta em vez do botão.
+
+1. Acesse o [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+   e crie um projeto (ou use um existente).
+2. Configure a "Tela de consentimento OAuth" (tipo "Externo" funciona
+   para a maioria dos casos).
+3. Em "Credenciais" → "Criar credenciais" → "ID do cliente OAuth":
+   - Tipo de aplicativo: **Aplicativo da Web**
+   - Em "Origens JavaScript autorizadas", adicione a URL do seu site
+     (ex: `https://seudominio.com.br` e, para testar local,
+     `http://localhost:3000`)
+4. Copie o Client ID gerado (termina em `.apps.googleusercontent.com`).
+5. Cole em dois lugares:
+   - No `.env` do servidor: `GOOGLE_CLIENT_ID=seu-client-id-aqui`
+   - No arquivo `public/js/login.js`, na linha que diz
+     `const GOOGLE_CLIENT_ID = 'COLOQUE_SEU_GOOGLE_CLIENT_ID_AQUI...'`
+6. Reinicie o servidor (ou refaça o deploy). O botão aparece sozinho.
+
+Quem entrar com Google e já tiver uma conta com o mesmo e-mail cadastrada
+por senha continua na mesma conta (o Google só é "linkado" a ela).
+
+## Estrutura de páginas (front-end)
+
+O painel agora tem uma barra lateral com 4 páginas (tudo dentro do mesmo
+`script.js`, sem recarregar a página):
+- **Dashboard** — métricas do período (leads, em negociação, ganho,
+  conversão), gráfico de leads captados, pipeline por etapa, últimos
+  leads e tarefas abertas
+- **Pipeline** — o quadro kanban original (arrastar cards, colunas,
+  filtro por mês, WhatsApp, etc.)
+- **Leads** — todos os clientes em formato de tabela, com busca e
+  filtro por etapa
+- **Tarefas** — lista de tarefas com prioridade, vencimento e lead
+  relacionado
+
 ## Rotas da API
 
 **Autenticação (públicas):**
 - `POST /api/auth/register` — `{ nome, email, senha }` → cria conta + funil padrão
 - `POST /api/auth/login` — `{ email, senha }` → retorna token
+- `POST /api/auth/google` — `{ credential }` (token do Google) → cria/liga conta e retorna token
 - `GET  /api/auth/me` — dados do usuário logado (exige token)
 
 **Painel (exigem token, sempre isoladas por usuário):**
@@ -83,4 +122,11 @@ crm-consorcio/
 - `PUT  /api/cards/:id` — edita cliente
 - `PUT  /api/cards/:id/move` — move cliente entre colunas (drag and drop)
 - `DELETE /api/cards/:id` — exclui cliente
+
+**Tarefas (exigem token, isoladas por usuário):**
+- `GET  /api/tasks` — lista as tarefas
+- `POST /api/tasks` — cria tarefa
+- `PUT  /api/tasks/:id` — edita tarefa
+- `PUT  /api/tasks/:id/toggle` — marca/desmarca como concluída
+- `DELETE /api/tasks/:id` — exclui tarefa
 # crm-consorcio
