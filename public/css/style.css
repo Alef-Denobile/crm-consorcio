@@ -227,6 +227,10 @@ main{ padding:24px; overflow-x:auto; }
 .auth-form{ display:flex; flex-direction:column; gap:14px; }
 .auth-submit{ margin-top:6px; padding:12px; min-height:44px; font-size:13px; width:100%; }
 .auth-box .error-banner{ margin:0 0 14px; }
+.auth-divider{ display:flex; align-items:center; gap:10px; margin:18px 0 14px; font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; }
+.auth-divider::before, .auth-divider::after{ content:''; flex:1; height:1px; background:var(--line); }
+.google-btn-wrap{ display:flex; justify-content:center; min-height:40px; }
+.google-btn-fallback{ font-size:11px; color:var(--ink-soft); text-align:center; margin:0; }
 
 /* =================================================================
    Estrutura com barra lateral (Dashboard / Pipeline / Leads / Tarefas)
@@ -236,7 +240,8 @@ main{ padding:24px; overflow-x:auto; }
 .sidebar{ width:232px; flex-shrink:0; background:var(--paper); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:22px 14px; position:sticky; top:0; height:100vh; overflow-y:auto; }
 .sidebar-brand{ display:flex; align-items:center; gap:10px; padding:4px 10px 22px; }
 .sidebar-logo{ width:30px; height:30px; border-radius:9px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
-.sidebar-brand-name{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; letter-spacing:-.01em; line-height:1.2; }
+.sidebar-brand-name{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; letter-spacing:-.01em; line-height:1.2; cursor:text; }
+.sidebar-brand-input{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; letter-spacing:-.01em; border:none; border-bottom:1px solid var(--ink); background:transparent; outline:none; flex:1; min-width:0; color:var(--ink); }
 
 .sidebar-nav{ display:flex; flex-direction:column; gap:2px; }
 .nav-item{ display:flex; align-items:center; gap:11px; padding:10px 12px; min-height:42px; border-radius:9px; border:none; background:none; font-size:13px; font-weight:500; color:var(--ink-soft); cursor:pointer; text-align:left; width:100%; }

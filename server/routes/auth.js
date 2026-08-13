@@ -1,12 +1,15 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
 const { seedColunasPadrao } = require('../seed');
 
 const router = express.Router();
 const JWT_SECRET = auth.JWT_SECRET;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 function gerarToken(user) {
   return jwt.sign({ sub: user._id.toString() }, JWT_SECRET, { expiresIn: '30d' });
@@ -54,6 +57,9 @@ router.post('/login', async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: 'E-mail ou senha inválidos.' });
     }
+    if (!user.senhaHash) {
+      return res.status(401).json({ error: 'Esta conta usa login com Google. Use o botão "Continuar com Google".' });
+    }
 
     const senhaOk = await bcrypt.compare(senha, user.senhaHash);
     if (!senhaOk) {
@@ -64,6 +70,49 @@ router.post('/login', async (req, res) => {
     res.json({ token, user: user.toJSON() });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao entrar.' });
+  }
+});
+
+// POST /api/auth/google -> login/cadastro usando o botão "Continuar com Google"
+router.post('/google', async (req, res) => {
+  try {
+    if (!GOOGLE_CLIENT_ID) {
+      return res.status(500).json({ error: 'Login com Google não está configurado neste servidor.' });
+    }
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ error: 'Credencial do Google ausente.' });
+    }
+
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      return res.status(401).json({ error: 'Não foi possível verificar sua conta Google.' });
+    }
+
+    const emailNormalizado = payload.email.toLowerCase().trim();
+    let user = await User.findOne({ $or: [{ googleId: payload.sub }, { email: emailNormalizado }] });
+
+    if (user) {
+      // conta já existia (por e-mail/senha, por exemplo) — só liga o Google a ela
+      if (!user.googleId) {
+        user.googleId = payload.sub;
+        await user.save();
+      }
+    } else {
+      user = await User.create({
+        nome: payload.name || '',
+        email: emailNormalizado,
+        googleId: payload.sub,
+        senhaHash: null,
+      });
+      await seedColunasPadrao(user._id);
+    }
+
+    const token = gerarToken(user);
+    res.json({ token, user: user.toJSON() });
+  } catch (err) {
+    res.status(401).json({ error: 'Não foi possível entrar com o Google.' });
   }
 });
 

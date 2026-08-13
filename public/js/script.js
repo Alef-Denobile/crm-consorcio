@@ -92,6 +92,16 @@ function setDarkMode(ligado){
 }
 setDarkMode(getDarkMode());
 
+/* ---------- nome do site (editável) ---------- */
+const NOME_PADRAO = 'Painel do Consórcio';
+function getSiteName(){ return localStorage.getItem('siteName') || NOME_PADRAO; }
+function setSiteName(nome){
+  const final = (nome || '').trim() || NOME_PADRAO;
+  localStorage.setItem('siteName', final);
+  document.title = final;
+}
+document.title = getSiteName();
+
 /* ---------- sessão / login ---------- */
 function getToken(){ return localStorage.getItem('token'); }
 function getCurrentUser(){
@@ -125,6 +135,8 @@ let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
 let settingsPanelOpen = false;
+let editingSiteName = false;
+let siteNameDraft = '';
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
@@ -538,7 +550,10 @@ function renderSidebar(){
     <aside class="sidebar">
       <div class="sidebar-brand">
         <span class="sidebar-logo">◎</span>
-        <span class="sidebar-brand-name">Painel do Consórcio</span>
+        ${editingSiteName
+          ? `<input class="sidebar-brand-input" id="site-name-input" value="${esc(siteNameDraft)}" />`
+          : `<span class="sidebar-brand-name" data-action="edit-site-name" title="Clique para renomear">${esc(getSiteName())}</span>`
+        }
       </div>
       <nav class="sidebar-nav">
         ${NAV.map(([key,label,icon])=>`
@@ -943,6 +958,22 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="nav"]').forEach(btn=>{
     btn.addEventListener('click', ()=> goToPage(btn.dataset.page));
   });
+
+  const brandNameEl = app.querySelector('[data-action="edit-site-name"]');
+  if(brandNameEl) brandNameEl.addEventListener('click', ()=>{
+    editingSiteName = true;
+    siteNameDraft = getSiteName();
+    renderApp();
+    const input = document.getElementById('site-name-input');
+    if(input){ input.focus(); input.select(); }
+  });
+  const siteNameInput = document.getElementById('site-name-input');
+  if(siteNameInput){
+    siteNameInput.addEventListener('input', (e)=>{ siteNameDraft = e.target.value; });
+    const commitSiteName = ()=>{ editingSiteName = false; setSiteName(siteNameDraft); renderApp(); };
+    siteNameInput.addEventListener('blur', commitSiteName);
+    siteNameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
+  }
 
   const settingsBtn = app.querySelector('[data-action="toggle-settings-panel"]');
   if(settingsBtn) settingsBtn.addEventListener('click', (e)=>{

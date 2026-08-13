@@ -8,6 +8,11 @@ let modo = 'login'; // ou 'register'
 document.documentElement.style.setProperty('--accent', localStorage.getItem('accentColor') || '#141414');
 // mesmo modo noturno escolhido no painel
 document.documentElement.setAttribute('data-theme', localStorage.getItem('darkMode') === '1' ? 'dark' : 'light');
+// mesmo nome do site escolhido no painel
+const nomeConfigurado = localStorage.getItem('siteName') || 'Painel do Consórcio';
+document.title = 'Entrar — ' + nomeConfigurado;
+const authTitleEl = document.getElementById('auth-title');
+if(authTitleEl) authTitleEl.textContent = nomeConfigurado;
 
 const form = document.getElementById('auth-form');
 const errorBox = document.getElementById('auth-error');
@@ -60,3 +65,48 @@ form.addEventListener('submit', async (e)=>{
     submitBtn.disabled = false;
   }
 });
+
+/* ---------- "Continuar com Google" ---------- */
+// Troque pelo Client ID gerado no Google Cloud Console (veja o README).
+const GOOGLE_CLIENT_ID = 'COLOQUE_SEU_GOOGLE_CLIENT_ID_AQUI.apps.googleusercontent.com';
+
+function initGoogleButton(){
+  if(GOOGLE_CLIENT_ID.indexOf('COLOQUE_SEU') !== -1){
+    const fallback = document.getElementById('google-btn-fallback');
+    if(fallback) fallback.style.display = 'block';
+    return;
+  }
+  if(!window.google || !window.google.accounts){
+    setTimeout(initGoogleButton, 300);
+    return;
+  }
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+  });
+  google.accounts.id.renderButton(
+    document.getElementById('google-btn-container'),
+    { theme:'outline', size:'large', width:320, text:'continue_with', locale:'pt-BR' }
+  );
+}
+initGoogleButton();
+
+async function handleGoogleCredential(response){
+  errorBox.style.display = 'none';
+  try{
+    const res = await fetch(API_BASE + '/auth/google', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ credential: response.credential }),
+    });
+    const data = await res.json();
+    if(!res.ok){ throw new Error(data.error || 'Não foi possível entrar com o Google.'); }
+
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    window.location.href = 'index.html';
+  }catch(err){
+    errorBox.textContent = err.message;
+    errorBox.style.display = 'block';
+  }
+}
