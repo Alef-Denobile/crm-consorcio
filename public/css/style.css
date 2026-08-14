@@ -216,7 +216,8 @@ main{ padding:24px; overflow-x:auto; }
 .btn-danger{ padding:10px 16px; min-height:40px; border-radius:8px; border:none; background:var(--danger); color:#fff; font-size:12px; font-weight:600; cursor:pointer; }
 
 .loading{ min-height:100vh; display:flex; align-items:center; justify-content:center; color:var(--ink); font-size:14px; }
-.error-banner{ margin:12px 24px 0; padding:12px 14px; background:var(--danger-soft); color:var(--danger); border-radius:10px; font-size:12px; cursor:pointer; }
+.error-banner{ position:fixed; top:20px; right:20px; z-index:200; max-width:380px; margin:0; padding:13px 16px; background:var(--danger-soft); color:var(--danger); border-radius:10px; font-size:12px; cursor:pointer; box-shadow:0 12px 30px rgba(0,0,0,.2); animation:errorEntra .18s ease-out; }
+@keyframes errorEntra{ from{ opacity:0; transform:translateY(-8px); } to{ opacity:1; transform:translateY(0); } }
 
 /* ---------- tela de login / cadastro ---------- */
 .auth-wrap{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--bg); }
@@ -228,7 +229,7 @@ main{ padding:24px; overflow-x:auto; }
 .auth-tab.active{ background:var(--accent); color:#fff; }
 .auth-form{ display:flex; flex-direction:column; gap:14px; }
 .auth-submit{ margin-top:6px; padding:12px; min-height:44px; font-size:13px; width:100%; }
-.auth-box .error-banner{ margin:0 0 14px; }
+.auth-box .error-banner{ position:static; margin:0 0 14px; box-shadow:none; animation:none; max-width:none; }
 .auth-divider{ display:flex; align-items:center; gap:10px; margin:18px 0 14px; font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; }
 .auth-divider::before, .auth-divider::after{ content:''; flex:1; height:1px; background:var(--line); }
 .google-btn-wrap{ display:flex; justify-content:center; min-height:40px; }
