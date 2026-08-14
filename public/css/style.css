@@ -62,7 +62,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .settings-wrap{ position:relative; }
 .settings-btn{ width:36px; height:36px; border-radius:999px; border:1px solid var(--line); background:var(--paper); color:var(--ink-soft); cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center; }
 .settings-btn:hover{ border-color:var(--ink); color:var(--ink); }
-.settings-panel{ position:absolute; right:0; top:44px; z-index:30; width:240px; background:var(--paper); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,.16); padding:16px; }
+.settings-panel{ position:fixed; z-index:100; width:240px; background:var(--paper); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 30px rgba(0,0,0,.18); padding:16px; }
 .settings-section + .settings-section{ margin-top:16px; }
 .settings-section-title{ font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:10px; }
 .settings-sep{ border-top:1px solid var(--line); margin:14px 0; }
@@ -257,7 +257,6 @@ main{ padding:24px; overflow-x:auto; }
 .sidebar-footer .settings-wrap{ width:100%; }
 .sidebar-footer .settings-btn{ width:100%; height:auto; border-radius:9px; border:none; padding:10px 12px; min-height:42px; display:flex; align-items:center; gap:11px; font-size:13px; font-weight:500; color:var(--ink-soft); justify-content:flex-start; }
 .sidebar-footer .settings-btn:hover{ background:var(--hover-tint); color:var(--ink); border-color:transparent; }
-.sidebar .settings-panel{ top:auto; bottom:48px; left:0; right:auto; }
 .logout-item{ color:var(--danger); }
 .logout-item:hover{ background:var(--danger-soft); color:var(--danger); }
 

@@ -378,6 +378,21 @@ function filteredLeads(){
 }
 
 /* ---------- navegação entre páginas ---------- */
+// Posiciona o painel de configurações do lado do botão que o abriu.
+// Como o painel usa position:fixed, ele nunca é cortado pela rolagem
+// própria da barra lateral — sempre aparece por cima do resto da tela.
+function posicionarPainelConfiguracoes(){
+  if(!settingsPanelOpen) return;
+  const btn = document.querySelector('[data-action="toggle-settings-panel"]');
+  const panel = document.querySelector('.settings-panel');
+  if(!btn || !panel) return;
+  const rect = btn.getBoundingClientRect();
+  const left = Math.min(rect.right + 10, window.innerWidth - panel.offsetWidth - 12);
+  const bottom = Math.max(window.innerHeight - rect.bottom, 12);
+  panel.style.left = Math.max(left, 12) + 'px';
+  panel.style.bottom = bottom + 'px';
+}
+
 function goToPage(page){
   if(currentPage === page) return;
   currentPage = page;
@@ -1054,6 +1069,8 @@ function bindAppEvents(){
     settingsPanelOpen = !settingsPanelOpen;
     renderApp();
   });
+  posicionarPainelConfiguracoes();
+  window.addEventListener('resize', posicionarPainelConfiguracoes);
   const darkModeSwitch = app.querySelector('[data-action="toggle-dark-mode"]');
   if(darkModeSwitch) darkModeSwitch.addEventListener('click', ()=>{
     setDarkMode(!getDarkMode());

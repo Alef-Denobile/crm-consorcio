@@ -63,7 +63,7 @@ form.addEventListener('submit', async (e)=>{
 
 /* ---------- "Continuar com Google" ---------- */
 // Troque pelo Client ID gerado no Google Cloud Console (veja o README).
-const GOOGLE_CLIENT_ID = '105063218745-vsie49mgs15lgpn6hdfk06v2a6o23o9b.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = 'COLOQUE_SEU_GOOGLE_CLIENT_ID_AQUI.apps.googleusercontent.com';
 
 function initGoogleButton(){
   if(GOOGLE_CLIENT_ID.indexOf('COLOQUE_SEU') !== -1){
