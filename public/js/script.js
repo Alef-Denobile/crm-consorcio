@@ -627,7 +627,7 @@ function renderSidebar(){
         <span class="sidebar-logo">◎</span>
         ${editingGreeting
           ? `<span class="sidebar-greeting">Olá, <input class="sidebar-greeting-input" id="greeting-input" value="${esc(greetingDraft)}" placeholder="seu nome" /></span>`
-          : `<span class="sidebar-greeting">Olá, <span class="sidebar-brand-name" data-action="edit-greeting" title="Clique para editar">${esc(getGreetingName() || 'visitante')}</span></span>`
+          : `<span class="sidebar-greeting">Olá, <span class="sidebar-brand-name" data-action="edit-greeting" title="Clique para editar">${esc(getGreetingName() || 'visitante')}</span><button class="edit-greeting-icon" data-action="edit-greeting" title="Editar nome">${ICON_EDIT}</button></span>`
         }
       </div>
       <nav class="sidebar-nav">
@@ -1047,13 +1047,14 @@ function bindAppEvents(){
     btn.addEventListener('click', ()=> goToPage(btn.dataset.page));
   });
 
-  const brandNameEl = app.querySelector('[data-action="edit-greeting"]');
-  if(brandNameEl) brandNameEl.addEventListener('click', ()=>{
-    editingGreeting = true;
-    greetingDraft = getGreetingName();
-    renderApp();
-    const input = document.getElementById('greeting-input');
-    if(input){ input.focus(); input.select(); }
+  app.querySelectorAll('[data-action="edit-greeting"]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      editingGreeting = true;
+      greetingDraft = getGreetingName();
+      renderApp();
+      const input = document.getElementById('greeting-input');
+      if(input){ input.focus(); input.select(); }
+    });
   });
   const greetingInput = document.getElementById('greeting-input');
   if(greetingInput){

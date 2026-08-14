@@ -245,6 +245,8 @@ main{ padding:24px; overflow-x:auto; }
 .sidebar-greeting{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; letter-spacing:-.01em; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sidebar-brand-name{ cursor:text; }
 .sidebar-brand-name:hover{ text-decoration:underline dotted; }
+.edit-greeting-icon{ display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; padding:0; margin-left:2px; border:none; background:none; color:var(--ink-soft); cursor:pointer; border-radius:6px; vertical-align:middle; }
+.edit-greeting-icon:hover{ background:var(--hover-tint); color:var(--ink); }
 .sidebar-greeting-input{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; letter-spacing:-.01em; border:none; border-bottom:1px solid var(--ink); background:transparent; outline:none; width:120px; color:var(--ink); }
 
 .sidebar-nav{ display:flex; flex-direction:column; gap:2px; }
