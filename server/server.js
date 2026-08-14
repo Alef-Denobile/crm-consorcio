@@ -9,6 +9,7 @@ const boardRoutes = require('./routes/board');
 const columnRoutes = require('./routes/columns');
 const cardRoutes = require('./routes/cards');
 const taskRoutes = require('./routes/tasks');
+const calendarRoutes = require('./routes/calendar');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,6 +24,7 @@ app.use('/api/board', boardRoutes);
 app.use('/api/columns', columnRoutes);
 app.use('/api/cards', cardRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // front-end estático (a pasta public com index.html, css e js)
 app.use(express.static(path.join(__dirname, '..', 'public')));

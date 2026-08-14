@@ -92,15 +92,18 @@ function setDarkMode(ligado){
 }
 setDarkMode(getDarkMode());
 
-/* ---------- nome do site (editável) ---------- */
-const NOME_PADRAO = 'Painel do Consórcio';
-function getSiteName(){ return localStorage.getItem('siteName') || NOME_PADRAO; }
-function setSiteName(nome){
-  const final = (nome || '').trim() || NOME_PADRAO;
-  localStorage.setItem('siteName', final);
-  document.title = final;
+/* ---------- nome do site (fixo) e saudação (editável) ---------- */
+document.title = 'Painel CRM';
+function getGreetingName(){
+  const custom = localStorage.getItem('greetingName');
+  if(custom) return custom;
+  return (currentUser && currentUser.nome) ? currentUser.nome : '';
 }
-document.title = getSiteName();
+function setGreetingName(nome){
+  const final = (nome || '').trim();
+  if(final) localStorage.setItem('greetingName', final);
+  else localStorage.removeItem('greetingName');
+}
 
 /* ---------- sessão / login ---------- */
 function getToken(){ return localStorage.getItem('token'); }
@@ -135,12 +138,15 @@ let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
 let settingsPanelOpen = false;
-let editingSiteName = false;
-let siteNameDraft = '';
+let editingGreeting = false;
+let greetingDraft = '';
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
 let tarefasShowConcluidas = false;
+let calendarConnected = false;
+let calendarSyncing = false;
+let calendarSyncedOnce = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
 let confirmState = null;         // { message, onConfirm }
@@ -190,6 +196,56 @@ async function loadTasks(){
   }
   tasksLoaded = true;
   renderApp();
+}
+
+/* ---------- Google Agenda ---------- */
+async function loadCalendarStatus(){
+  try{
+    const data = await apiRequest('GET', '/calendar/status');
+    calendarConnected = !!data.connected;
+  }catch(e){
+    calendarConnected = false;
+  }
+  renderApp();
+}
+async function connectGoogleCalendar(){
+  try{
+    const data = await apiRequest('GET', '/calendar/connect-url');
+    window.location.href = data.url;
+  }catch(e){
+    errorMsg = 'Não foi possível iniciar a conexão com a Google Agenda.';
+    renderApp();
+  }
+}
+async function disconnectGoogleCalendar(){
+  try{
+    await apiRequest('POST', '/calendar/disconnect');
+    calendarConnected = false;
+  }catch(e){
+    errorMsg = 'Não foi possível desconectar da Google Agenda.';
+  }
+  renderApp();
+}
+async function syncCalendarNow(){
+  if(calendarSyncing) return;
+  calendarSyncing = true;
+  renderApp();
+  try{
+    await apiRequest('POST', '/tasks/sync-calendar');
+    await loadTasks();
+  }catch(e){
+    errorMsg = 'Não foi possível sincronizar com a Google Agenda agora.';
+  }
+  calendarSyncing = false;
+  renderApp();
+}
+function tratarRetornoDoGoogle(){
+  const params = new URLSearchParams(window.location.search);
+  const status = params.get('calendar');
+  if(!status) return;
+  if(status === 'conectado'){ calendarConnected = true; }
+  else if(status === 'erro'){ errorMsg = 'Não foi possível conectar com a Google Agenda. Tente novamente.'; }
+  window.history.replaceState({}, '', window.location.pathname);
 }
 
 /* ---------- derivações (Pipeline) ---------- */
@@ -331,6 +387,10 @@ function goToPage(page){
   addingCol = false;
   editingColId = null;
   renderApp();
+  if(page === 'tarefas' && calendarConnected && !calendarSyncedOnce){
+    calendarSyncedOnce = true;
+    syncCalendarNow();
+  }
 }
 
 /* ---------- mutações: colunas e cards (cada uma fala com a API) ---------- */
@@ -550,9 +610,9 @@ function renderSidebar(){
     <aside class="sidebar">
       <div class="sidebar-brand">
         <span class="sidebar-logo">◎</span>
-        ${editingSiteName
-          ? `<input class="sidebar-brand-input" id="site-name-input" value="${esc(siteNameDraft)}" />`
-          : `<span class="sidebar-brand-name" data-action="edit-site-name" title="Clique para renomear">${esc(getSiteName())}</span>`
+        ${editingGreeting
+          ? `<span class="sidebar-greeting">Olá, <input class="sidebar-greeting-input" id="greeting-input" value="${esc(greetingDraft)}" placeholder="seu nome" /></span>`
+          : `<span class="sidebar-greeting">Olá, <span class="sidebar-brand-name" data-action="edit-greeting" title="Clique para editar">${esc(getGreetingName() || 'visitante')}</span></span>`
         }
       </div>
       <nav class="sidebar-nav">
@@ -561,7 +621,6 @@ function renderSidebar(){
         `).join('')}
       </nav>
       <div class="sidebar-footer">
-        ${currentUser && currentUser.nome ? `<span class="user-name">${esc(currentUser.nome)}</span>` : ''}
         <div class="settings-wrap">
           <button class="settings-btn" data-action="toggle-settings-panel" title="Configurações">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -591,6 +650,17 @@ function renderSidebar(){
                   Outra cor
                   <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
                 </label>
+              </div>
+              <div class="settings-sep"></div>
+              <div class="settings-section">
+                <div class="settings-section-title">Google Agenda</div>
+                ${calendarConnected ? `
+                  <p class="settings-calendar-status">✓ Conectada</p>
+                  <button class="btn-outline settings-calendar-btn" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'Sincronizar agora'}</button>
+                  <button class="btn-outline settings-calendar-btn" data-action="disconnect-calendar">Desconectar</button>
+                ` : `
+                  <button class="btn-primary settings-calendar-btn" data-action="connect-calendar">Conectar Google Agenda</button>
+                `}
               </div>
             </div>
           ` : ''}
@@ -906,7 +976,10 @@ function renderTarefasPage(){
         <h1>Tarefas</h1>
         <p>${pendentes} pendente${pendentes===1?'':'s'}</p>
       </div>
-      <button class="btn-primary" data-action="open-new-task">+ Nova tarefa</button>
+      <div class="page-head-actions">
+        ${calendarConnected ? `<button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'📅 Sincronizar Agenda'}</button>` : ''}
+        <button class="btn-primary" data-action="open-new-task">+ Nova tarefa</button>
+      </div>
     </div>
 
     <label class="tasks-toolbar">
@@ -959,20 +1032,20 @@ function bindAppEvents(){
     btn.addEventListener('click', ()=> goToPage(btn.dataset.page));
   });
 
-  const brandNameEl = app.querySelector('[data-action="edit-site-name"]');
+  const brandNameEl = app.querySelector('[data-action="edit-greeting"]');
   if(brandNameEl) brandNameEl.addEventListener('click', ()=>{
-    editingSiteName = true;
-    siteNameDraft = getSiteName();
+    editingGreeting = true;
+    greetingDraft = getGreetingName();
     renderApp();
-    const input = document.getElementById('site-name-input');
+    const input = document.getElementById('greeting-input');
     if(input){ input.focus(); input.select(); }
   });
-  const siteNameInput = document.getElementById('site-name-input');
-  if(siteNameInput){
-    siteNameInput.addEventListener('input', (e)=>{ siteNameDraft = e.target.value; });
-    const commitSiteName = ()=>{ editingSiteName = false; setSiteName(siteNameDraft); renderApp(); };
-    siteNameInput.addEventListener('blur', commitSiteName);
-    siteNameInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
+  const greetingInput = document.getElementById('greeting-input');
+  if(greetingInput){
+    greetingInput.addEventListener('input', (e)=>{ greetingDraft = e.target.value; });
+    const commitGreeting = ()=>{ editingGreeting = false; setGreetingName(greetingDraft); renderApp(); };
+    greetingInput.addEventListener('blur', commitGreeting);
+    greetingInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
   }
 
   const settingsBtn = app.querySelector('[data-action="toggle-settings-panel"]');
@@ -994,6 +1067,14 @@ function bindAppEvents(){
   });
   const themeCustomInput = document.getElementById('theme-custom-input');
   if(themeCustomInput) themeCustomInput.addEventListener('input', (e)=> setAccentColor(e.target.value));
+
+  const connectCalBtn = app.querySelector('[data-action="connect-calendar"]');
+  if(connectCalBtn) connectCalBtn.addEventListener('click', connectGoogleCalendar);
+  const disconnectCalBtn = app.querySelector('[data-action="disconnect-calendar"]');
+  if(disconnectCalBtn) disconnectCalBtn.addEventListener('click', disconnectGoogleCalendar);
+  app.querySelectorAll('[data-action="sync-calendar-now"]').forEach(btn=>{
+    btn.addEventListener('click', syncCalendarNow);
+  });
 
   /* -- Dashboard -- */
   app.querySelectorAll('[data-action="set-dash-period"]').forEach(btn=>{
@@ -1400,6 +1481,8 @@ function closeConfirm(){ confirmState = null; document.getElementById('confirm-r
 
 /* ---------- start ---------- */
 if(getToken()){
+  tratarRetornoDoGoogle();
   loadBoard();
   loadTasks();
+  loadCalendarStatus();
 }

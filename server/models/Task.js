@@ -9,6 +9,7 @@ const taskSchema = new mongoose.Schema(
     leadId: { type: mongoose.Schema.Types.ObjectId, ref: 'Card', default: null },
     descricao: { type: String, default: '' },
     concluida: { type: Boolean, default: false },
+    googleEventId: { type: String, default: null },
   },
   {
     timestamps: true,

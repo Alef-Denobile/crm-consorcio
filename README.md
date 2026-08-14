@@ -91,6 +91,43 @@ funcionar — sem isso, ele mostra uma mensagem discreta em vez do botão.
 Quem entrar com Google e já tiver uma conta com o mesmo e-mail cadastrada
 por senha continua na mesma conta (o Google só é "linkado" a ela).
 
+## Configurar a sincronização com a Google Agenda (opcional)
+
+Usa o mesmo projeto do Google Cloud de cima, mas precisa de **duas coisas a
+mais** além do Client ID que você já tem:
+
+1. Volte em **Credenciais** → clique no ID do cliente OAuth que você já
+   criou (o mesmo do login) → em **"URIs de redirecionamento
+   autorizados"**, adicione:
+   - `https://seudominio.com.br/api/calendar/callback` (produção)
+   - `http://localhost:3000/api/calendar/callback` (se for testar local)
+
+   ⚠️ Isso é diferente das "Origens JavaScript autorizadas" que você já
+   preencheu pro login — sem essa URL de redirecionamento cadastrada, o
+   Google recusa a conexão com erro `redirect_uri_mismatch`.
+
+2. Na mesma tela, copie o **Client Secret** (fica visível ao lado do
+   Client ID) e adicione no `.env`:
+   ```
+   GOOGLE_CLIENT_SECRET=seu-client-secret-aqui
+   ```
+   (No Render, adicione como variável de ambiente também, igual às outras.)
+
+3. Se a tela de consentimento OAuth do seu projeto ainda estiver em modo
+   **"Testando"** (comum pra projetos pessoais), adicione seu e-mail em
+   **"Usuários de teste"** — senão o Google recusa a conexão.
+
+Depois disso, é só clicar em **Conectar Google Agenda** dentro do painel
+(ícone de engrenagem → seção "Google Agenda"). Um calendário novo chamado
+**"Painel do Consórcio — Tarefas"** é criado automaticamente na sua conta
+Google — só ele é usado, seus outros compromissos não são tocados.
+
+⚠️ **Limitação do modo "Testando":** enquanto o projeto não passar pela
+verificação do Google (processo à parte, opcional), a conexão expira a
+cada 7 dias e você precisa clicar em "Conectar" de novo. Pra uso pessoal
+isso costuma ser tranquilo; se incomodar, me avise que vejo com você o
+processo de verificação.
+
 ## Estrutura de páginas (front-end)
 
 O painel agora tem uma barra lateral com 4 páginas (tudo dentro do mesmo
@@ -128,5 +165,12 @@ O painel agora tem uma barra lateral com 4 páginas (tudo dentro do mesmo
 - `POST /api/tasks` — cria tarefa
 - `PUT  /api/tasks/:id` — edita tarefa
 - `PUT  /api/tasks/:id/toggle` — marca/desmarca como concluída
-- `DELETE /api/tasks/:id` — exclui tarefa
+- `DELETE /api/tasks/:id` — exclui tarefa (e o evento correspondente na Agenda)
+- `POST /api/tasks/sync-calendar` — puxa da Google Agenda o que mudou de lá pra cá
+
+**Google Agenda (exigem token):**
+- `GET  /api/calendar/status` — diz se o usuário já conectou a Agenda
+- `GET  /api/calendar/connect-url` — devolve a URL de autorização do Google
+- `GET  /api/calendar/callback` — o Google redireciona pra cá após o consentimento (não chame direto)
+- `POST /api/calendar/disconnect` — desconecta (não apaga os eventos já criados)
 # crm-consorcio

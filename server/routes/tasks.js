@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const Task = require('../models/Task');
 const Card = require('../models/Card');
+const User = require('../models/User');
+const { chamarCalendarApi, getOrCreateCalendarId } = require('../utils/calendarSync');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de tarefa exigem login
@@ -14,6 +16,66 @@ function filtrarCampos(body) {
     if (body[campo] !== undefined) dados[campo] = body[campo] === '' ? null : body[campo];
   }
   return dados;
+}
+
+// Empurra a tarefa (criação/edição) pra Google Agenda, se o usuário tiver conectado.
+// Nunca deixa um erro aqui quebrar a resposta principal da rota de tarefas.
+async function sincronizarTarefaComCalendar(userId, task) {
+  try {
+    const user = await User.findById(userId);
+    if (!user || !user.googleCalendar || !user.googleCalendar.refreshToken) return;
+    const calendarId = await getOrCreateCalendarId(user);
+
+    if (!task.vencimento) {
+      if (task.googleEventId) {
+        try {
+          await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events/${task.googleEventId}`, { method: 'DELETE' });
+        } catch (e) { /* evento já pode ter sido apagado manualmente */ }
+        task.googleEventId = null;
+        await task.save();
+      }
+      return;
+    }
+
+    const dataStr = new Date(task.vencimento).toISOString().slice(0, 10);
+    const corpoEvento = {
+      summary: task.titulo,
+      description: task.descricao || '',
+      start: { date: dataStr },
+      end: { date: dataStr },
+    };
+
+    if (task.googleEventId) {
+      await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events/${task.googleEventId}`, {
+        method: 'PUT',
+        body: JSON.stringify(corpoEvento),
+      });
+    } else {
+      const criado = await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events`, {
+        method: 'POST',
+        body: JSON.stringify(corpoEvento),
+      });
+      if (criado && criado.id) {
+        task.googleEventId = criado.id;
+        await task.save();
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao sincronizar tarefa com o Google Agenda:', err.message);
+  }
+}
+
+// Remove o evento correspondente na Google Agenda quando a tarefa é excluída no CRM.
+async function removerEventoDoCalendar(userId, googleEventId) {
+  if (!googleEventId) return;
+  try {
+    const user = await User.findById(userId);
+    if (!user || !user.googleCalendar || !user.googleCalendar.refreshToken) return;
+    const calendarId = await getOrCreateCalendarId(user);
+    await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events/${googleEventId}`, { method: 'DELETE' });
+  } catch (err) {
+    console.error('Erro ao remover evento do Google Agenda:', err.message);
+  }
 }
 
 // GET /api/tasks -> todas as tarefas do usuário logado
@@ -42,6 +104,7 @@ router.post('/', async (req, res) => {
     }
     const task = await Task.create({ ...dados, userId: req.userId });
     res.status(201).json(task.toJSON());
+    sincronizarTarefaComCalendar(req.userId, task);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao criar tarefa.' });
   }
@@ -64,6 +127,7 @@ router.put('/:id', async (req, res) => {
     );
     if (!task) return res.status(404).json({ error: 'Tarefa não encontrada.' });
     res.json(task.toJSON());
+    sincronizarTarefaComCalendar(req.userId, task);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao atualizar tarefa.' });
   }
@@ -94,8 +158,62 @@ router.delete('/:id', async (req, res) => {
     const task = await Task.findOneAndDelete({ _id: req.params.id, userId: req.userId });
     if (!task) return res.status(404).json({ error: 'Tarefa não encontrada.' });
     res.status(204).end();
+    removerEventoDoCalendar(req.userId, task.googleEventId);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao excluir tarefa.' });
+  }
+});
+
+// POST /api/tasks/sync-calendar -> puxa da Google Agenda o que mudou de lá pra cá
+router.post('/sync-calendar', async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || !user.googleCalendar || !user.googleCalendar.refreshToken) {
+      return res.status(400).json({ error: 'Google Agenda não conectada.' });
+    }
+    const calendarId = await getOrCreateCalendarId(user);
+    const resultado = await chamarCalendarApi(
+      user,
+      `/calendars/${encodeURIComponent(calendarId)}/events?singleEvents=true&maxResults=250`
+    );
+    const eventos = (resultado && resultado.items) || [];
+
+    const tarefasAtuais = await Task.find({ userId: req.userId });
+    const porEventId = new Map(tarefasAtuais.filter((t) => t.googleEventId).map((t) => [t.googleEventId, t]));
+
+    let criadas = 0;
+    let atualizadas = 0;
+
+    for (const evento of eventos) {
+      if (evento.status === 'cancelled') continue;
+      const dataEvento = evento.start && (evento.start.date || (evento.start.dateTime || '').slice(0, 10));
+      const existente = porEventId.get(evento.id);
+
+      if (existente) {
+        const atualizadoNoGoogle = new Date(evento.updated);
+        if (atualizadoNoGoogle > existente.updatedAt) {
+          existente.titulo = evento.summary || existente.titulo;
+          existente.descricao = evento.description || '';
+          existente.vencimento = dataEvento ? new Date(dataEvento) : existente.vencimento;
+          await existente.save();
+          atualizadas++;
+        }
+      } else {
+        await Task.create({
+          userId: req.userId,
+          titulo: evento.summary || '(sem título)',
+          descricao: evento.description || '',
+          vencimento: dataEvento ? new Date(dataEvento) : null,
+          prioridade: 'media',
+          googleEventId: evento.id,
+        });
+        criadas++;
+      }
+    }
+
+    res.json({ criadas, atualizadas });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao sincronizar com o Google Agenda.' });
   }
 });
 

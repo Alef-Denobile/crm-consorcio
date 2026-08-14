@@ -8,11 +8,6 @@ let modo = 'login'; // ou 'register'
 document.documentElement.style.setProperty('--accent', localStorage.getItem('accentColor') || '#141414');
 // mesmo modo noturno escolhido no painel
 document.documentElement.setAttribute('data-theme', localStorage.getItem('darkMode') === '1' ? 'dark' : 'light');
-// mesmo nome do site escolhido no painel
-const nomeConfigurado = localStorage.getItem('siteName') || 'Painel do Consórcio';
-document.title = 'Entrar — ' + nomeConfigurado;
-const authTitleEl = document.getElementById('auth-title');
-if(authTitleEl) authTitleEl.textContent = nomeConfigurado;
 
 const form = document.getElementById('auth-form');
 const errorBox = document.getElementById('auth-error');
