@@ -348,3 +348,24 @@ main{ padding:24px; overflow-x:auto; }
 .icon-btn{ border:none; background:none; color:var(--ink-soft); cursor:pointer; padding:8px; min-width:34px; min-height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; }
 .icon-btn:hover{ background:var(--hover-tint); color:var(--ink); }
 .tasks-empty{ text-align:center; color:var(--ink-soft); font-style:italic; padding:40px 0; background:var(--paper); border:1px solid var(--line); border-radius:14px; }
+
+/* ---------- Comissões ---------- */
+.month-step-nav{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:2px 6px; background:var(--paper); }
+.month-step-nav span{ min-width:130px; text-align:center; }
+.contratos-list{ display:flex; flex-direction:column; gap:14px; }
+.contrato-card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px; }
+.contrato-card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.contrato-card-title{ font-size:14px; font-weight:700; margin:0 0 4px; }
+.contrato-card-note{ font-size:12px; color:var(--ink-soft); margin:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.contrato-card-actions{ display:flex; align-items:center; gap:4px; flex-shrink:0; }
+.contrato-card-blocks{ font-size:13px; line-height:1.7; margin-bottom:12px; color:var(--ink); }
+.contrato-card-total{ font-weight:700; margin-top:4px; }
+.contrato-card-status{ display:flex; align-items:center; justify-content:space-between; margin-top:8px; font-size:12px; color:var(--ink-soft); }
+
+.scope-toggle{ display:flex; gap:8px; margin-top:5px; }
+.scope-btn{ flex:1; display:flex; align-items:center; justify-content:center; padding:10px; min-height:42px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid var(--line); background:var(--col-bg); color:var(--ink-soft); }
+.scope-btn.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+
+.calc-preview{ background:var(--col-bg); border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:13px; line-height:1.7; }
+.calc-preview b{ color:var(--accent); }
+.calc-preview-note{ font-size:11px; color:var(--ink-soft); margin:6px 0 0; }

@@ -130,7 +130,7 @@ processo de verificação.
 
 ## Estrutura de páginas (front-end)
 
-O painel agora tem uma barra lateral com 4 páginas (tudo dentro do mesmo
+O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
 `script.js`, sem recarregar a página):
 - **Dashboard** — métricas do período (leads, em negociação, ganho,
   conversão), gráfico de leads captados, pipeline por etapa, últimos
@@ -139,6 +139,9 @@ O painel agora tem uma barra lateral com 4 páginas (tudo dentro do mesmo
   filtro por mês, WhatsApp, etc.)
 - **Leads** — todos os clientes em formato de tabela, com busca e
   filtro por etapa
+- **Comissões** — contratos de comissão por mês, com cálculo automático
+  das parcelas a partir do valor da carta de crédito vendida (regra fixa:
+  10 parcelas × 0,00103388 + 3 parcelas × 0,00190561)
 - **Tarefas** — lista de tarefas com prioridade, vencimento e lead
   relacionado
 
@@ -167,6 +170,12 @@ O painel agora tem uma barra lateral com 4 páginas (tudo dentro do mesmo
 - `PUT  /api/tasks/:id/toggle` — marca/desmarca como concluída
 - `DELETE /api/tasks/:id` — exclui tarefa (e o evento correspondente na Agenda)
 - `POST /api/tasks/sync-calendar` — puxa da Google Agenda o que mudou de lá pra cá
+
+**Comissões (exigem token, isoladas por usuário):**
+- `GET  /api/comissoes` — lista os contratos
+- `POST /api/comissoes` — cria contrato (parcelas calculadas automaticamente)
+- `PUT  /api/comissoes/:id` — edita contrato (recalcula se o valor da carta mudar)
+- `DELETE /api/comissoes/:id` — exclui contrato
 
 **Google Agenda (exigem token):**
 - `GET  /api/calendar/status` — diz se o usuário já conectou a Agenda

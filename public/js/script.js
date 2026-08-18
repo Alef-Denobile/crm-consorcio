@@ -50,6 +50,7 @@ const ICON_DASHBOARD = `<svg width="17" height="17" viewBox="0 0 24 24" fill="no
 const ICON_PIPELINE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="4.5" height="16" rx="1"/><rect x="9.75" y="4" width="4.5" height="10" rx="1"/><rect x="16.5" y="4" width="4.5" height="13" rx="1"/></svg>`;
 const ICON_LEADS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
 const ICON_TASKS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
+const ICON_COMISSOES = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="16" r="3"/><line x1="19" y1="5" x2="5" y2="19"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -147,6 +148,10 @@ let tarefasShowConcluidas = false;
 let calendarConnected = false;
 let calendarSyncing = false;
 let calendarSyncedOnce = false;
+let contratos = [];
+let contratosLoaded = false;
+let comissoesMonth = currentMonthKey();
+let contratoModalForm = null;
 let modalForm = null;            // objeto do cliente sendo editado/criado
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
 let confirmState = null;         // { message, onConfirm }
@@ -195,6 +200,16 @@ async function loadTasks(){
     tasks = [];
   }
   tasksLoaded = true;
+  renderApp();
+}
+async function loadContratos(){
+  try{
+    const data = await apiRequest('GET', '/comissoes');
+    contratos = data.contratos;
+  }catch(e){
+    contratos = [];
+  }
+  contratosLoaded = true;
   renderApp();
 }
 
@@ -364,6 +379,56 @@ function renderLeadsChart(){
       </svg>
     </div>
   `;
+}
+
+/* ---------- comissões: cálculo e derivações ---------- */
+const ESCOPOS = {
+  Pessoal: { label:'Pessoal', color:'var(--ink-soft)', bg:'var(--badge-neutral-bg)' },
+  Empresa: { label:'Empresa', color:'#FFFFFF',         bg:'var(--accent)' },
+};
+// mesma regra fixa do widget original: 10 parcelas a 0,00103388 + 3 parcelas a 0,00190561
+function calcComissaoPreview(creditoValor){
+  const credito = parseFloat(creditoValor) || 0;
+  const value1 = Math.round(credito * (1033.88/1000000) * 100) / 100;
+  const value2 = Math.round(credito * (1905.61/1000000) * 100) / 100;
+  return { value1, value2 };
+}
+function monthsBetween(anchorYM, targetYM){
+  const [ay,am] = anchorYM.split('-').map(Number);
+  const [ty,tm] = targetYM.split('-').map(Number);
+  return (ty-ay)*12 + (tm-am);
+}
+function addMonthsKey(ym, delta){
+  const [y,m] = ym.split('-').map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+function parcelaValue(c, idx){
+  return idx < c.parcelas1 ? c.value : c.value2;
+}
+function contratoTotal(c){
+  let total = 0;
+  for(let i=0;i<c.parcelas;i++) total += parcelaValue(c,i);
+  return total;
+}
+function contratoRestante(c, fromIdx){
+  let total = 0;
+  for(let i=Math.max(0,fromIdx);i<c.parcelas;i++) total += parcelaValue(c,i);
+  return total;
+}
+function comissoesStats(){
+  const rowsMes = contratos.map(c=>{
+    const anchor = (c.date||'').slice(0,7);
+    const idx = monthsBetween(anchor, comissoesMonth);
+    return (idx < 0 || idx >= c.parcelas) ? null : { c, idx, value: parcelaValue(c, idx) };
+  }).filter(Boolean);
+  const previstoMes = rowsMes.reduce((a,r)=> a+r.value, 0);
+  const totalAtivo = contratos.reduce((a,c)=>{
+    const anchor = (c.date||'').slice(0,7);
+    const idx = monthsBetween(anchor, comissoesMonth);
+    return a + contratoRestante(c, idx);
+  }, 0);
+  return { previstoMes, totalAtivo, total: contratos.length };
 }
 
 /* ---------- derivações (Leads) ---------- */
@@ -590,6 +655,40 @@ async function toggleTaskConcluida(id){
   }
 }
 
+/* ---------- mutações: comissões ---------- */
+async function saveContratoFromModal(){
+  const f = contratoModalForm;
+  if(!f.desc.trim() || !f.creditoValor) return;
+  const dados = { desc: f.desc, scope: f.scope, date: f.date, creditoValor: f.creditoValor };
+  try{
+    if(f.__isNew){
+      const novo = await apiRequest('POST', '/comissoes', dados);
+      contratos.unshift(novo);
+    } else {
+      const atualizado = await apiRequest('PUT', `/comissoes/${f.id}`, dados);
+      const idx = contratos.findIndex(c=>c.id===f.id);
+      if(idx>-1) contratos[idx] = atualizado;
+    }
+    closeContratoModal();
+  }catch(e){
+    errorMsg = 'Não foi possível salvar o contrato.';
+  }
+  renderApp();
+}
+async function deleteContratoById(id){
+  const idx = contratos.findIndex(c=>c.id===id);
+  if(idx===-1) return;
+  const [removido] = contratos.splice(idx,1);
+  renderApp();
+  try{
+    await apiRequest('DELETE', `/comissoes/${id}`);
+  }catch(e){
+    contratos.splice(idx,0,removido);
+    errorMsg = 'Não foi possível excluir o contrato.';
+    renderApp();
+  }
+}
+
 /* ---------- render: shell (barra lateral + página atual) ---------- */
 function renderApp(){
   const app = document.getElementById('app');
@@ -599,6 +698,7 @@ function renderApp(){
   if(currentPage === 'dashboard') pageHtml = renderDashboardPage();
   else if(currentPage === 'pipeline') pageHtml = renderPipelinePage();
   else if(currentPage === 'leads') pageHtml = renderLeadsPage();
+  else if(currentPage === 'comissoes') pageHtml = renderComissoesPage();
   else if(currentPage === 'tarefas') pageHtml = renderTarefasPage();
 
   app.innerHTML = `
@@ -619,6 +719,7 @@ function renderSidebar(){
     ['dashboard', 'Dashboard', ICON_DASHBOARD],
     ['pipeline', 'Pipeline', ICON_PIPELINE],
     ['leads', 'Leads', ICON_LEADS],
+    ['comissoes', 'Comissões', ICON_COMISSOES],
     ['tarefas', 'Tarefas', ICON_TASKS],
   ];
   return `
@@ -1033,6 +1134,90 @@ function renderTarefasPage(){
   `;
 }
 
+/* ---------- página: Comissões ---------- */
+function renderComissoesPage(){
+  if(!contratosLoaded){
+    return `<div class="page-head"><div><h1>Comissões</h1><p>Carregando…</p></div></div>`;
+  }
+  const stats = comissoesStats();
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Comissões</h1>
+        <p>Previsão de recebimento por mês · ${monthLabel(comissoesMonth, true)}</p>
+      </div>
+      <div class="page-head-actions">
+        <div class="month-step-nav">
+          <button class="icon-btn" data-action="comissoes-mes" data-delta="-1" title="Mês anterior">‹</button>
+          <span>${monthLabel(comissoesMonth, true)}</span>
+          <button class="icon-btn" data-action="comissoes-mes" data-delta="1" title="Próximo mês">›</button>
+        </div>
+        <button class="btn-primary" data-action="open-new-contrato">+ Novo contrato</button>
+      </div>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-card-top"><span>Previsto este mês</span></div>
+        <div class="metric-value">${fmtBRL(stats.previstoMes)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-top"><span>Total ativo a receber</span></div>
+        <div class="metric-value">${fmtBRL(stats.totalAtivo)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-card-top"><span>Contratos cadastrados</span></div>
+        <div class="metric-value">${stats.total}</div>
+      </div>
+    </div>
+
+    ${contratos.length ? `
+      <div class="contratos-list">
+        ${contratos.map(c=>renderContratoCard(c)).join('')}
+      </div>
+    ` : `<div class="tasks-empty">Nenhum contrato de comissão cadastrado ainda.</div>`}
+  `;
+}
+
+function renderContratoCard(c){
+  const anchor = (c.date||'').slice(0,7);
+  const idx = monthsBetween(anchor, comissoesMonth);
+  const parcelaAtual = Math.min(Math.max(idx+1, 0), c.parcelas);
+  const pct = Math.max(0, Math.min(1, idx / c.parcelas));
+  const status = idx >= c.parcelas ? 'Contrato quitado' : idx < 0 ? 'Ainda não iniciado' : `Parcela ${parcelaAtual}/${c.parcelas} este mês`;
+  const escopo = ESCOPOS[c.scope] || ESCOPOS.Pessoal;
+  const p2 = c.parcelas - c.parcelas1;
+  const blocosHtml = p2 > 0
+    ? `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div><div>🔹 ${p2} parcela${p2===1?'':'s'} de ${fmtBRL(c.value2)} cada</div>`
+    : `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div>`;
+  return `
+    <div class="contrato-card">
+      <div class="contrato-card-head">
+        <div>
+          <h3 class="contrato-card-title">${esc(c.desc)}</h3>
+          <p class="contrato-card-note">
+            <span class="badge" style="color:${escopo.color};background:${escopo.bg}">${escopo.label}</span>
+            <span>· ${c.parcelas}x parcelas · Carta de crédito: ${fmtBRL(c.creditoValor)}</span>
+          </p>
+        </div>
+        <div class="contrato-card-actions">
+          <button class="icon-btn" data-action="open-edit-contrato" data-contrato-id="${c.id}" title="Editar">${ICON_EDIT}</button>
+          <button class="icon-btn" data-action="delete-contrato" data-contrato-id="${c.id}" title="Excluir">${ICON_TRASH}</button>
+        </div>
+      </div>
+      <div class="contrato-card-blocks">
+        ${blocosHtml}
+        <div class="contrato-card-total">Total líquido da comissão: ${fmtBRL(contratoTotal(c))}</div>
+      </div>
+      <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${pct*100}%"></div></div>
+      <div class="contrato-card-status">
+        <span>${status}</span>
+        <span>Início: ${monthLabel(anchor, true)}</span>
+      </div>
+    </div>
+  `;
+}
+
 /* ---------- eventos ---------- */
 function bindAppEvents(){
   const app = document.getElementById('app');
@@ -1119,6 +1304,25 @@ function bindAppEvents(){
   });
   const toggleConcluidasEl = app.querySelector('[data-action="toggle-show-concluidas"]');
   if(toggleConcluidasEl) toggleConcluidasEl.addEventListener('click', ()=>{ tarefasShowConcluidas = !tarefasShowConcluidas; renderApp(); });
+
+  /* -- Comissões -- */
+  app.querySelectorAll('[data-action="comissoes-mes"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ comissoesMonth = addMonthsKey(comissoesMonth, parseInt(btn.dataset.delta,10)); renderApp(); });
+  });
+  const openNewContratoBtn = app.querySelector('[data-action="open-new-contrato"]');
+  if(openNewContratoBtn) openNewContratoBtn.addEventListener('click', openNewContrato);
+  app.querySelectorAll('[data-action="open-edit-contrato"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openEditContrato(btn.dataset.contratoId));
+  });
+  app.querySelectorAll('[data-action="delete-contrato"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.contratoId;
+      showConfirm({
+        message: 'Excluir este contrato de comissão? Essa ação não pode ser desfeita.',
+        onConfirm: ()=>{ deleteContratoById(id); closeConfirm(); },
+      });
+    });
+  });
 
   /* -- Leads -- */
   const openNewLeadBtn = app.querySelector('[data-action="open-new-lead"]');
@@ -1476,6 +1680,118 @@ function renderTaskModal(){
   }
 }
 
+/* ---------- modal do contrato de comissão ---------- */
+function openNewContrato(){
+  contratoModalForm = { __isNew:true, id:null, desc:'', scope:'Pessoal', creditoValor:0, date: comissoesMonth + '-01' };
+  renderContratoModal();
+}
+function openEditContrato(id){
+  const c = contratos.find(x=>x.id===id);
+  if(!c) return;
+  contratoModalForm = { __isNew:false, id:c.id, desc:c.desc, scope:c.scope, creditoValor:c.creditoValor, date:c.date };
+  renderContratoModal();
+}
+function closeContratoModal(){ contratoModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+
+function renderContratoModal(){
+  const root = document.getElementById('modal-root');
+  if(!contratoModalForm){ root.innerHTML=''; return; }
+  const f = contratoModalForm;
+  const preview = calcComissaoPreview(f.creditoValor);
+  const previewTotal = preview.value1*10 + preview.value2*3;
+
+  root.innerHTML = `
+    <div class="overlay" id="contrato-modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>${f.__isNew ? 'Novo contrato de comissão' : 'Editar contrato'}</h3>
+          <button id="contrato-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Cliente / contrato</label>
+            <input type="text" id="c-desc" value="${esc(f.desc)}" placeholder="Ex: Consórcio — Contrato Imóvel 118" />
+          </div>
+          <div class="field">
+            <label>Escopo</label>
+            <div class="scope-toggle" id="c-scope-toggle">
+              <div class="scope-btn ${f.scope==='Pessoal'?'active':''}" data-scope="Pessoal">Pessoal</div>
+              <div class="scope-btn ${f.scope==='Empresa'?'active':''}" data-scope="Empresa">Empresa</div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Valor da carta de crédito vendida</label>
+            <div class="money-wrap">
+              <span>R$</span>
+              <input type="text" inputmode="numeric" id="c-credito" value="${f.creditoValor ? Number(f.creditoValor).toLocaleString('pt-BR') : ''}" placeholder="0" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Mês da 1ª parcela</label>
+            <input type="month" id="c-mes" value="${(f.date||'').slice(0,7)}" />
+          </div>
+          <div class="calc-preview" id="c-preview">
+            🔹 10 primeiras parcelas: <b>${fmtBRL(preview.value1)}</b> cada<br/>
+            🔹 3 últimas parcelas: <b>${fmtBRL(preview.value2)}</b> cada<br/>
+            Total: 13x parcelas · Total líquido da comissão: <b>${fmtBRL(previewTotal)}</b>
+          </div>
+          <p class="calc-preview-note">O valor de cada parcela é calculado automaticamente a partir da carta de crédito, já líquido.</p>
+        </div>
+        <div class="modal-foot">
+          ${!f.__isNew ? `<button class="delete-link" id="c-delete">🗑 Excluir</button>` : '<span></span>'}
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="c-cancel">Cancelar</button>
+            <button class="btn-save" id="c-save">${f.__isNew ? 'Criar contrato' : 'Salvar alterações'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('contrato-modal-close').addEventListener('click', closeContratoModal);
+  document.getElementById('c-cancel').addEventListener('click', closeContratoModal);
+  document.getElementById('contrato-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='contrato-modal-overlay') closeContratoModal(); });
+
+  document.getElementById('c-desc').addEventListener('input', (e)=> contratoModalForm.desc = e.target.value);
+  document.getElementById('c-mes').addEventListener('change', (e)=> contratoModalForm.date = e.target.value + '-01');
+
+  document.querySelectorAll('#c-scope-toggle .scope-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      contratoModalForm.scope = btn.dataset.scope;
+      document.querySelectorAll('#c-scope-toggle .scope-btn').forEach(b=>{
+        b.classList.toggle('active', b.dataset.scope===contratoModalForm.scope);
+      });
+    });
+  });
+
+  const creditoInput = document.getElementById('c-credito');
+  creditoInput.addEventListener('input', (e)=>{
+    const { numero, texto } = maskInteiro(e.target.value);
+    contratoModalForm.creditoValor = numero;
+    e.target.value = texto;
+    const prev = calcComissaoPreview(numero);
+    const total = prev.value1*10 + prev.value2*3;
+    const previewEl = document.getElementById('c-preview');
+    if(previewEl){
+      previewEl.innerHTML = `
+        🔹 10 primeiras parcelas: <b>${fmtBRL(prev.value1)}</b> cada<br/>
+        🔹 3 últimas parcelas: <b>${fmtBRL(prev.value2)}</b> cada<br/>
+        Total: 13x parcelas · Total líquido da comissão: <b>${fmtBRL(total)}</b>
+      `;
+    }
+  });
+
+  document.getElementById('c-save').addEventListener('click', saveContratoFromModal);
+  if(!f.__isNew){
+    document.getElementById('c-delete').addEventListener('click', ()=>{
+      showConfirm({
+        message: 'Excluir este contrato de comissão? Essa ação não pode ser desfeita.',
+        onConfirm: ()=>{ deleteContratoById(f.id); closeContratoModal(); closeConfirm(); },
+      });
+    });
+  }
+}
+
 /* ---------- confirmação genérica ---------- */
 function showConfirm({ message, onConfirm }){
   confirmState = { message, onConfirm };
@@ -1503,4 +1819,5 @@ if(getToken()){
   loadBoard();
   loadTasks();
   loadCalendarStatus();
+  loadContratos();
 }
