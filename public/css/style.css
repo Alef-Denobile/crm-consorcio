@@ -262,7 +262,7 @@ main{ padding:24px; overflow-x:auto; }
 .sidebar-backdrop{ display:none; }
 
 /* responsivo: barra lateral vira uma gaveta escondida, aberta pelo hambúrguer */
-@media (max-width:760px){
+@media (max-width:1024px){
   .hamburger-btn{ display:flex; }
   .sidebar{
     position:fixed; left:0; top:0; height:100vh; width:240px; z-index:200;
@@ -404,3 +404,16 @@ main{ padding:24px; overflow-x:auto; }
 .dash-panel-title-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
 .dash-panel-title-row .dash-panel-title{ margin:0; display:flex; align-items:center; gap:6px; }
 .ai-insights-list{ margin:0; padding-left:18px; font-size:13px; line-height:1.8; color:var(--ink); }
+
+/* ---------- conversa do WhatsApp (dentro do modal do cliente) ---------- */
+.wa-conversa{ margin-top:10px; padding:12px; background:var(--col-bg); border:1px solid var(--line); border-radius:10px; }
+.wa-conversa-lista{ display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; margin-bottom:10px; }
+.wa-msg{ max-width:82%; padding:8px 10px; border-radius:10px; font-size:12px; }
+.wa-msg p{ margin:0 0 3px; word-break:break-word; }
+.wa-msg span{ font-size:10px; }
+.wa-msg-in{ align-self:flex-start; background:var(--paper); border:1px solid var(--line); color:var(--ink); }
+.wa-msg-in span{ color:var(--ink-soft); }
+.wa-msg-out{ align-self:flex-end; background:var(--accent); color:#fff; }
+.wa-msg-out span{ color:rgba(255,255,255,.75); }
+.wa-conversa-input-row{ display:flex; gap:8px; }
+.wa-conversa-input-row input{ flex:1; padding:9px 11px; min-height:38px; border-radius:8px; border:1px solid var(--line); font-size:12px; font-family:inherit; background:var(--paper); color:var(--ink); }

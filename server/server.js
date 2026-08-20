@@ -12,6 +12,7 @@ const taskRoutes = require('./routes/tasks');
 const calendarRoutes = require('./routes/calendar');
 const comissoesRoutes = require('./routes/comissoes');
 const aiRoutes = require('./routes/ai');
+const whatsappRoutes = require('./routes/whatsapp');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,6 +30,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/comissoes', comissoesRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/whatsapp', whatsappRoutes);
 
 // front-end estático (a pasta public com index.html, css e js)
 app.use(express.static(path.join(__dirname, '..', 'public')));

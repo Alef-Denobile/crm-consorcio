@@ -149,6 +149,9 @@ let tarefasShowConcluidas = false;
 let calendarConnected = false;
 let calendarSyncing = false;
 let calendarSyncedOnce = false;
+let whatsappConnected = false;
+let whatsappSalvando = false;
+let whatsappConfigMsg = null;
 let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
@@ -233,6 +236,101 @@ async function loadCalendarStatus(){
     calendarConnected = false;
   }
   renderApp();
+}
+
+/* ---------- WhatsApp Business API ---------- */
+async function loadWhatsappStatus(){
+  try{
+    const data = await apiRequest('GET', '/whatsapp/status');
+    whatsappConnected = !!data.connected;
+  }catch(e){
+    whatsappConnected = false;
+  }
+  renderApp();
+}
+async function salvarWhatsappConfig(){
+  const phoneEl = document.getElementById('wa-phone-id');
+  const tokenEl = document.getElementById('wa-token');
+  const wabaEl = document.getElementById('wa-waba-id');
+  const phoneNumberId = phoneEl ? phoneEl.value.trim() : '';
+  const accessToken = tokenEl ? tokenEl.value.trim() : '';
+  const wabaId = wabaEl ? wabaEl.value.trim() : '';
+  if(!phoneNumberId || !accessToken){
+    whatsappConfigMsg = { tipo:'erro', texto:'Preencha o Phone Number ID e o Access Token.' };
+    renderApp();
+    return;
+  }
+  whatsappSalvando = true;
+  whatsappConfigMsg = null;
+  renderApp();
+  try{
+    await apiRequest('POST', '/whatsapp/configurar', { phoneNumberId, accessToken, wabaId });
+    whatsappConnected = true;
+    whatsappConfigMsg = { tipo:'ok', texto:'Conectado com sucesso.' };
+  }catch(e){
+    whatsappConfigMsg = { tipo:'erro', texto: e.message || 'Não foi possível salvar a configuração.' };
+  }
+  whatsappSalvando = false;
+  renderApp();
+}
+async function desconectarWhatsapp(){
+  try{
+    await apiRequest('POST', '/whatsapp/desconectar');
+    whatsappConnected = false;
+  }catch(e){
+    errorMsg = 'Não foi possível desconectar o WhatsApp Business.';
+  }
+  renderApp();
+}
+async function abrirConversaWhatsapp(){
+  const box = document.getElementById('f-wa-conversa');
+  if(!box || !modalForm || modalForm.__isNew) return;
+  box.style.display = 'block';
+  box.innerHTML = '<p class="settings-page-note">Carregando conversa…</p>';
+  try{
+    const data = await apiRequest('GET', `/whatsapp/conversas/${modalForm.id}`);
+    renderConversaWhatsapp(data.mensagens || []);
+  }catch(e){
+    box.innerHTML = `<p class="settings-page-msg erro">${esc(e.message || 'Não foi possível carregar a conversa.')}</p>`;
+  }
+}
+function renderConversaWhatsapp(mensagens){
+  const box = document.getElementById('f-wa-conversa');
+  if(!box) return;
+  box.innerHTML = `
+    <div class="wa-conversa-lista">
+      ${mensagens.length ? mensagens.map(m=>`
+        <div class="wa-msg wa-msg-${m.direction}">
+          <p>${esc(m.texto)}</p>
+          <span>${new Date(m.timestamp).toLocaleString('pt-BR')}</span>
+        </div>
+      `).join('') : '<p class="settings-page-note">Nenhuma mensagem ainda.</p>'}
+    </div>
+    <div class="wa-conversa-input-row">
+      <input type="text" id="wa-nova-msg" placeholder="Digite uma mensagem..." />
+      <button type="button" class="btn-primary" id="wa-enviar-btn">Enviar</button>
+    </div>
+  `;
+  const lista = box.querySelector('.wa-conversa-lista');
+  if(lista) lista.scrollTop = lista.scrollHeight;
+  const input = document.getElementById('wa-nova-msg');
+  const enviarBtn = document.getElementById('wa-enviar-btn');
+  const enviar = async ()=>{
+    const texto = input.value.trim();
+    if(!texto || !modalForm) return;
+    enviarBtn.disabled = true;
+    try{
+      await apiRequest('POST', '/whatsapp/enviar', { cardId: modalForm.id, texto });
+      input.value = '';
+      await abrirConversaWhatsapp();
+    }catch(e){
+      errorMsg = e.message || 'Não foi possível enviar a mensagem.';
+      renderApp();
+    }
+    if(enviarBtn) enviarBtn.disabled = false;
+  };
+  enviarBtn.addEventListener('click', enviar);
+  input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') enviar(); });
 }
 async function connectGoogleCalendar(){
   try{
@@ -1417,7 +1515,35 @@ function renderConfiguracoesPage(){
             `
             : `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
           }
-          <p class="settings-page-note">O botão do WhatsApp já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
+          <p class="settings-page-note">O botão do WhatsApp de abrir conversa já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
+        </div>
+
+        <div class="settings-page-section">
+          <h3>WhatsApp Business API</h3>
+          <div class="settings-page-row">
+            <span>Status</span>
+            <span>${whatsappConnected ? '✓ Conectado' : 'Não conectado'}</span>
+          </div>
+          ${whatsappConnected ? `
+            <p class="settings-page-note">Conversas ficam registradas dentro do card de cada cliente. Pra reconfigurar, desconecte e conecte de novo com os dados atualizados.</p>
+            <button class="btn-outline" data-action="desconectar-whatsapp">Desconectar</button>
+          ` : `
+            <div class="field">
+              <label>Phone Number ID</label>
+              <input type="text" id="wa-phone-id" placeholder="Ex: 109xxxxxxxxxxxx" />
+            </div>
+            <div class="field">
+              <label>Access Token</label>
+              <input type="password" id="wa-token" placeholder="Token permanente gerado no Meta" />
+            </div>
+            <div class="field">
+              <label>WABA ID (opcional)</label>
+              <input type="text" id="wa-waba-id" placeholder="ID da conta comercial do WhatsApp" />
+            </div>
+            ${whatsappConfigMsg ? `<p class="settings-page-msg ${whatsappConfigMsg.tipo}">${esc(whatsappConfigMsg.texto)}</p>` : ''}
+            <button class="btn-primary" data-action="salvar-whatsapp-config" ${whatsappSalvando?'disabled':''}>${whatsappSalvando?'Salvando…':'Conectar'}</button>
+          `}
+          <p class="settings-page-note">Requer conta comercial no Meta com o produto WhatsApp ativado. Passo a passo completo no README.</p>
         </div>
 
         <div class="settings-page-section">
@@ -1587,6 +1713,11 @@ function bindAppEvents(){
   if(importColunaSelect) importColunaSelect.addEventListener('change', (e)=> importColumnId = e.target.value);
   const importBtn = document.getElementById('import-btn');
   if(importBtn) importBtn.addEventListener('click', importarLeadsCsv);
+
+  const salvarWaBtn = app.querySelector('[data-action="salvar-whatsapp-config"]');
+  if(salvarWaBtn) salvarWaBtn.addEventListener('click', salvarWhatsappConfig);
+  const desconectarWaBtn = app.querySelector('[data-action="desconectar-whatsapp"]');
+  if(desconectarWaBtn) desconectarWaBtn.addEventListener('click', desconectarWhatsapp);
 
   /* -- Leads -- */
   const openNewLeadBtn = app.querySelector('[data-action="open-new-lead"]');
@@ -1797,8 +1928,10 @@ function renderModal(){
                 ${WA_ICON} Abrir WhatsApp
               </button>
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-mensagem">${ICON_SPARKLE} Sugerir mensagem</button>` : ''}
+              ${!f.__isNew && whatsappConnected ? `<button type="button" class="ai-btn" id="f-ver-conversa">${WA_ICON} Ver conversa</button>` : ''}
             </div>
             <div class="ai-result" id="f-ai-mensagem-result" style="display:none;"></div>
+            <div class="wa-conversa" id="f-wa-conversa" style="display:none;"></div>
           </div>
           <div class="field">
             <label>Observações (opcional)</label>
@@ -1835,6 +1968,8 @@ function renderModal(){
   if(aiMensagemBtn) aiMensagemBtn.addEventListener('click', sugerirMensagemIA);
   const aiTarefaBtn = document.getElementById('f-ai-tarefa');
   if(aiTarefaBtn) aiTarefaBtn.addEventListener('click', sugerirTarefaIA);
+  const verConversaBtn = document.getElementById('f-ver-conversa');
+  if(verConversaBtn) verConversaBtn.addEventListener('click', abrirConversaWhatsapp);
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
   document.getElementById('f-mes').addEventListener('change', (e)=> modalForm.mes = e.target.value);
 
@@ -2091,4 +2226,5 @@ if(getToken()){
   loadTasks();
   loadCalendarStatus();
   loadContratos();
+  loadWhatsappStatus();
 }

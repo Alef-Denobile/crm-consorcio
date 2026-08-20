@@ -10,6 +10,15 @@ const googleCalendarSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const whatsappBusinessSchema = new mongoose.Schema(
+  {
+    phoneNumberId: { type: String, default: null },
+    accessToken: { type: String, default: null },
+    wabaId: { type: String, default: null },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     nome: { type: String, trim: true, default: '' },
@@ -17,6 +26,7 @@ const userSchema = new mongoose.Schema(
     senhaHash: { type: String, default: null }, // null quando a conta usa só login com Google
     googleId: { type: String, default: null, unique: true, sparse: true },
     googleCalendar: { type: googleCalendarSchema, default: () => ({}) },
+    whatsappBusiness: { type: whatsappBusinessSchema, default: () => ({}) },
   },
   {
     timestamps: true,
@@ -29,6 +39,8 @@ const userSchema = new mongoose.Schema(
         delete ret.senhaHash; // nunca devolver o hash da senha pro front-end
         ret.googleCalendarConnected = !!(ret.googleCalendar && ret.googleCalendar.refreshToken);
         delete ret.googleCalendar; // tokens nunca saem do servidor
+        ret.whatsappConnected = !!(ret.whatsappBusiness && ret.whatsappBusiness.accessToken && ret.whatsappBusiness.phoneNumberId);
+        delete ret.whatsappBusiness; // token de acesso nunca sai do servidor
       },
     },
   }

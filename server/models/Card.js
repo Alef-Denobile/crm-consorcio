@@ -1,5 +1,12 @@
 const mongoose = require('mongoose');
 
+function normalizarTelefone(tel) {
+  let digitos = String(tel || '').replace(/\D/g, '');
+  if (!digitos) return null;
+  if (digitos.length <= 11) digitos = '55' + digitos; // assume Brasil se não veio com DDI
+  return digitos;
+}
+
 const cardSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -8,6 +15,7 @@ const cardSchema = new mongoose.Schema(
     valor: { type: Number, default: 0 },
     temperatura: { type: String, enum: ['quente', 'morno', 'frio'], default: 'morno' },
     telefone: { type: String, default: '' },
+    telefoneNormalizado: { type: String, default: null, index: true }, // só dígitos, com DDI — usado pra casar mensagens do WhatsApp
     obs: { type: String, default: '' },
     mes: { type: String, default: '' }, // formato "YYYY-MM"
   },
@@ -23,5 +31,18 @@ const cardSchema = new mongoose.Schema(
     },
   }
 );
+
+// mantém telefoneNormalizado em dia tanto em .create()/.save() quanto em findOneAndUpdate()
+cardSchema.pre('save', function (next) {
+  if (this.isModified('telefone')) this.telefoneNormalizado = normalizarTelefone(this.telefone);
+  next();
+});
+cardSchema.pre('findOneAndUpdate', function (next) {
+  const update = this.getUpdate();
+  if (update && update.telefone !== undefined) {
+    update.telefoneNormalizado = normalizarTelefone(update.telefone);
+  }
+  next();
+});
 
 module.exports = mongoose.model('Card', cardSchema);

@@ -149,6 +149,55 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   correspondente. O botão de acesso fica no rodapé da barra lateral,
   separado dos outros, acima do "Sair"
 
+## Configurar a API do WhatsApp Business (opcional)
+
+Isso é diferente do botão de WhatsApp que já existia (aquele só abre uma
+conversa externa). Com essa integração, as mensagens passam a ficar
+registradas dentro do CRM — dá pra ver o histórico e responder sem sair
+do painel.
+
+**O que você precisa preparar no Meta:**
+
+1. Crie/acesse uma conta em [business.facebook.com](https://business.facebook.com)
+2. Vá em [developers.facebook.com/apps](https://developers.facebook.com/apps), crie um app do tipo "Empresa" e adicione o produto **WhatsApp**
+3. No painel do produto WhatsApp, você já ganha um número de teste — ou
+   pode adicionar seu próprio número comercial (ele não pode continuar
+   logado no WhatsApp normal do celular ao mesmo tempo)
+4. Copie o **Phone Number ID** (aparece na tela inicial do produto WhatsApp)
+5. Gere um **Access Token permanente**: Configurações da Empresa →
+   Usuários do sistema → crie um usuário do sistema → gere um token com
+   permissão `whatsapp_business_messaging`
+6. (Opcional) copie o **WABA ID** (ID da conta do WhatsApp Business),
+   útil se você quiser gerenciar modelos de mensagem depois
+
+**Configure o webhook (pra receber mensagens):**
+
+1. No painel do produto WhatsApp → Configuração → Webhook
+2. URL de retorno de chamada: `https://seudominio.com.br/api/whatsapp/webhook`
+3. Token de verificação: qualquer texto que você escolher — coloque esse
+   mesmo valor no `.env` como `WHATSAPP_VERIFY_TOKEN` (e no Render também)
+4. Inscreva-se no campo `messages`
+
+**No painel do CRM:**
+
+1. Configurações → Integrações → WhatsApp Business API
+2. Cole o Phone Number ID e o Access Token → Conectar
+
+Depois disso, qualquer mensagem que o cliente mandar pro seu número
+aparece automaticamente como um card novo no Pipeline (se ainda não
+existir um cliente com aquele telefone) e fica registrada na conversa
+dentro do card — acessível pelo botão "Ver conversa" no modal de edição.
+
+⚠️ **Sobre o primeiro contato:** a API só deixa mandar texto livre pra
+quem já te escreveu nas últimas 24h. Pra iniciar uma conversa com
+alguém que nunca falou com você, é preciso usar um "modelo de mensagem"
+aprovado pela Meta — isso não está implementado ainda (só o envio de
+texto livre, pra quando o cliente inicia ou responde).
+
+⚠️ **Custo:** a Meta cobra por conversa iniciada (varia por categoria e
+país), geralmente com uma cota gratuita mensal. Consulte a página de
+preços da Meta antes de usar em produção.
+
 ## Recursos de IA
 
 Usam a API da Anthropic (modelo Haiku, rápido e barato — dá pra trocar
@@ -211,4 +260,13 @@ de erro ao clicar.
 - `POST /api/ai/mensagem` — `{ cardId }` → sugere mensagem de WhatsApp para o cliente
 - `POST /api/ai/insights` — gera de 2 a 4 alertas curtos sobre o funil atual
 - `POST /api/ai/sugerir-tarefa` — `{ cardId }` → sugere título e prazo de uma tarefa de acompanhamento
+
+**WhatsApp Business:**
+- `GET  /api/whatsapp/webhook` — verificação do webhook (chamada pela Meta, não chame direto)
+- `POST /api/whatsapp/webhook` — recebe mensagens e status (chamada pela Meta, pública)
+- `GET  /api/whatsapp/status` — diz se o usuário já conectou (exige token)
+- `POST /api/whatsapp/configurar` — `{ phoneNumberId, accessToken, wabaId }` (exige token)
+- `POST /api/whatsapp/desconectar` — (exige token)
+- `GET  /api/whatsapp/conversas/:cardId` — histórico de mensagens do cliente (exige token)
+- `POST /api/whatsapp/enviar` — `{ cardId, texto }` → envia mensagem (exige token)
 # crm-consorcio
