@@ -160,8 +160,8 @@ let senhaSalvando = false;
 let importColumnId = null;
 let importResultado = null; // { sucesso, falha }
 let importando = false;
-let configTab = 'geral';
 let aiInsights = [];
+let configOverflowOpen = false;
 let insightsCarregando = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
@@ -1359,99 +1359,111 @@ function renderConfiguracoesPage(){
     </div>
 
     <div class="config-tabs">
-      <button class="tab-btn ${configTab==='geral'?'active':''}" data-action="set-config-tab" data-tab="geral">Geral</button>
-      <button class="tab-btn ${configTab==='aparencia'?'active':''}" data-action="set-config-tab" data-tab="aparencia">Aparência</button>
-    </div>
-
-    ${configTab === 'aparencia' ? renderConfigAparencia() : renderConfigGeral()}
-  `;
-}
-
-function renderConfigAparencia(){
-  return `
-    <div class="settings-page-grid">
-      <div class="settings-page-section">
-        <h2>Aparência</h2>
-        <label class="settings-toggle-row">
-          <span>Modo noturno</span>
-          <span class="switch ${getDarkMode()?'on':''}" data-action="toggle-dark-mode">
-            <span class="switch-knob"></span>
-          </span>
-        </label>
-        <div class="settings-page-subtitle">Cor de destaque</div>
-        <div class="theme-swatches">
-          ${ACCENT_PRESETS.map(cor=>`<button class="theme-swatch ${getAccentColor().toLowerCase()===cor.toLowerCase()?'active':''}" data-action="set-accent" data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).join('')}
-        </div>
-        <label class="theme-custom-label">
-          Outra cor
-          <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
-        </label>
-      </div>
-    </div>
-  `;
-}
-
-function renderConfigGeral(){
-  return `
-    <div class="settings-page-grid">
-      <div class="settings-page-section">
-        <h2>Seu perfil</h2>
-        <div class="settings-page-row"><span>Nome</span><span>${esc((currentUser && currentUser.nome) || '—')}</span></div>
-        <div class="settings-page-row"><span>E-mail</span><span>${esc((currentUser && currentUser.email) || '—')}</span></div>
-      </div>
-
-      <div class="settings-page-section">
-        <h2>Login e segurança</h2>
-        ${currentUser && !currentUser.temSenha ? `
-          <p class="settings-page-note">Esta conta ainda não tem senha (entra só com o Google). Você pode definir uma agora, se quiser.</p>
+      <button class="tab-btn config-tab-btn" data-action="scroll-to-config" data-target="config-perfil">Perfil</button>
+      <button class="tab-btn config-tab-btn" data-action="scroll-to-config" data-target="config-integracoes">Integrações</button>
+      <button class="tab-btn config-tab-btn" data-action="scroll-to-config" data-target="config-aparencia">Aparência</button>
+      <div class="config-tabs-overflow">
+        <button class="tab-btn config-overflow-btn" data-action="toggle-config-overflow" title="Mais opções">⋯</button>
+        ${configOverflowOpen ? `
+          <div class="config-overflow-menu">
+            <button data-action="scroll-to-config" data-target="config-perfil">Perfil</button>
+            <button data-action="scroll-to-config" data-target="config-integracoes">Integrações</button>
+            <button data-action="scroll-to-config" data-target="config-aparencia">Aparência</button>
+          </div>
         ` : ''}
-        <div class="field">
-          <label>Senha atual</label>
-          <input type="password" id="s-senha-atual" placeholder="Deixe em branco se ainda não tem senha" />
-        </div>
-        <div class="field">
-          <label>Nova senha</label>
-          <input type="password" id="s-senha-nova" placeholder="Mínimo 6 caracteres" />
-        </div>
-        ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
-        <button class="btn-primary" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Salvar senha'}</button>
-      </div>
-
-      <div class="settings-page-section">
-        <h2>Integrações</h2>
-        <div class="settings-page-row">
-          <span>Google Agenda</span>
-          <span>${calendarConnected ? '✓ Conectada' : 'Não conectada'}</span>
-        </div>
-        ${calendarConnected
-          ? `
-            <div class="settings-btn-row">
-              <button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'Sincronizar agora'}</button>
-              <button class="btn-outline" data-action="disconnect-calendar">Desconectar</button>
-            </div>
-          `
-          : `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
-        }
-        <p class="settings-page-note">O botão do WhatsApp já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
-      </div>
-
-      <div class="settings-page-section">
-        <h2>Importar leads</h2>
-        <p class="settings-page-note">Envie um arquivo CSV com as colunas <b>Nome, Telefone, Valor</b> (nessa ordem, cabeçalho na primeira linha).</p>
-        <div class="field">
-          <label>Coluna de destino</label>
-          <select id="import-coluna">
-            ${board.columns.map(c=>`<option value="${c.id}" ${importColumnId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
-          <label>Arquivo CSV</label>
-          <input type="file" id="import-arquivo" accept=".csv,text/csv" />
-        </div>
-        ${importResultado ? `<p class="settings-page-msg ok">${importResultado.sucesso} lead(s) importado(s)${importResultado.falha ? `, ${importResultado.falha} falharam` : ''}.</p>` : ''}
-        <button class="btn-primary" id="import-btn" ${importando?'disabled':''}>${importando?'Importando…':'Importar'}</button>
       </div>
     </div>
+
+    <section id="config-perfil" class="config-group">
+      <h2 class="config-group-title">Perfil</h2>
+      <div class="settings-page-grid">
+        <div class="settings-page-section">
+          <h3>Seu perfil</h3>
+          <div class="settings-page-row"><span>Nome</span><span>${esc((currentUser && currentUser.nome) || '—')}</span></div>
+          <div class="settings-page-row"><span>E-mail</span><span>${esc((currentUser && currentUser.email) || '—')}</span></div>
+        </div>
+
+        <div class="settings-page-section">
+          <h3>Login e segurança</h3>
+          ${currentUser && !currentUser.temSenha ? `
+            <p class="settings-page-note">Esta conta ainda não tem senha (entra só com o Google). Você pode definir uma agora, se quiser.</p>
+          ` : ''}
+          <div class="field">
+            <label>Senha atual</label>
+            <input type="password" id="s-senha-atual" placeholder="Deixe em branco se ainda não tem senha" />
+          </div>
+          <div class="field">
+            <label>Nova senha</label>
+            <input type="password" id="s-senha-nova" placeholder="Mínimo 6 caracteres" />
+          </div>
+          ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
+          <button class="btn-primary" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Salvar senha'}</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="config-integracoes" class="config-group">
+      <h2 class="config-group-title">Integrações</h2>
+      <div class="settings-page-grid">
+        <div class="settings-page-section">
+          <h3>Google Agenda</h3>
+          <div class="settings-page-row">
+            <span>Status</span>
+            <span>${calendarConnected ? '✓ Conectada' : 'Não conectada'}</span>
+          </div>
+          ${calendarConnected
+            ? `
+              <div class="settings-btn-row">
+                <button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'Sincronizar agora'}</button>
+                <button class="btn-outline" data-action="disconnect-calendar">Desconectar</button>
+              </div>
+            `
+            : `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
+          }
+          <p class="settings-page-note">O botão do WhatsApp já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
+        </div>
+
+        <div class="settings-page-section">
+          <h3>Importar leads</h3>
+          <p class="settings-page-note">Envie um arquivo CSV com as colunas <b>Nome, Telefone, Valor</b> (nessa ordem, cabeçalho na primeira linha).</p>
+          <div class="field">
+            <label>Coluna de destino</label>
+            <select id="import-coluna">
+              ${board.columns.map(c=>`<option value="${c.id}" ${importColumnId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Arquivo CSV</label>
+            <input type="file" id="import-arquivo" accept=".csv,text/csv" />
+          </div>
+          ${importResultado ? `<p class="settings-page-msg ok">${importResultado.sucesso} lead(s) importado(s)${importResultado.falha ? `, ${importResultado.falha} falharam` : ''}.</p>` : ''}
+          <button class="btn-primary" id="import-btn" ${importando?'disabled':''}>${importando?'Importando…':'Importar'}</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="config-aparencia" class="config-group">
+      <h2 class="config-group-title">Aparência</h2>
+      <div class="settings-page-grid">
+        <div class="settings-page-section">
+          <h3>Modo noturno e cor de destaque</h3>
+          <label class="settings-toggle-row">
+            <span>Modo noturno</span>
+            <span class="switch ${getDarkMode()?'on':''}" data-action="toggle-dark-mode">
+              <span class="switch-knob"></span>
+            </span>
+          </label>
+          <div class="settings-page-subtitle">Cor de destaque</div>
+          <div class="theme-swatches">
+            ${ACCENT_PRESETS.map(cor=>`<button class="theme-swatch ${getAccentColor().toLowerCase()===cor.toLowerCase()?'active':''}" data-action="set-accent" data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).join('')}
+          </div>
+          <label class="theme-custom-label">
+            Outra cor
+            <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
+          </label>
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -1556,8 +1568,19 @@ function bindAppEvents(){
   });
 
   /* -- Configurações -- */
-  app.querySelectorAll('[data-action="set-config-tab"]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ configTab = btn.dataset.tab; renderApp(); });
+  app.querySelectorAll('[data-action="scroll-to-config"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const alvo = document.getElementById(btn.dataset.target);
+      if(alvo) alvo.scrollIntoView({ behavior:'smooth', block:'start' });
+      configOverflowOpen = false;
+      renderApp();
+    });
+  });
+  const configOverflowBtn = app.querySelector('[data-action="toggle-config-overflow"]');
+  if(configOverflowBtn) configOverflowBtn.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    configOverflowOpen = !configOverflowOpen;
+    renderApp();
   });
   const senhaAtualInput = document.getElementById('s-senha-atual');
   if(senhaAtualInput) senhaAtualInput.addEventListener('input', (e)=> senhaAtualVal = e.target.value);
@@ -1707,6 +1730,9 @@ function closeMenusOnOutsideClick(e){
   }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
+  }
+  if(configOverflowOpen && !e.target.closest('.config-overflow-menu') && !e.target.closest('[data-action="toggle-config-overflow"]')){
+    configOverflowOpen = false; renderApp();
   }
 }
 

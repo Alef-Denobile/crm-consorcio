@@ -39,7 +39,7 @@
   --badge-border:rgba(255,255,255,.12);
 }
 [data-theme="dark"] ::-webkit-scrollbar-thumb{ background:#3A3A3A; }
-[data-theme="dark"] .col-menu, [data-theme="dark"] .date-menu,
+[data-theme="dark"] .col-menu, [data-theme="dark"] .date-menu, [data-theme="dark"] .config-overflow-menu,
 [data-theme="dark"] .modal, [data-theme="dark"] .confirm-box{ box-shadow:0 14px 34px rgba(0,0,0,.55); }
 [data-theme="dark"] .card:hover{ box-shadow:0 10px 24px rgba(0,0,0,.5); }
 
@@ -360,7 +360,7 @@ main{ padding:24px; overflow-x:auto; }
 /* ---------- Configurações (página) ---------- */
 .settings-page-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; align-items:start; }
 .settings-page-section{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:20px; }
-.settings-page-section h2{ font-size:14px; font-weight:700; margin:0 0 14px; }
+.settings-page-section h3{ font-size:14px; font-weight:700; margin:0 0 14px; }
 .settings-page-section .field{ margin-bottom:12px; }
 .settings-page-row{ display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; gap:10px; }
 .settings-page-row:last-of-type{ border-bottom:none; }
@@ -372,7 +372,20 @@ main{ padding:24px; overflow-x:auto; }
 .settings-page-msg.erro{ background:var(--danger-soft); color:var(--danger); }
 .settings-page-subtitle{ font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin:0 0 10px; }
 .settings-btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
-.config-tabs{ display:flex; gap:8px; margin-bottom:20px; }
+.config-tabs{ display:flex; gap:8px; margin-bottom:28px; align-items:center; }
+.config-tabs-overflow{ display:none; position:relative; }
+.config-overflow-btn{ font-size:16px; font-weight:700; letter-spacing:2px; padding:9px 16px; line-height:1; }
+.config-overflow-menu{ position:absolute; left:0; top:44px; z-index:30; min-width:170px; background:var(--paper); border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 28px rgba(0,0,0,.14); padding:6px; display:flex; flex-direction:column; gap:2px; }
+.config-overflow-menu button{ text-align:left; padding:9px 12px; min-height:38px; border-radius:7px; border:none; background:none; font-size:13px; color:var(--ink); cursor:pointer; font-family:inherit; }
+.config-overflow-menu button:hover{ background:var(--hover-tint); }
+
+@media (max-width:640px){
+  .config-tab-btn{ display:none; }
+  .config-tabs-overflow{ display:inline-block; }
+}
+.config-group{ scroll-margin-top:20px; margin-bottom:36px; }
+.config-group:last-child{ margin-bottom:0; }
+.config-group-title{ font-family:'Fraunces',serif; font-size:18px; font-weight:600; margin:0 0 16px; letter-spacing:-.01em; }
 
 /* ---------- IA (mensagem sugerida, insights, tarefa sugerida) ---------- */
 .wa-actions-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }

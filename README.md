@@ -144,10 +144,10 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   10 parcelas × 0,00103388 + 3 parcelas × 0,00190561)
 - **Tarefas** — lista de tarefas com prioridade, vencimento e lead
   relacionado
-- **Configurações** — dividida em duas abas: "Aparência" (modo noturno
-  e cor de destaque) e "Geral" (perfil, trocar/definir senha, status
-  das integrações e importação de leads via CSV). O botão de acesso
-  fica no rodapé da barra lateral, separado dos outros, acima do "Sair"
+- **Configurações** — uma página só, em três seções na ordem Perfil →
+  Integrações → Aparência. Os botões no topo rolam a tela até a seção
+  correspondente. O botão de acesso fica no rodapé da barra lateral,
+  separado dos outros, acima do "Sair"
 
 ## Recursos de IA
 
