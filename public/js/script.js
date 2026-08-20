@@ -51,6 +51,7 @@ const ICON_PIPELINE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="non
 const ICON_LEADS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`;
 const ICON_TASKS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
 const ICON_COMISSOES = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="16" r="3"/><line x1="19" y1="5" x2="5" y2="19"/></svg>`;
+const ICON_SETTINGS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -152,6 +153,13 @@ let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
 let contratoModalForm = null;
+let senhaAtualVal = '';
+let senhaNovaVal = '';
+let senhaMsg = null; // { tipo:'ok'|'erro', texto }
+let senhaSalvando = false;
+let importColumnId = null;
+let importResultado = null; // { sucesso, falha }
+let importando = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
 let confirmState = null;         // { message, onConfirm }
@@ -471,6 +479,19 @@ function goToPage(page){
     calendarSyncedOnce = true;
     syncCalendarNow();
   }
+  if(page === 'configuracoes'){
+    senhaMsg = null; senhaAtualVal = ''; senhaNovaVal = '';
+    importResultado = null;
+    refreshCurrentUser();
+  }
+}
+async function refreshCurrentUser(){
+  try{
+    const data = await apiRequest('GET', '/auth/me');
+    currentUser = data.user;
+    localStorage.setItem('user', JSON.stringify(currentUser));
+    renderApp();
+  }catch(e){ /* mantém os dados já em cache */ }
 }
 
 /* ---------- mutações: colunas e cards (cada uma fala com a API) ---------- */
@@ -689,6 +710,72 @@ async function deleteContratoById(id){
   }
 }
 
+/* ---------- mutações: senha e importação de leads ---------- */
+async function salvarSenha(){
+  if(!senhaNovaVal || senhaNovaVal.length < 6){
+    senhaMsg = { tipo:'erro', texto:'A nova senha precisa ter ao menos 6 caracteres.' };
+    renderApp();
+    return;
+  }
+  senhaSalvando = true;
+  senhaMsg = null;
+  renderApp();
+  try{
+    await apiRequest('PUT', '/auth/password', { senhaAtual: senhaAtualVal, senhaNova: senhaNovaVal });
+    senhaMsg = { tipo:'ok', texto:'Senha salva com sucesso.' };
+    senhaAtualVal = ''; senhaNovaVal = '';
+    await refreshCurrentUser();
+  }catch(e){
+    senhaMsg = { tipo:'erro', texto: e.message || 'Não foi possível salvar a senha.' };
+  }
+  senhaSalvando = false;
+  renderApp();
+}
+
+// Parser simples de CSV: "Nome,Telefone,Valor", uma linha por lead.
+// Não lida com campos entre aspas contendo vírgulas — suficiente pro uso esperado.
+function parseCsvLeads(texto){
+  const linhas = texto.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if(!linhas.length) return [];
+  const inicio = /nome/i.test(linhas[0]) ? 1 : 0;
+  const out = [];
+  for(let i=inicio;i<linhas.length;i++){
+    const partes = linhas[i].split(',').map(p=>p.trim().replace(/^"|"$/g,''));
+    if(!partes[0]) continue;
+    const valorTexto = (partes[2]||'0').replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3})/g,'').replace(',','.');
+    out.push({ nome: partes[0], telefone: partes[1]||'', valor: parseFloat(valorTexto) || 0 });
+  }
+  return out;
+}
+async function importarLeadsCsv(){
+  const fileInput = document.getElementById('import-arquivo');
+  const file = fileInput && fileInput.files && fileInput.files[0];
+  if(!file){ errorMsg = 'Escolha um arquivo CSV primeiro.'; renderApp(); return; }
+  const columnId = importColumnId || (document.getElementById('import-coluna') || {}).value;
+  if(!columnId){ errorMsg = 'Escolha a coluna de destino.'; renderApp(); return; }
+
+  importando = true;
+  importResultado = null;
+  renderApp();
+
+  const texto = await file.text();
+  const linhas = parseCsvLeads(texto);
+  let sucesso = 0, falha = 0;
+  for(const linha of linhas){
+    try{
+      const novo = await apiRequest('POST', '/cards', {
+        columnId, cliente: linha.nome, telefone: linha.telefone, valor: linha.valor,
+        temperatura: 'morno', obs: '', mes: currentMonthKey(),
+      });
+      board.cards.push(novo);
+      sucesso++;
+    }catch(e){ falha++; }
+  }
+  importResultado = { sucesso, falha };
+  importando = false;
+  renderApp();
+}
+
 /* ---------- render: shell (barra lateral + página atual) ---------- */
 function renderApp(){
   const app = document.getElementById('app');
@@ -699,6 +786,7 @@ function renderApp(){
   else if(currentPage === 'pipeline') pageHtml = renderPipelinePage();
   else if(currentPage === 'leads') pageHtml = renderLeadsPage();
   else if(currentPage === 'comissoes') pageHtml = renderComissoesPage();
+  else if(currentPage === 'configuracoes') pageHtml = renderConfiguracoesPage();
   else if(currentPage === 'tarefas') pageHtml = renderTarefasPage();
 
   app.innerHTML = `
@@ -721,6 +809,7 @@ function renderSidebar(){
     ['leads', 'Leads', ICON_LEADS],
     ['comissoes', 'Comissões', ICON_COMISSOES],
     ['tarefas', 'Tarefas', ICON_TASKS],
+    ['configuracoes', 'Configurações', ICON_SETTINGS],
   ];
   return `
     <aside class="sidebar">
@@ -739,10 +828,7 @@ function renderSidebar(){
       <div class="sidebar-footer">
         <div class="settings-wrap">
           <button class="settings-btn" data-action="toggle-settings-panel" title="Configurações">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/>
-            </svg>
+            ${ICON_SETTINGS}
             <span>Configurações</span>
           </button>
           ${settingsPanelOpen ? `
@@ -1218,6 +1304,73 @@ function renderContratoCard(c){
   `;
 }
 
+/* ---------- página: Configurações ---------- */
+function renderConfiguracoesPage(){
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Configurações</h1>
+        <p>Sua conta, integrações e dados</p>
+      </div>
+    </div>
+
+    <div class="settings-page-grid">
+      <div class="settings-page-section">
+        <h2>Seu perfil</h2>
+        <div class="settings-page-row"><span>Nome</span><span>${esc((currentUser && currentUser.nome) || '—')}</span></div>
+        <div class="settings-page-row"><span>E-mail</span><span>${esc((currentUser && currentUser.email) || '—')}</span></div>
+      </div>
+
+      <div class="settings-page-section">
+        <h2>Login e segurança</h2>
+        ${currentUser && !currentUser.temSenha ? `
+          <p class="settings-page-note">Esta conta ainda não tem senha (entra só com o Google). Você pode definir uma agora, se quiser.</p>
+        ` : ''}
+        <div class="field">
+          <label>Senha atual</label>
+          <input type="password" id="s-senha-atual" placeholder="Deixe em branco se ainda não tem senha" />
+        </div>
+        <div class="field">
+          <label>Nova senha</label>
+          <input type="password" id="s-senha-nova" placeholder="Mínimo 6 caracteres" />
+        </div>
+        ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
+        <button class="btn-primary" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Salvar senha'}</button>
+      </div>
+
+      <div class="settings-page-section">
+        <h2>Integrações</h2>
+        <div class="settings-page-row">
+          <span>Google Agenda</span>
+          <span>${calendarConnected ? '✓ Conectada' : 'Não conectada'}</span>
+        </div>
+        ${calendarConnected
+          ? `<button class="btn-outline" data-action="disconnect-calendar">Desconectar</button>`
+          : `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
+        }
+        <p class="settings-page-note">O botão do WhatsApp já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
+      </div>
+
+      <div class="settings-page-section">
+        <h2>Importar leads</h2>
+        <p class="settings-page-note">Envie um arquivo CSV com as colunas <b>Nome, Telefone, Valor</b> (nessa ordem, cabeçalho na primeira linha).</p>
+        <div class="field">
+          <label>Coluna de destino</label>
+          <select id="import-coluna">
+            ${board.columns.map(c=>`<option value="${c.id}" ${importColumnId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Arquivo CSV</label>
+          <input type="file" id="import-arquivo" accept=".csv,text/csv" />
+        </div>
+        ${importResultado ? `<p class="settings-page-msg ok">${importResultado.sucesso} lead(s) importado(s)${importResultado.falha ? `, ${importResultado.falha} falharam` : ''}.</p>` : ''}
+        <button class="btn-primary" id="import-btn" ${importando?'disabled':''}>${importando?'Importando…':'Importar'}</button>
+      </div>
+    </div>
+  `;
+}
+
 /* ---------- eventos ---------- */
 function bindAppEvents(){
   const app = document.getElementById('app');
@@ -1323,6 +1476,19 @@ function bindAppEvents(){
       });
     });
   });
+
+  /* -- Configurações -- */
+  const senhaAtualInput = document.getElementById('s-senha-atual');
+  if(senhaAtualInput) senhaAtualInput.addEventListener('input', (e)=> senhaAtualVal = e.target.value);
+  const senhaNovaInput = document.getElementById('s-senha-nova');
+  if(senhaNovaInput) senhaNovaInput.addEventListener('input', (e)=> senhaNovaVal = e.target.value);
+  const senhaSalvarBtn = document.getElementById('s-senha-salvar');
+  if(senhaSalvarBtn) senhaSalvarBtn.addEventListener('click', salvarSenha);
+
+  const importColunaSelect = document.getElementById('import-coluna');
+  if(importColunaSelect) importColunaSelect.addEventListener('change', (e)=> importColumnId = e.target.value);
+  const importBtn = document.getElementById('import-btn');
+  if(importBtn) importBtn.addEventListener('click', importarLeadsCsv);
 
   /* -- Leads -- */
   const openNewLeadBtn = app.querySelector('[data-action="open-new-lead"]');

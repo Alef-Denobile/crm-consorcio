@@ -144,6 +144,8 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   10 parcelas × 0,00103388 + 3 parcelas × 0,00190561)
 - **Tarefas** — lista de tarefas com prioridade, vencimento e lead
   relacionado
+- **Configurações** — perfil, trocar/definir senha, status das
+  integrações (Google Agenda) e importação de leads via CSV
 
 ## Rotas da API
 
@@ -152,6 +154,7 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
 - `POST /api/auth/login` — `{ email, senha }` → retorna token
 - `POST /api/auth/google` — `{ credential }` (token do Google) → cria/liga conta e retorna token
 - `GET  /api/auth/me` — dados do usuário logado (exige token)
+- `PUT  /api/auth/password` — `{ senhaAtual, senhaNova }` → troca (ou define) a senha da conta
 
 **Painel (exigem token, sempre isoladas por usuário):**
 - `GET  /api/board` — colunas + cards

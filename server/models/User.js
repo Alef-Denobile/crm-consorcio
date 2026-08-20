@@ -25,6 +25,7 @@ const userSchema = new mongoose.Schema(
         ret.id = ret._id.toString();
         delete ret._id;
         delete ret.__v;
+        ret.temSenha = !!ret.senhaHash;
         delete ret.senhaHash; // nunca devolver o hash da senha pro front-end
         ret.googleCalendarConnected = !!(ret.googleCalendar && ret.googleCalendar.refreshToken);
         delete ret.googleCalendar; // tokens nunca saem do servidor

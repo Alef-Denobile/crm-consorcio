@@ -127,4 +127,28 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
+// PUT /api/auth/password -> troca (ou define, se a conta só tinha login com Google) a senha
+router.put('/password', auth, async (req, res) => {
+  try {
+    const { senhaAtual, senhaNova } = req.body;
+    if (!senhaNova || senhaNova.length < 6) {
+      return res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres.' });
+    }
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    if (user.senhaHash) {
+      if (!senhaAtual) return res.status(400).json({ error: 'Informe a senha atual.' });
+      const ok = await bcrypt.compare(senhaAtual, user.senhaHash);
+      if (!ok) return res.status(401).json({ error: 'Senha atual incorreta.' });
+    }
+
+    user.senhaHash = await bcrypt.hash(senhaNova, 10);
+    await user.save();
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao alterar a senha.' });
+  }
+});
+
 module.exports = router;

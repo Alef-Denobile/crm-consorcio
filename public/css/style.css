@@ -369,3 +369,17 @@ main{ padding:24px; overflow-x:auto; }
 .calc-preview{ background:var(--col-bg); border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:13px; line-height:1.7; }
 .calc-preview b{ color:var(--accent); }
 .calc-preview-note{ font-size:11px; color:var(--ink-soft); margin:6px 0 0; }
+
+/* ---------- Configurações (página) ---------- */
+.settings-page-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; align-items:start; }
+.settings-page-section{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:20px; }
+.settings-page-section h2{ font-size:14px; font-weight:700; margin:0 0 14px; }
+.settings-page-section .field{ margin-bottom:12px; }
+.settings-page-row{ display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; gap:10px; }
+.settings-page-row:last-of-type{ border-bottom:none; }
+.settings-page-row span:first-child{ color:var(--ink-soft); }
+.settings-page-row span:last-child{ font-weight:600; color:var(--ink); text-align:right; }
+.settings-page-note{ font-size:11px; color:var(--ink-soft); margin:10px 0 0; line-height:1.5; }
+.settings-page-msg{ font-size:12px; margin:8px 0; padding:8px 10px; border-radius:8px; }
+.settings-page-msg.ok{ background:var(--badge-neutral-bg); color:var(--ink); }
+.settings-page-msg.erro{ background:var(--danger-soft); color:var(--danger); }
