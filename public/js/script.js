@@ -161,7 +161,7 @@ let importColumnId = null;
 let importResultado = null; // { sucesso, falha }
 let importando = false;
 let aiInsights = [];
-let configOverflowOpen = false;
+let sidebarOpen = false;
 let insightsCarregando = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
@@ -461,6 +461,7 @@ function goToPage(page){
   openMenuColId = null;
   addingCol = false;
   editingColId = null;
+  sidebarOpen = false;
   renderApp();
   if(page === 'tarefas' && calendarConnected && !calendarSyncedOnce){
     calendarSyncedOnce = true;
@@ -864,9 +865,15 @@ function renderApp(){
   else if(currentPage === 'tarefas') pageHtml = renderTarefasPage();
 
   app.innerHTML = `
-    <div class="app-shell">
+    <div class="app-shell ${sidebarOpen ? 'sidebar-open' : ''}">
       ${renderSidebar()}
+      <div class="sidebar-backdrop" data-action="close-sidebar"></div>
       <div class="main-area">
+        <button class="hamburger-btn" data-action="toggle-sidebar" title="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
         ${errorMsg ? `<div class="error-banner" data-action="dismiss-error" title="Clique para fechar">⚠ ${esc(errorMsg)}</div>` : ''}
         ${pageHtml}
       </div>
@@ -1359,19 +1366,9 @@ function renderConfiguracoesPage(){
     </div>
 
     <div class="config-tabs">
-      <button class="tab-btn config-tab-btn" data-action="scroll-to-config" data-target="config-perfil">Perfil</button>
-      <button class="tab-btn config-tab-btn" data-action="scroll-to-config" data-target="config-integracoes">Integrações</button>
-      <button class="tab-btn config-tab-btn" data-action="scroll-to-config" data-target="config-aparencia">Aparência</button>
-      <div class="config-tabs-overflow">
-        <button class="tab-btn config-overflow-btn" data-action="toggle-config-overflow" title="Mais opções">⋯</button>
-        ${configOverflowOpen ? `
-          <div class="config-overflow-menu">
-            <button data-action="scroll-to-config" data-target="config-perfil">Perfil</button>
-            <button data-action="scroll-to-config" data-target="config-integracoes">Integrações</button>
-            <button data-action="scroll-to-config" data-target="config-aparencia">Aparência</button>
-          </div>
-        ` : ''}
-      </div>
+      <button class="tab-btn" data-action="scroll-to-config" data-target="config-perfil">Perfil</button>
+      <button class="tab-btn" data-action="scroll-to-config" data-target="config-integracoes">Integrações</button>
+      <button class="tab-btn" data-action="scroll-to-config" data-target="config-aparencia">Aparência</button>
     </div>
 
     <section id="config-perfil" class="config-group">
@@ -1470,6 +1467,11 @@ function renderConfiguracoesPage(){
 /* ---------- eventos ---------- */
 function bindAppEvents(){
   const app = document.getElementById('app');
+
+  const hamburgerBtn = app.querySelector('[data-action="toggle-sidebar"]');
+  if(hamburgerBtn) hamburgerBtn.addEventListener('click', ()=>{ sidebarOpen = !sidebarOpen; renderApp(); });
+  const closeSidebarEl = app.querySelector('[data-action="close-sidebar"]');
+  if(closeSidebarEl) closeSidebarEl.addEventListener('click', ()=>{ sidebarOpen = false; renderApp(); });
 
   const errorBanner = app.querySelector('[data-action="dismiss-error"]');
   if(errorBanner) errorBanner.addEventListener('click', ()=>{ errorMsg=null; renderApp(); });
@@ -1572,15 +1574,7 @@ function bindAppEvents(){
     btn.addEventListener('click', ()=>{
       const alvo = document.getElementById(btn.dataset.target);
       if(alvo) alvo.scrollIntoView({ behavior:'smooth', block:'start' });
-      configOverflowOpen = false;
-      renderApp();
     });
-  });
-  const configOverflowBtn = app.querySelector('[data-action="toggle-config-overflow"]');
-  if(configOverflowBtn) configOverflowBtn.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    configOverflowOpen = !configOverflowOpen;
-    renderApp();
   });
   const senhaAtualInput = document.getElementById('s-senha-atual');
   if(senhaAtualInput) senhaAtualInput.addEventListener('input', (e)=> senhaAtualVal = e.target.value);
@@ -1730,9 +1724,6 @@ function closeMenusOnOutsideClick(e){
   }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
-  }
-  if(configOverflowOpen && !e.target.closest('.config-overflow-menu') && !e.target.closest('[data-action="toggle-config-overflow"]')){
-    configOverflowOpen = false; renderApp();
   }
 }
 
