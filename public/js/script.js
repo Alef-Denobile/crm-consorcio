@@ -139,7 +139,6 @@ let newColNameVal = '';
 let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
-let settingsPanelOpen = false;
 let editingGreeting = false;
 let greetingDraft = '';
 let dateMenuOpen = false;
@@ -451,25 +450,9 @@ function filteredLeads(){
 }
 
 /* ---------- navegação entre páginas ---------- */
-// Posiciona o painel de configurações do lado do botão que o abriu.
-// Como o painel usa position:fixed, ele nunca é cortado pela rolagem
-// própria da barra lateral — sempre aparece por cima do resto da tela.
-function posicionarPainelConfiguracoes(){
-  if(!settingsPanelOpen) return;
-  const btn = document.querySelector('[data-action="toggle-settings-panel"]');
-  const panel = document.querySelector('.settings-panel');
-  if(!btn || !panel) return;
-  const rect = btn.getBoundingClientRect();
-  const left = Math.min(rect.right + 10, window.innerWidth - panel.offsetWidth - 12);
-  const bottom = Math.max(window.innerHeight - rect.bottom, 12);
-  panel.style.left = Math.max(left, 12) + 'px';
-  panel.style.bottom = bottom + 'px';
-}
-
 function goToPage(page){
   if(currentPage === page) return;
   currentPage = page;
-  settingsPanelOpen = false;
   dateMenuOpen = false;
   openMenuColId = null;
   addingCol = false;
@@ -826,47 +809,6 @@ function renderSidebar(){
         `).join('')}
       </nav>
       <div class="sidebar-footer">
-        <div class="settings-wrap">
-          <button class="settings-btn" data-action="toggle-settings-panel" title="Configurações">
-            ${ICON_SETTINGS}
-            <span>Configurações</span>
-          </button>
-          ${settingsPanelOpen ? `
-            <div class="settings-panel">
-              <div class="settings-section">
-                <div class="settings-section-title">Aparência</div>
-                <label class="settings-toggle-row">
-                  <span>Modo noturno</span>
-                  <span class="switch ${getDarkMode()?'on':''}" data-action="toggle-dark-mode">
-                    <span class="switch-knob"></span>
-                  </span>
-                </label>
-              </div>
-              <div class="settings-sep"></div>
-              <div class="settings-section">
-                <div class="settings-section-title">Cor de destaque</div>
-                <div class="theme-swatches">
-                  ${ACCENT_PRESETS.map(cor=>`<button class="theme-swatch ${getAccentColor().toLowerCase()===cor.toLowerCase()?'active':''}" data-action="set-accent" data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).join('')}
-                </div>
-                <label class="theme-custom-label">
-                  Outra cor
-                  <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
-                </label>
-              </div>
-              <div class="settings-sep"></div>
-              <div class="settings-section">
-                <div class="settings-section-title">Google Agenda</div>
-                ${calendarConnected ? `
-                  <p class="settings-calendar-status">✓ Conectada</p>
-                  <button class="btn-outline settings-calendar-btn" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'Sincronizar agora'}</button>
-                  <button class="btn-outline settings-calendar-btn" data-action="disconnect-calendar">Desconectar</button>
-                ` : `
-                  <button class="btn-primary settings-calendar-btn" data-action="connect-calendar">Conectar Google Agenda</button>
-                `}
-              </div>
-            </div>
-          ` : ''}
-        </div>
         <button class="nav-item logout-item" data-action="logout">${ICON_LOGOUT}<span>Sair</span></button>
       </div>
     </aside>
@@ -1316,6 +1258,24 @@ function renderConfiguracoesPage(){
 
     <div class="settings-page-grid">
       <div class="settings-page-section">
+        <h2>Aparência</h2>
+        <label class="settings-toggle-row">
+          <span>Modo noturno</span>
+          <span class="switch ${getDarkMode()?'on':''}" data-action="toggle-dark-mode">
+            <span class="switch-knob"></span>
+          </span>
+        </label>
+        <div class="settings-page-subtitle">Cor de destaque</div>
+        <div class="theme-swatches">
+          ${ACCENT_PRESETS.map(cor=>`<button class="theme-swatch ${getAccentColor().toLowerCase()===cor.toLowerCase()?'active':''}" data-action="set-accent" data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).join('')}
+        </div>
+        <label class="theme-custom-label">
+          Outra cor
+          <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
+        </label>
+      </div>
+
+      <div class="settings-page-section">
         <h2>Seu perfil</h2>
         <div class="settings-page-row"><span>Nome</span><span>${esc((currentUser && currentUser.nome) || '—')}</span></div>
         <div class="settings-page-row"><span>E-mail</span><span>${esc((currentUser && currentUser.email) || '—')}</span></div>
@@ -1345,7 +1305,12 @@ function renderConfiguracoesPage(){
           <span>${calendarConnected ? '✓ Conectada' : 'Não conectada'}</span>
         </div>
         ${calendarConnected
-          ? `<button class="btn-outline" data-action="disconnect-calendar">Desconectar</button>`
+          ? `
+            <div class="settings-btn-row">
+              <button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'Sincronizar agora'}</button>
+              <button class="btn-outline" data-action="disconnect-calendar">Desconectar</button>
+            </div>
+          `
           : `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
         }
         <p class="settings-page-note">O botão do WhatsApp já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
@@ -1402,14 +1367,6 @@ function bindAppEvents(){
     greetingInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
   }
 
-  const settingsBtn = app.querySelector('[data-action="toggle-settings-panel"]');
-  if(settingsBtn) settingsBtn.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    settingsPanelOpen = !settingsPanelOpen;
-    renderApp();
-  });
-  posicionarPainelConfiguracoes();
-  window.addEventListener('resize', posicionarPainelConfiguracoes);
   const darkModeSwitch = app.querySelector('[data-action="toggle-dark-mode"]');
   if(darkModeSwitch) darkModeSwitch.addEventListener('click', ()=>{
     setDarkMode(!getDarkMode());
@@ -1623,9 +1580,6 @@ function bindAppEvents(){
 function closeMenusOnOutsideClick(e){
   if(openMenuColId && !e.target.closest('.col-menu') && !e.target.closest('[data-action="toggle-col-menu"]')){
     openMenuColId = null; renderApp();
-  }
-  if(settingsPanelOpen && !e.target.closest('.settings-panel') && !e.target.closest('[data-action="toggle-settings-panel"]')){
-    settingsPanelOpen = false; renderApp();
   }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
