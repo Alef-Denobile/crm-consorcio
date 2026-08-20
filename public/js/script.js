@@ -52,6 +52,7 @@ const ICON_LEADS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" 
 const ICON_TASKS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
 const ICON_COMISSOES = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="16" r="3"/><line x1="19" y1="5" x2="5" y2="19"/></svg>`;
 const ICON_SETTINGS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`;
+const ICON_SPARKLE = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6L12 2Z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14Z"/><path d="M5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14Z"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -159,6 +160,9 @@ let senhaSalvando = false;
 let importColumnId = null;
 let importResultado = null; // { sucesso, falha }
 let importando = false;
+let configTab = 'geral';
+let aiInsights = [];
+let insightsCarregando = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
 let confirmState = null;         // { message, onConfirm }
@@ -759,6 +763,93 @@ async function importarLeadsCsv(){
   renderApp();
 }
 
+/* ---------- IA ---------- */
+async function gerarInsightsIA(){
+  insightsCarregando = true;
+  renderApp();
+  try{
+    const data = await apiRequest('POST', '/ai/insights');
+    aiInsights = data.insights || [];
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível gerar os insights.';
+  }
+  insightsCarregando = false;
+  renderApp();
+}
+
+async function sugerirMensagemIA(){
+  if(!modalForm || modalForm.__isNew) return;
+  const btn = document.getElementById('f-ai-mensagem');
+  const resultBox = document.getElementById('f-ai-mensagem-result');
+  if(btn){ btn.disabled = true; btn.innerHTML = `${ICON_SPARKLE} Gerando…`; }
+  try{
+    const data = await apiRequest('POST', '/ai/mensagem', { cardId: modalForm.id });
+    if(resultBox){
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `
+        <p>${esc(data.mensagem)}</p>
+        <div class="ai-result-actions">
+          <button type="button" class="btn-outline" id="f-ai-copiar">Copiar</button>
+          <button type="button" class="wa-btn" id="f-ai-abrir-wa">${WA_ICON} Abrir com essa mensagem</button>
+        </div>
+      `;
+      const copiarBtn = document.getElementById('f-ai-copiar');
+      if(copiarBtn) copiarBtn.addEventListener('click', ()=>{
+        navigator.clipboard.writeText(data.mensagem).catch(()=>{});
+      });
+      const abrirBtn = document.getElementById('f-ai-abrir-wa');
+      if(abrirBtn) abrirBtn.addEventListener('click', ()=>{
+        const link = waLink(modalForm.telefone);
+        if(link) window.open(link + '?text=' + encodeURIComponent(data.mensagem), '_blank', 'noopener');
+      });
+    }
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível gerar a mensagem.';
+    renderApp();
+  }
+  if(btn){ btn.disabled = false; btn.innerHTML = `${ICON_SPARKLE} Sugerir mensagem`; }
+}
+
+async function sugerirTarefaIA(){
+  if(!modalForm || modalForm.__isNew) return;
+  const btn = document.getElementById('f-ai-tarefa');
+  const resultBox = document.getElementById('f-ai-tarefa-result');
+  if(btn){ btn.disabled = true; btn.innerHTML = `${ICON_SPARKLE} Pensando…`; }
+  try{
+    const data = await apiRequest('POST', '/ai/sugerir-tarefa', { cardId: modalForm.id });
+    const dataVenc = new Date();
+    dataVenc.setDate(dataVenc.getDate() + data.dias);
+    const vencISO = dataVenc.toISOString().slice(0,10);
+    if(resultBox){
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `
+        <p><b>${esc(data.titulo)}</b> — vencimento sugerido: ${formatDate(vencISO)}</p>
+        <div class="ai-result-actions">
+          <button type="button" class="btn-outline" id="f-ai-criar-tarefa">Criar essa tarefa</button>
+        </div>
+      `;
+      const criarBtn = document.getElementById('f-ai-criar-tarefa');
+      if(criarBtn) criarBtn.addEventListener('click', async ()=>{
+        criarBtn.disabled = true;
+        try{
+          const nova = await apiRequest('POST', '/tasks', {
+            titulo: data.titulo, vencimento: vencISO, prioridade:'media', leadId: modalForm.id, descricao:'',
+          });
+          tasks.push(nova);
+          resultBox.innerHTML = '<p>✓ Tarefa criada.</p>';
+        }catch(e){
+          errorMsg = 'Não foi possível criar a tarefa.';
+          renderApp();
+        }
+      });
+    }
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível sugerir uma tarefa.';
+    renderApp();
+  }
+  if(btn){ btn.disabled = false; btn.innerHTML = `${ICON_SPARKLE} Sugerir tarefa de acompanhamento`; }
+}
+
 /* ---------- render: shell (barra lateral + página atual) ---------- */
 function renderApp(){
   const app = document.getElementById('app');
@@ -792,7 +883,6 @@ function renderSidebar(){
     ['leads', 'Leads', ICON_LEADS],
     ['comissoes', 'Comissões', ICON_COMISSOES],
     ['tarefas', 'Tarefas', ICON_TASKS],
-    ['configuracoes', 'Configurações', ICON_SETTINGS],
   ];
   return `
     <aside class="sidebar">
@@ -809,6 +899,7 @@ function renderSidebar(){
         `).join('')}
       </nav>
       <div class="sidebar-footer">
+        <button class="nav-item ${currentPage==='configuracoes'?'active':''}" data-action="nav" data-page="configuracoes">${ICON_SETTINGS}<span>Configurações</span></button>
         <button class="nav-item logout-item" data-action="logout">${ICON_LOGOUT}<span>Sair</span></button>
       </div>
     </aside>
@@ -894,6 +985,17 @@ function renderDashboardPage(){
           </div>
         `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>'}
       </div>
+    </div>
+
+    <div class="dash-panel">
+      <div class="dash-panel-title-row">
+        <div class="dash-panel-title">${ICON_SPARKLE} Insights da IA</div>
+        <button class="btn-outline" data-action="gerar-insights" ${insightsCarregando?'disabled':''}>${insightsCarregando?'Gerando…':'Gerar'}</button>
+      </div>
+      ${aiInsights.length
+        ? `<ul class="ai-insights-list">${aiInsights.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`
+        : `<p class="dash-empty">Clique em "Gerar" para receber alertas sobre o seu funil.</p>`
+      }
     </div>
   `;
 }
@@ -1256,6 +1358,17 @@ function renderConfiguracoesPage(){
       </div>
     </div>
 
+    <div class="config-tabs">
+      <button class="tab-btn ${configTab==='geral'?'active':''}" data-action="set-config-tab" data-tab="geral">Geral</button>
+      <button class="tab-btn ${configTab==='aparencia'?'active':''}" data-action="set-config-tab" data-tab="aparencia">Aparência</button>
+    </div>
+
+    ${configTab === 'aparencia' ? renderConfigAparencia() : renderConfigGeral()}
+  `;
+}
+
+function renderConfigAparencia(){
+  return `
     <div class="settings-page-grid">
       <div class="settings-page-section">
         <h2>Aparência</h2>
@@ -1274,7 +1387,13 @@ function renderConfiguracoesPage(){
           <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
         </label>
       </div>
+    </div>
+  `;
+}
 
+function renderConfigGeral(){
+  return `
+    <div class="settings-page-grid">
       <div class="settings-page-section">
         <h2>Seu perfil</h2>
         <div class="settings-page-row"><span>Nome</span><span>${esc((currentUser && currentUser.nome) || '—')}</span></div>
@@ -1393,6 +1512,8 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="set-dash-period"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ dashboardPeriod = btn.dataset.period; renderApp(); });
   });
+  const gerarInsightsBtn = app.querySelector('[data-action="gerar-insights"]');
+  if(gerarInsightsBtn) gerarInsightsBtn.addEventListener('click', gerarInsightsIA);
 
   /* -- tarefas (usado no Dashboard e na página Tarefas) -- */
   app.querySelectorAll('[data-action="toggle-task"]').forEach(el=>{
@@ -1435,6 +1556,9 @@ function bindAppEvents(){
   });
 
   /* -- Configurações -- */
+  app.querySelectorAll('[data-action="set-config-tab"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ configTab = btn.dataset.tab; renderApp(); });
+  });
   const senhaAtualInput = document.getElementById('s-senha-atual');
   if(senhaAtualInput) senhaAtualInput.addEventListener('input', (e)=> senhaAtualVal = e.target.value);
   const senhaNovaInput = document.getElementById('s-senha-nova');
@@ -1651,13 +1775,19 @@ function renderModal(){
           <div class="field">
             <label>Telefone (opcional)</label>
             <input type="text" id="f-telefone" value="${esc(f.telefone||'')}" placeholder="(11) 90000-0000" />
-            <button type="button" class="wa-btn wa-btn-modal" id="f-whatsapp" style="${f.telefone ? '' : 'display:none;'}">
-              ${WA_ICON} Abrir WhatsApp
-            </button>
+            <div class="wa-actions-row">
+              <button type="button" class="wa-btn wa-btn-modal" id="f-whatsapp" style="${f.telefone ? '' : 'display:none;'}">
+                ${WA_ICON} Abrir WhatsApp
+              </button>
+              ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-mensagem">${ICON_SPARKLE} Sugerir mensagem</button>` : ''}
+            </div>
+            <div class="ai-result" id="f-ai-mensagem-result" style="display:none;"></div>
           </div>
           <div class="field">
             <label>Observações (opcional)</label>
             <textarea id="f-obs" rows="3" placeholder="Detalhes da negociação...">${esc(f.obs||'')}</textarea>
+            ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-tarefa">${ICON_SPARKLE} Sugerir tarefa de acompanhamento</button>` : ''}
+            <div class="ai-result" id="f-ai-tarefa-result" style="display:none;"></div>
           </div>
         </div>
         <div class="modal-foot">
@@ -1684,6 +1814,10 @@ function renderModal(){
   });
   waModalBtn.addEventListener('click', ()=> abrirWhatsapp(modalForm.telefone));
   document.getElementById('f-obs').addEventListener('input', (e)=> modalForm.obs = e.target.value);
+  const aiMensagemBtn = document.getElementById('f-ai-mensagem');
+  if(aiMensagemBtn) aiMensagemBtn.addEventListener('click', sugerirMensagemIA);
+  const aiTarefaBtn = document.getElementById('f-ai-tarefa');
+  if(aiTarefaBtn) aiTarefaBtn.addEventListener('click', sugerirTarefaIA);
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
   document.getElementById('f-mes').addEventListener('change', (e)=> modalForm.mes = e.target.value);
 

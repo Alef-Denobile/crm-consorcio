@@ -144,10 +144,31 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   10 parcelas × 0,00103388 + 3 parcelas × 0,00190561)
 - **Tarefas** — lista de tarefas com prioridade, vencimento e lead
   relacionado
-- **Configurações** — perfil, trocar/definir senha, status das
-  integrações (Google Agenda) e importação de leads via CSV
+- **Configurações** — dividida em duas abas: "Aparência" (modo noturno
+  e cor de destaque) e "Geral" (perfil, trocar/definir senha, status
+  das integrações e importação de leads via CSV). O botão de acesso
+  fica no rodapé da barra lateral, separado dos outros, acima do "Sair"
 
-## Rotas da API
+## Recursos de IA
+
+Usam a API da Anthropic (modelo Haiku, rápido e barato — dá pra trocar
+em `server/utils/anthropic.js` se quiser mais qualidade em troca de
+custo maior). Precisam da variável `ANTHROPIC_API_KEY` no `.env`
+(gere em https://console.anthropic.com/settings/keys). Sem essa chave
+configurada, os botões continuam aparecendo mas mostram uma mensagem
+de erro ao clicar.
+
+- **Sugerir mensagem** — no modal de editar cliente, ao lado do botão
+  do WhatsApp: gera um rascunho de mensagem de retomada de contato
+  personalizado, com opção de copiar ou já abrir o WhatsApp com o
+  texto preenchido
+- **Sugerir tarefa de acompanhamento** — no modal de editar cliente,
+  perto de Observações: sugere uma tarefa com prazo, que pode ser
+  criada com um clique
+- **Insights da IA** — no Dashboard, um painel com botão "Gerar" que
+  lista de 2 a 4 alertas curtos sobre o estado atual do funil (não
+  gera sozinho, só quando você pede — pra não pesar a tela nem gastar
+  chamadas de API à toa)
 
 **Autenticação (públicas):**
 - `POST /api/auth/register` — `{ nome, email, senha }` → cria conta + funil padrão
@@ -185,4 +206,9 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
 - `GET  /api/calendar/connect-url` — devolve a URL de autorização do Google
 - `GET  /api/calendar/callback` — o Google redireciona pra cá após o consentimento (não chame direto)
 - `POST /api/calendar/disconnect` — desconecta (não apaga os eventos já criados)
+
+**IA (exigem token):**
+- `POST /api/ai/mensagem` — `{ cardId }` → sugere mensagem de WhatsApp para o cliente
+- `POST /api/ai/insights` — gera de 2 a 4 alertas curtos sobre o funil atual
+- `POST /api/ai/sugerir-tarefa` — `{ cardId }` → sugere título e prazo de uma tarefa de acompanhamento
 # crm-consorcio

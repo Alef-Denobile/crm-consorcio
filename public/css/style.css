@@ -372,3 +372,16 @@ main{ padding:24px; overflow-x:auto; }
 .settings-page-msg.erro{ background:var(--danger-soft); color:var(--danger); }
 .settings-page-subtitle{ font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin:0 0 10px; }
 .settings-btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
+.config-tabs{ display:flex; gap:8px; margin-bottom:20px; }
+
+/* ---------- IA (mensagem sugerida, insights, tarefa sugerida) ---------- */
+.wa-actions-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
+.ai-btn{ display:inline-flex; align-items:center; gap:5px; padding:7px 11px; min-height:32px; border-radius:999px; border:1px solid var(--accent); background:none; color:var(--accent); font-size:11px; font-weight:600; cursor:pointer; margin-top:8px; }
+.ai-btn:hover{ background:var(--hover-tint); }
+.ai-btn:disabled{ opacity:.6; cursor:default; }
+.ai-result{ margin-top:10px; padding:12px; background:var(--col-bg); border:1px solid var(--line); border-radius:10px; font-size:12px; line-height:1.6; }
+.ai-result p{ margin:0 0 8px; }
+.ai-result-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+.dash-panel-title-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+.dash-panel-title-row .dash-panel-title{ margin:0; display:flex; align-items:center; gap:6px; }
+.ai-insights-list{ margin:0; padding-left:18px; font-size:13px; line-height:1.8; color:var(--ink); }
