@@ -136,7 +136,12 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   conversão), gráfico de leads captados, pipeline por etapa, últimos
   leads e tarefas abertas
 - **Pipeline** — o quadro kanban original (arrastar cards, colunas,
-  filtro por mês, WhatsApp, etc.)
+  filtro por mês, WhatsApp, etc.), agora dividido em **funis** — abas
+  no topo da página, cada uma com seu próprio conjunto de colunas e
+  clientes. Dá pra ter, por exemplo, um funil "Consórcio Imóvel" e
+  outro "Consórcio Auto" totalmente separados. Contas criadas antes
+  desse recurso ganham automaticamente um "Funil Principal" com as
+  colunas que já existiam — nada se perde
 - **Leads** — todos os clientes em formato de tabela, com busca e
   filtro por etapa
 - **Comissões** — contratos de comissão por mês, com cálculo automático
@@ -147,7 +152,8 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
 - **Conversas** — todas as conversas do WhatsApp Business, ordenadas
   pela mensagem mais recente; clicar numa abre o card do cliente
 - **Relatórios** — novos leads por mês (últimos 6 meses), leads por
-  qualificação, totais de ganho/perdido, e exportação em CSV
+  qualificação, totais de ganho/perdido, e exportação em CSV. Tem um
+  seletor para ver "Todos os funis" ou um específico
 - **Disparos** — envia a mesma mensagem de WhatsApp para vários leads
   de uma vez, com filtro por coluna e qualificação
 - **Suporte** — perguntas frequentes e um link de contato por e-mail.
@@ -240,8 +246,12 @@ de erro ao clicar.
 - `PUT  /api/auth/password` — `{ senhaAtual, senhaNova }` → troca (ou define) a senha da conta
 
 **Painel (exigem token, sempre isoladas por usuário):**
+- `GET  /api/funis` — lista os funis (cria "Funil Principal" e migra colunas antigas se necessário)
+- `POST /api/funis` — cria funil vazio
+- `PUT  /api/funis/:id` — renomeia funil
+- `DELETE /api/funis/:id` — exclui funil, colunas e cards dele (exige ao menos 1 funil restante)
 - `GET  /api/board` — colunas + cards
-- `POST /api/columns` — cria coluna
+- `POST /api/columns` — cria coluna (dentro de um funil, via `funilId`)
 - `PUT  /api/columns/:id` — renomeia / muda tipo
 - `DELETE /api/columns/:id` — exclui coluna (e os cards dela)
 - `POST /api/cards` — cria cliente

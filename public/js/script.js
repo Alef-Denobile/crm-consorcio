@@ -166,6 +166,12 @@ let disparoSelecionados = new Set();
 let disparoTexto = '';
 let disparoEnviando = false;
 let disparoResultado = null;
+let funis = [];
+let funisLoaded = false;
+let funilAtualId = null;
+let editingFunilId = null;
+let editingFunilName = '';
+let relatorioFunilId = '';
 let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
@@ -220,6 +226,69 @@ async function loadBoard(){
   loaded = true;
   renderApp();
 }
+
+/* ---------- funis (múltiplos pipelines) ---------- */
+async function loadFunis(){
+  try{
+    const data = await apiRequest('GET', '/funis');
+    funis = data.funis || [];
+    if((!funilAtualId || !funis.some(f=>f.id===funilAtualId)) && funis.length){
+      funilAtualId = funis[0].id;
+    }
+  }catch(e){
+    funis = [];
+  }
+  funisLoaded = true;
+  renderApp();
+}
+async function criarNovoFunil(){
+  try{
+    const novo = await apiRequest('POST', '/funis', { nome: 'Novo funil' });
+    funis.push(novo);
+    funilAtualId = novo.id;
+  }catch(e){
+    errorMsg = 'Não foi possível criar o funil.';
+  }
+  renderApp();
+}
+async function renomearFunil(id, nome){
+  const f = funis.find(x=>x.id===id);
+  if(!f) return;
+  const nomeFinal = nome.trim() || f.nome;
+  const anterior = f.nome;
+  f.nome = nomeFinal;
+  renderApp();
+  try{
+    await apiRequest('PUT', `/funis/${id}`, { nome: nomeFinal });
+  }catch(e){
+    f.nome = anterior;
+    errorMsg = 'Não foi possível renomear o funil.';
+    renderApp();
+  }
+}
+async function excluirFunil(id){
+  const idx = funis.findIndex(f=>f.id===id);
+  if(idx===-1) return;
+  const [removido] = funis.splice(idx,1);
+  const colunasRemovidas = board.columns.filter(c=>c.funilId===id);
+  const colunaIds = new Set(colunasRemovidas.map(c=>c.id));
+  const cardsRemovidos = board.cards.filter(c=>colunaIds.has(c.columnId));
+  board.columns = board.columns.filter(c=>c.funilId!==id);
+  board.cards = board.cards.filter(c=>!colunaIds.has(c.columnId));
+  if(funilAtualId === id) funilAtualId = funis.length ? funis[0].id : null;
+  renderApp();
+  try{
+    await apiRequest('DELETE', `/funis/${id}`);
+  }catch(e){
+    funis.splice(idx,0,removido);
+    board.columns.push(...colunasRemovidas);
+    board.cards.push(...cardsRemovidos);
+    if(!funis.some(f=>f.id===funilAtualId)) funilAtualId = removido.id;
+    errorMsg = 'Não foi possível excluir o funil.';
+    renderApp();
+  }
+}
+
 async function loadTasks(){
   try{
     const data = await apiRequest('GET', '/tasks');
@@ -407,7 +476,8 @@ async function enviarDisparo(){
 }
 
 /* ---------- Relatórios ---------- */
-function relatoriosDadosMensais(mesesAtras){
+function relatoriosDadosMensais(mesesAtras, cardsBase){
+  const cards = cardsBase || board.cards;
   const buckets = [];
   const agora = new Date();
   for(let i=mesesAtras-1;i>=0;i--){
@@ -415,7 +485,7 @@ function relatoriosDadosMensais(mesesAtras){
     buckets.push({ key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, novos:0 });
   }
   const porKey = new Map(buckets.map(b=>[b.key,b]));
-  board.cards.forEach(c=>{
+  cards.forEach(c=>{
     if(!c.createdAt) return;
     const bucket = porKey.get(c.createdAt.slice(0,7));
     if(bucket) bucket.novos++;
@@ -424,7 +494,7 @@ function relatoriosDadosMensais(mesesAtras){
 }
 function exportarCsv(){
   const linhas = [['Nome','Telefone','Valor','Coluna','Temperatura','Mês'].join(',')];
-  board.cards.forEach(c=>{
+  cardsParaRelatorio().forEach(c=>{
     const col = board.columns.find(k=>k.id===c.columnId);
     linhas.push([
       `"${(c.cliente||'').replace(/"/g,'""')}"`,
@@ -497,19 +567,19 @@ function cardsOf(colId){ return visibleCards().filter(c=>c.columnId===colId); }
 function sumByTipo(tipo){
   return visibleCards().reduce((s,c)=>{
     const col = board.columns.find(k=>k.id===c.columnId);
-    return (col && col.tipo===tipo) ? s + (Number(c.valor)||0) : s;
+    return (col && col.tipo===tipo && col.funilId===funilAtualId) ? s + (Number(c.valor)||0) : s;
   },0);
 }
 function countByTipo(tipo){
   return visibleCards().filter(c=>{
     const col = board.columns.find(k=>k.id===c.columnId);
-    return col && col.tipo===tipo;
+    return col && col.tipo===tipo && col.funilId===funilAtualId;
   }).length;
 }
 function quentesAtivos(){
   return visibleCards().filter(c=>{
     const col = board.columns.find(k=>k.id===c.columnId);
-    return col && col.tipo==='aberto' && c.temperatura==='quente';
+    return col && col.tipo==='aberto' && col.funilId===funilAtualId && c.temperatura==='quente';
   }).length;
 }
 
@@ -775,15 +845,18 @@ async function deleteColumnById(id){
 
 async function reorderColumns(draggedId, targetId){
   if(draggedId === targetId) return;
-  const fromIdx = board.columns.findIndex(c=>c.id===draggedId);
-  const toIdx = board.columns.findIndex(c=>c.id===targetId);
+  const doFunil = board.columns.filter(c=>c.funilId===funilAtualId);
+  const outras = board.columns.filter(c=>c.funilId!==funilAtualId);
+  const fromIdx = doFunil.findIndex(c=>c.id===draggedId);
+  const toIdx = doFunil.findIndex(c=>c.id===targetId);
   if(fromIdx===-1 || toIdx===-1) return;
   const anterior = [...board.columns];
-  const [movida] = board.columns.splice(fromIdx,1);
-  board.columns.splice(toIdx,0,movida);
+  const [movida] = doFunil.splice(fromIdx,1);
+  doFunil.splice(toIdx,0,movida);
+  board.columns = [...outras, ...doFunil];
   renderApp();
   try{
-    await Promise.all(board.columns.map((col,idx)=> apiRequest('PUT', `/columns/${col.id}`, { ordem: idx })));
+    await Promise.all(doFunil.map((col,idx)=> apiRequest('PUT', `/columns/${col.id}`, { ordem: idx })));
   }catch(e){
     board.columns = anterior;
     errorMsg = 'Não foi possível reordenar as colunas.';
@@ -795,9 +868,9 @@ async function addColumn(){
   const nome = newColNameVal.trim();
   addingCol = false;
   newColNameVal = '';
-  if(!nome){ renderApp(); return; }
+  if(!nome || !funilAtualId){ renderApp(); return; }
   try{
-    const novaCol = await apiRequest('POST', '/columns', { nome, tipo:'aberto' });
+    const novaCol = await apiRequest('POST', '/columns', { nome, tipo:'aberto', funilId: funilAtualId });
     board.columns.push(novaCol);
   }catch(e){
     errorMsg = 'Não foi possível criar a coluna.';
@@ -1249,13 +1322,32 @@ function renderDashboardPage(){
 
 /* ---------- página: Pipeline (o quadro kanban, como já era) ---------- */
 function renderPipelinePage(){
+  if(!funisLoaded){
+    return `<div class="page-head"><div><h1>Pipeline</h1><p>Carregando…</p></div></div>`;
+  }
   const months = monthsList();
+  const funilAtual = funis.find(f=>f.id===funilAtualId);
+  const columnsDoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
   return `
     <div class="page-head">
       <div>
         <h1>Pipeline</h1>
         <p>Arraste os clientes para mudar de coluna</p>
       </div>
+    </div>
+
+    <div class="funil-tabs">
+      ${funis.map(f=>{
+        if(editingFunilId===f.id){
+          return `<input class="funil-name-input" id="funil-rename-${f.id}" value="${esc(editingFunilName)}" />`;
+        }
+        return `<button class="tab-btn ${funilAtualId===f.id?'active':''}" data-action="set-funil" data-funil-id="${f.id}">${esc(f.nome)}</button>`;
+      }).join('')}
+      ${funilAtual ? `
+        <button class="icon-btn" data-action="edit-funil-name" data-funil-id="${funilAtual.id}" title="Renomear funil">${ICON_EDIT}</button>
+        ${funis.length > 1 ? `<button class="icon-btn" data-action="delete-funil" data-funil-id="${funilAtual.id}" title="Excluir funil">${ICON_TRASH}</button>` : ''}
+      ` : ''}
+      <button class="tab-btn" data-action="open-new-funil" title="Criar novo funil">+ Funil</button>
     </div>
 
     <div class="tabs">
@@ -1296,7 +1388,7 @@ function renderPipelinePage(){
 
     <main>
       <div class="board">
-        ${board.columns.map(col => renderColumn(col)).join('')}
+        ${columnsDoFunil.map(col => renderColumn(col)).join('')}
         <div class="add-col-wrap">
           ${addingCol ? `
             <div class="add-col-form">
@@ -1849,6 +1941,9 @@ function bindAppEvents(){
   if(enviarDisparoBtn) enviarDisparoBtn.addEventListener('click', enviarDisparo);
 
   /* -- Relatórios -- */
+  /* -- Relatórios -- */
+  const relatorioFunilSelect = document.getElementById('relatorio-funil-select');
+  if(relatorioFunilSelect) relatorioFunilSelect.addEventListener('change', (e)=>{ relatorioFunilId = e.target.value; renderApp(); });
   const exportarCsvBtn = app.querySelector('[data-action="exportar-csv"]');
   if(exportarCsvBtn) exportarCsvBtn.addEventListener('click', exportarCsv);
 
@@ -1908,6 +2003,37 @@ function bindAppEvents(){
   });
   const leadsFilterSelect = document.getElementById('leads-status-filter');
   if(leadsFilterSelect) leadsFilterSelect.addEventListener('change', (e)=>{ leadsStatusFilter = e.target.value; renderApp(); });
+
+  /* -- Pipeline: funis -- */
+  app.querySelectorAll('[data-action="set-funil"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ funilAtualId = btn.dataset.funilId; renderApp(); });
+  });
+  const novoFunilBtn = app.querySelector('[data-action="open-new-funil"]');
+  if(novoFunilBtn) novoFunilBtn.addEventListener('click', criarNovoFunil);
+  const editFunilBtn = app.querySelector('[data-action="edit-funil-name"]');
+  if(editFunilBtn) editFunilBtn.addEventListener('click', ()=>{
+    editingFunilId = editFunilBtn.dataset.funilId;
+    const f = funis.find(x=>x.id===editingFunilId);
+    editingFunilName = f ? f.nome : '';
+    renderApp();
+    const input = document.getElementById('funil-rename-'+editingFunilId);
+    if(input){ input.focus(); input.select(); }
+  });
+  document.querySelectorAll('[id^="funil-rename-"]').forEach(input=>{
+    input.addEventListener('input', (e)=>{ editingFunilName = e.target.value; });
+    const commitFunil = ()=>{ const id = editingFunilId; editingFunilId = null; renomearFunil(id, editingFunilName); };
+    input.addEventListener('blur', commitFunil);
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
+  });
+  const deleteFunilBtn = app.querySelector('[data-action="delete-funil"]');
+  if(deleteFunilBtn) deleteFunilBtn.addEventListener('click', ()=>{
+    const id = deleteFunilBtn.dataset.funilId;
+    const f = funis.find(x=>x.id===id);
+    showConfirm({
+      message: `Excluir o funil "${f.nome}"? Todas as colunas e clientes dele também serão excluídos.`,
+      onConfirm: ()=>{ excluirFunil(id); closeConfirm(); },
+    });
+  });
 
   /* -- Pipeline: filtro de data -- */
   const dateMenuBtn = app.querySelector('[data-action="toggle-date-menu"]');
@@ -2360,12 +2486,18 @@ function renderDisparosPage(){
 }
 
 /* ---------- página: Relatórios ---------- */
+function cardsParaRelatorio(){
+  if(!relatorioFunilId) return board.cards;
+  const colunaIds = new Set(board.columns.filter(c=>c.funilId===relatorioFunilId).map(c=>c.id));
+  return board.cards.filter(c=>colunaIds.has(c.columnId));
+}
 function renderRelatoriosPage(){
-  const dados = relatoriosDadosMensais(6);
+  const cardsRel = cardsParaRelatorio();
+  const dados = relatoriosDadosMensais(6, cardsRel);
   const maxNovos = Math.max(1, ...dados.map(d=>d.novos));
-  const totalGanho = board.cards.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='ganho' ? s+(Number(c.valor)||0) : s; },0);
-  const totalPerdido = board.cards.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='perdido' ? s+(Number(c.valor)||0) : s; },0);
-  const porTemp = ['quente','morno','frio'].map(t=>({ temp:t, count: board.cards.filter(c=>c.temperatura===t).length }));
+  const totalGanho = cardsRel.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='ganho' ? s+(Number(c.valor)||0) : s; },0);
+  const totalPerdido = cardsRel.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='perdido' ? s+(Number(c.valor)||0) : s; },0);
+  const porTemp = ['quente','morno','frio'].map(t=>({ temp:t, count: cardsRel.filter(c=>c.temperatura===t).length }));
 
   return `
     <div class="page-head">
@@ -2373,13 +2505,19 @@ function renderRelatoriosPage(){
         <h1>Relatórios</h1>
         <p>Visão consolidada dos últimos 6 meses</p>
       </div>
-      <button class="btn-outline" data-action="exportar-csv">Exportar CSV</button>
+      <div class="page-head-actions">
+        <select id="relatorio-funil-select" class="leads-filter">
+          <option value="">Todos os funis</option>
+          ${funis.map(f=>`<option value="${f.id}" ${relatorioFunilId===f.id?'selected':''}>${esc(f.nome)}</option>`).join('')}
+        </select>
+        <button class="btn-outline" data-action="exportar-csv">Exportar CSV</button>
+      </div>
     </div>
 
     <div class="metric-grid">
       <div class="metric-card"><div class="metric-card-top"><span>Total ganho</span></div><div class="metric-value">${fmtBRL(totalGanho)}</div></div>
       <div class="metric-card"><div class="metric-card-top"><span>Total perdido</span></div><div class="metric-value">${fmtBRL(totalPerdido)}</div></div>
-      <div class="metric-card"><div class="metric-card-top"><span>Total de leads</span></div><div class="metric-value">${board.cards.length}</div></div>
+      <div class="metric-card"><div class="metric-card-top"><span>Total de leads</span></div><div class="metric-value">${cardsRel.length}</div></div>
     </div>
 
     <div class="dash-panel">
@@ -2400,7 +2538,7 @@ function renderRelatoriosPage(){
         ${porTemp.map(t=>`
           <div class="stage-row">
             <div class="stage-row-top"><span>${TEMPS[t.temp].label}</span><span>${t.count}</span></div>
-            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${board.cards.length ? (t.count/board.cards.length*100) : 0}%"></div></div>
+            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${cardsRel.length ? (t.count/cardsRel.length*100) : 0}%"></div></div>
           </div>
         `).join('')}
       </div>
@@ -2571,6 +2709,7 @@ function closeConfirm(){ confirmState = null; document.getElementById('confirm-r
 if(getToken()){
   tratarRetornoDoGoogle();
   loadBoard();
+  loadFunis();
   loadTasks();
   loadCalendarStatus();
   loadContratos();
