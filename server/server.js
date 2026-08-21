@@ -15,6 +15,7 @@ const aiRoutes = require('./routes/ai');
 const whatsappRoutes = require('./routes/whatsapp');
 const funisRoutes = require('./routes/funis');
 const equipeRoutes = require('./routes/equipe');
+const automacoesRoutes = require('./routes/automacoes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,6 +36,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/funis', funisRoutes);
 app.use('/api/equipe', equipeRoutes);
+app.use('/api/automacoes', automacoesRoutes);
 
 // front-end estático (a pasta public com index.html, css e js)
 app.use(express.static(path.join(__dirname, '..', 'public')));

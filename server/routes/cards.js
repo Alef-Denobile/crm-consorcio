@@ -3,9 +3,44 @@ const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
+const Automacao = require('../models/Automacao');
+const Task = require('../models/Task');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
+
+// Roda depois que um card entra numa coluna — nunca deixa erro aqui quebrar a resposta principal
+async function executarAutomacoesDaColuna(userId, colunaId, card) {
+  try {
+    const automacoes = await Automacao.find({ userId, colunaGatilhoId: colunaId, ativa: true });
+    for (const auto of automacoes) {
+      try {
+        if (auto.acaoTipo === 'criar_tarefa') {
+          const dias = (auto.acaoParams && auto.acaoParams.diasParaVencimento) || 3;
+          const venc = new Date();
+          venc.setDate(venc.getDate() + Number(dias));
+          await Task.create({
+            userId,
+            titulo: (auto.acaoParams && auto.acaoParams.titulo) || 'Follow-up automático',
+            vencimento: venc,
+            prioridade: 'media',
+            leadId: card._id,
+            descricao: `Criada automaticamente pela automação "${auto.nome}".`,
+          });
+        } else if (auto.acaoTipo === 'mover_coluna') {
+          const destino = auto.acaoParams && auto.acaoParams.colunaDestinoId;
+          if (destino && String(destino) !== String(colunaId)) {
+            await Card.findByIdAndUpdate(card._id, { columnId: destino });
+          }
+        }
+      } catch (e) {
+        console.error('Erro ao executar automação:', e.message);
+      }
+    }
+  } catch (e) {
+    console.error('Erro ao buscar automações:', e.message);
+  }
+}
 
 const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes'];
 function filtrarCampos(body) {
@@ -32,6 +67,7 @@ router.post('/', async (req, res) => {
 
     const card = await Card.create({ ...dados, userId: req.userId });
     res.status(201).json(card.toJSON());
+    executarAutomacoesDaColuna(req.userId, dados.columnId, card);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao criar cliente.' });
   }
@@ -80,6 +116,7 @@ router.put('/:id/move', async (req, res) => {
     );
     if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
     res.json(card.toJSON());
+    executarAutomacoesDaColuna(req.userId, columnId, card);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao mover cliente.' });
   }

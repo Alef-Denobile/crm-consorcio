@@ -41,6 +41,40 @@ async function enviarMensagemGraph(user, card, texto) {
   return data;
 }
 
+// Envia um modelo de mensagem já aprovado pela Meta — é o único jeito de escrever
+// pra alguém que ainda não te mandou mensagem (fora da janela de 24h de texto livre).
+async function enviarTemplateGraph(user, card, nomeTemplate, idioma, variaveis) {
+  const components = [];
+  if (Array.isArray(variaveis) && variaveis.length) {
+    components.push({
+      type: 'body',
+      parameters: variaveis.map((v) => ({ type: 'text', text: String(v) })),
+    });
+  }
+  const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${user.whatsappBusiness.accessToken}`,
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: card.telefoneNormalizado,
+      type: 'template',
+      template: {
+        name: nomeTemplate,
+        language: { code: idioma || 'pt_BR' },
+        ...(components.length ? { components } : {}),
+      },
+    }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    throw new Error((data.error && data.error.message) || 'Erro ao enviar o modelo de mensagem.');
+  }
+  return data;
+}
+
 /* ===================== rotas públicas (chamadas pela Meta) ===================== */
 
 // GET /api/whatsapp/webhook -> verificação inicial exigida pela Meta ao cadastrar o webhook
@@ -247,13 +281,70 @@ router.post('/enviar', auth, async (req, res) => {
   }
 });
 
+// GET /api/whatsapp/templates -> lista os modelos de mensagem já aprovados pela Meta
+router.get('/templates', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) {
+      return res.status(400).json({ error: 'WhatsApp Business não está conectado.' });
+    }
+    if (!user.whatsappBusiness.wabaId) {
+      return res.status(400).json({ error: 'Cadastre o WABA ID em Configurações pra listar os modelos automaticamente.' });
+    }
+    const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.wabaId}/message_templates?fields=name,status,language&limit=100`, {
+      headers: { Authorization: `Bearer ${user.whatsappBusiness.accessToken}` },
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error((data.error && data.error.message) || 'Erro ao buscar os modelos.');
+    const aprovados = (data.data || []).filter((t) => t.status === 'APPROVED');
+    res.json({ templates: aprovados.map((t) => ({ nome: t.name, idioma: t.language })) });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao buscar os modelos de mensagem.' });
+  }
+});
+
+// POST /api/whatsapp/enviar-template -> envia um modelo aprovado pra um cliente (funciona mesmo fora da janela de 24h)
+router.post('/enviar-template', auth, async (req, res) => {
+  try {
+    const { cardId, templateName, idioma, variaveis } = req.body;
+    if (!templateName) return res.status(400).json({ error: 'Informe o nome do modelo.' });
+
+    const user = await User.findById(req.userId);
+    if (!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) {
+      return res.status(400).json({ error: 'WhatsApp Business não está conectado.' });
+    }
+    const card = await Card.findOne({ _id: cardId, userId: req.userId });
+    if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    if (!card.telefoneNormalizado) return res.status(400).json({ error: 'Esse cliente não tem telefone cadastrado.' });
+
+    const data = await enviarTemplateGraph(user, card, templateName, idioma, variaveis);
+
+    const msg = await Message.create({
+      userId: req.userId,
+      cardId: card._id,
+      direction: 'out',
+      texto: `[modelo: ${templateName}]`,
+      whatsappMessageId: data.messages && data.messages[0] && data.messages[0].id,
+      status: 'sent',
+      timestamp: new Date(),
+    });
+    res.status(201).json(msg.toJSON());
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao enviar o modelo de mensagem.' });
+  }
+});
+
 // POST /api/whatsapp/disparo -> envia a mesma mensagem pra vários clientes de uma vez
 router.post('/disparo', auth, async (req, res) => {
   try {
-    const { cardIds, texto } = req.body;
-    if (!texto || !texto.trim()) return res.status(400).json({ error: 'Mensagem vazia.' });
+    const { cardIds, texto, usarTemplate, templateName, idioma, variaveis } = req.body;
     if (!Array.isArray(cardIds) || !cardIds.length) {
       return res.status(400).json({ error: 'Selecione ao menos um lead.' });
+    }
+    if (usarTemplate) {
+      if (!templateName) return res.status(400).json({ error: 'Informe o nome do modelo.' });
+    } else if (!texto || !texto.trim()) {
+      return res.status(400).json({ error: 'Mensagem vazia.' });
     }
 
     const user = await User.findById(req.userId);
@@ -270,12 +361,14 @@ router.post('/disparo', auth, async (req, res) => {
           falha++;
           continue;
         }
-        const data = await enviarMensagemGraph(user, card, texto);
+        const data = usarTemplate
+          ? await enviarTemplateGraph(user, card, templateName, idioma, variaveis)
+          : await enviarMensagemGraph(user, card, texto);
         await Message.create({
           userId: req.userId,
           cardId: card._id,
           direction: 'out',
-          texto,
+          texto: usarTemplate ? `[modelo: ${templateName}]` : texto,
           whatsappMessageId: data.messages && data.messages[0] && data.messages[0].id,
           status: 'sent',
           timestamp: new Date(),

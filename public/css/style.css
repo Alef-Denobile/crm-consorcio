@@ -277,6 +277,12 @@ main{ padding:24px; overflow-x:auto; }
   }
   .app-shell.sidebar-open .sidebar-backdrop{ opacity:1; pointer-events:auto; }
   .main-area{ margin-left:0; padding:20px 16px 40px; }
+  .main-topbar{
+    position:sticky; top:0; z-index:140;
+    background:var(--bg);
+    padding:8px 0;
+    margin:-8px 0 8px;
+  }
 }
 
 /* ---------- Dashboard ---------- */
@@ -461,3 +467,13 @@ main{ padding:24px; overflow-x:auto; }
   .chat-interno-wrap{ flex-direction:column; }
   .chat-interno-membros{ width:100%; }
 }
+
+/* ---------- indicadores de status da mensagem (WhatsApp) ---------- */
+.wa-status{ margin-left:4px; font-weight:700; }
+.wa-status-read{ color:#3EA6FF; }
+.wa-status-failed{ color:var(--danger); }
+
+/* ---------- Automações ---------- */
+.automacoes-list{ display:flex; flex-direction:column; gap:14px; }
+.automacao-card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px; }
+.automacao-card.automacao-inativa{ opacity:.55; }

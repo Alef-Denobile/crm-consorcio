@@ -155,7 +155,12 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   qualificação, totais de ganho/perdido, e exportação em CSV. Tem um
   seletor para ver "Todos os funis" ou um específico
 - **Disparos** — envia a mesma mensagem de WhatsApp para vários leads
-  de uma vez, com filtro por coluna e qualificação
+  de uma vez, com filtro por coluna e qualificação. Também aceita
+  **modelos de mensagem aprovados** (necessário pra alcançar leads
+  frios, fora da janela de 24h de texto livre)
+- **Automações** — cria regras do tipo "quando um cliente entra nesta
+  coluna → cria uma tarefa" ou "→ move pra outra coluna". Dispara
+  sozinho toda vez que um card muda (ou é criado) numa coluna
 - **Chat Interno** — um canal de conversa único por equipe, entre quem
   faz parte dela
 - **Supervisão** — visível só pra quem é supervisor(a) da equipe:
@@ -328,5 +333,13 @@ de erro ao clicar.
 - `GET  /api/whatsapp/conversas/:cardId` — histórico de mensagens do cliente (exige token)
 - `POST /api/whatsapp/enviar` — `{ cardId, texto }` → envia mensagem (exige token)
 - `GET  /api/whatsapp/conversas` — lista todas as conversas, ordenadas pela mais recente (exige token)
-- `POST /api/whatsapp/disparo` — `{ cardIds, texto }` → envia a mesma mensagem para vários leads (exige token)
+- `POST /api/whatsapp/disparo` — `{ cardIds, texto }` ou `{ cardIds, usarTemplate:true, templateName, idioma, variaveis }` → envia (exige token)
+- `GET  /api/whatsapp/templates` — lista os modelos de mensagem aprovados (exige token e WABA ID configurado)
+- `POST /api/whatsapp/enviar-template` — `{ cardId, templateName, idioma, variaveis }` → envia um modelo (exige token)
+
+**Automações (exigem token):**
+- `GET  /api/automacoes` — lista as automações do usuário
+- `POST /api/automacoes` — `{ nome, colunaGatilhoId, acaoTipo, acaoParams }` → cria
+- `PUT  /api/automacoes/:id` — edita (nome, ativa/inativa, parâmetros da ação)
+- `DELETE /api/automacoes/:id` — exclui
 # crm-consorcio

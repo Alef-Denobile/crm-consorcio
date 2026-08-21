@@ -60,6 +60,7 @@ const ICON_RELATORIOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="n
 const ICON_SUPORTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
 const ICON_CHAT_INTERNO = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
 const ICON_SUPERVISAO = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const ICON_AUTOMACOES = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -168,6 +169,11 @@ let disparoSelecionados = new Set();
 let disparoTexto = '';
 let disparoEnviando = false;
 let disparoResultado = null;
+let disparoUsarTemplate = false;
+let disparoTemplateNome = '';
+let disparoTemplateIdioma = 'pt_BR';
+let disparoTemplateVariaveis = '';
+let disparoTemplatesDisponiveis = [];
 let funis = [];
 let funisLoaded = false;
 let funilAtualId = null;
@@ -185,6 +191,9 @@ let chatTexto = '';
 let chatEnviando = false;
 let supervisaoMembros = [];
 let supervisaoLoaded = false;
+let automacoes = [];
+let automacoesLoaded = false;
+let automacaoModalForm = null;
 let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
@@ -390,6 +399,13 @@ async function abrirConversaWhatsapp(){
     box.innerHTML = `<p class="settings-page-msg erro">${esc(e.message || 'Não foi possível carregar a conversa.')}</p>`;
   }
 }
+function statusMensagemIcone(status){
+  if(status === 'read') return `<span class="wa-status wa-status-read" title="Lida">✓✓</span>`;
+  if(status === 'delivered') return `<span class="wa-status" title="Entregue">✓✓</span>`;
+  if(status === 'failed') return `<span class="wa-status wa-status-failed" title="Falhou">⚠</span>`;
+  if(status === 'sent') return `<span class="wa-status" title="Enviada">✓</span>`;
+  return '';
+}
 function renderConversaWhatsapp(mensagens){
   const box = document.getElementById('f-wa-conversa');
   if(!box) return;
@@ -398,7 +414,7 @@ function renderConversaWhatsapp(mensagens){
       ${mensagens.length ? mensagens.map(m=>`
         <div class="wa-msg wa-msg-${m.direction}">
           <p>${esc(m.texto)}</p>
-          <span>${new Date(m.timestamp).toLocaleString('pt-BR')}</span>
+          <span>${new Date(m.timestamp).toLocaleString('pt-BR')} ${m.direction==='out' ? statusMensagemIcone(m.status) : ''}</span>
         </div>
       `).join('') : '<p class="settings-page-note">Nenhuma mensagem ainda.</p>'}
     </div>
@@ -484,6 +500,65 @@ async function loadSupervisao(){
   supervisaoLoaded = true;
   renderApp();
 }
+
+/* ---------- Automações ---------- */
+async function loadAutomacoes(){
+  try{
+    const data = await apiRequest('GET', '/automacoes');
+    automacoes = data.automacoes || [];
+  }catch(e){
+    automacoes = [];
+  }
+  automacoesLoaded = true;
+  renderApp();
+}
+async function salvarAutomacao(){
+  const f = automacaoModalForm;
+  if(!f.nome.trim() || !f.colunaGatilhoId) return;
+  const dados = { nome: f.nome, colunaGatilhoId: f.colunaGatilhoId, acaoTipo: f.acaoTipo, acaoParams: f.acaoParams };
+  try{
+    if(f.__isNew){
+      const nova = await apiRequest('POST', '/automacoes', dados);
+      automacoes.unshift(nova);
+    } else {
+      const atualizada = await apiRequest('PUT', `/automacoes/${f.id}`, dados);
+      const idx = automacoes.findIndex(a=>a.id===f.id);
+      if(idx>-1) automacoes[idx] = atualizada;
+    }
+    closeAutomacaoModal();
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível salvar a automação.';
+  }
+  renderApp();
+}
+async function toggleAutomacaoAtiva(id){
+  const a = automacoes.find(x=>x.id===id);
+  if(!a) return;
+  const anterior = a.ativa;
+  a.ativa = !a.ativa;
+  renderApp();
+  try{
+    await apiRequest('PUT', `/automacoes/${id}`, { ativa: a.ativa });
+  }catch(e){
+    a.ativa = anterior;
+    errorMsg = 'Não foi possível atualizar a automação.';
+    renderApp();
+  }
+}
+async function excluirAutomacao(id){
+  const idx = automacoes.findIndex(a=>a.id===id);
+  if(idx===-1) return;
+  const [removida] = automacoes.splice(idx,1);
+  renderApp();
+  try{
+    await apiRequest('DELETE', `/automacoes/${id}`);
+  }catch(e){
+    automacoes.splice(idx,0,removida);
+    errorMsg = 'Não foi possível excluir a automação.';
+    renderApp();
+  }
+}
+
 async function criarEquipe(){
   const nome = equipeNomeNovo.trim();
   if(!nome){ equipeMsg = { tipo:'erro', texto:'Digite um nome para a equipe.' }; renderApp(); return; }
@@ -593,17 +668,40 @@ function computarNotificacoes(){
 
 /* ---------- Disparos (mensagem em massa) ---------- */
 async function enviarDisparo(){
-  if(disparoSelecionados.size===0 || !disparoTexto.trim()) return;
+  if(disparoSelecionados.size===0) return;
+  if(disparoUsarTemplate){
+    if(!disparoTemplateNome.trim()) return;
+  } else if(!disparoTexto.trim()){
+    return;
+  }
   disparoEnviando = true;
   disparoResultado = null;
   renderApp();
   try{
-    const data = await apiRequest('POST', '/whatsapp/disparo', { cardIds: Array.from(disparoSelecionados), texto: disparoTexto });
+    const corpo = { cardIds: Array.from(disparoSelecionados) };
+    if(disparoUsarTemplate){
+      corpo.usarTemplate = true;
+      corpo.templateName = disparoTemplateNome.trim();
+      corpo.idioma = disparoTemplateIdioma.trim() || 'pt_BR';
+      corpo.variaveis = disparoTemplateVariaveis.trim() ? disparoTemplateVariaveis.split(',').map(v=>v.trim()) : [];
+    } else {
+      corpo.texto = disparoTexto;
+    }
+    const data = await apiRequest('POST', '/whatsapp/disparo', corpo);
     disparoResultado = data;
   }catch(e){
     errorMsg = e.message || 'Não foi possível enviar os disparos.';
   }
   disparoEnviando = false;
+  renderApp();
+}
+async function carregarTemplatesDisponiveis(){
+  try{
+    const data = await apiRequest('GET', '/whatsapp/templates');
+    disparoTemplatesDisponiveis = data.templates || [];
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível carregar os modelos.';
+  }
   renderApp();
 }
 
@@ -1288,6 +1386,7 @@ function renderApp(){
   else if(currentPage === 'comissoes') pageHtml = renderComissoesPage();
   else if(currentPage === 'relatorios') pageHtml = renderRelatoriosPage();
   else if(currentPage === 'disparos') pageHtml = renderDisparosPage();
+  else if(currentPage === 'automacoes') pageHtml = renderAutomacoesPage();
   else if(currentPage === 'configuracoes') pageHtml = renderConfiguracoesPage();
   else if(currentPage === 'suporte') pageHtml = renderSuportePage();
   else if(currentPage === 'chat-interno') pageHtml = renderChatInternoPage();
@@ -1343,6 +1442,7 @@ function renderSidebar(){
     ['comissoes', 'Comissões', ICON_COMISSOES],
     ['relatorios', 'Relatórios', ICON_RELATORIOS],
     ['disparos', 'Disparos', ICON_DISPAROS],
+    ['automacoes', 'Automações', ICON_AUTOMACOES],
     ['tarefas', 'Tarefas', ICON_TASKS],
     ['chat-interno', 'Chat Interno', ICON_CHAT_INTERNO],
     ['supervisao', 'Supervisão', ICON_SUPERVISAO],
@@ -2070,6 +2170,16 @@ function bindAppEvents(){
   });
   const disparoTextoEl = document.getElementById('disparo-texto');
   if(disparoTextoEl) disparoTextoEl.addEventListener('input', (e)=> disparoTexto = e.target.value);
+  const toggleDisparoTemplateEl = app.querySelector('[data-action="toggle-disparo-template"]');
+  if(toggleDisparoTemplateEl) toggleDisparoTemplateEl.addEventListener('click', ()=>{ disparoUsarTemplate = !disparoUsarTemplate; renderApp(); });
+  const disparoTemplateNomeEl = document.getElementById('disparo-template-nome');
+  if(disparoTemplateNomeEl) disparoTemplateNomeEl.addEventListener('input', (e)=> disparoTemplateNome = e.target.value);
+  const disparoTemplateIdiomaEl = document.getElementById('disparo-template-idioma');
+  if(disparoTemplateIdiomaEl) disparoTemplateIdiomaEl.addEventListener('input', (e)=> disparoTemplateIdioma = e.target.value);
+  const disparoTemplateVariaveisEl = document.getElementById('disparo-template-variaveis');
+  if(disparoTemplateVariaveisEl) disparoTemplateVariaveisEl.addEventListener('input', (e)=> disparoTemplateVariaveis = e.target.value);
+  const carregarTemplatesBtn = app.querySelector('[data-action="carregar-templates"]');
+  if(carregarTemplatesBtn) carregarTemplatesBtn.addEventListener('click', carregarTemplatesDisponiveis);
   const disparoSelTodosBtn = app.querySelector('[data-action="disparo-selecionar-todos"]');
   if(disparoSelTodosBtn) disparoSelTodosBtn.addEventListener('click', ()=>{
     board.cards.forEach(c=>{
@@ -2083,6 +2193,25 @@ function bindAppEvents(){
   if(disparoLimparBtn) disparoLimparBtn.addEventListener('click', ()=>{ disparoSelecionados.clear(); renderApp(); });
   const enviarDisparoBtn = app.querySelector('[data-action="enviar-disparo"]');
   if(enviarDisparoBtn) enviarDisparoBtn.addEventListener('click', enviarDisparo);
+
+  /* -- Automações -- */
+  const openNewAutomacaoBtn = app.querySelector('[data-action="open-new-automacao"]');
+  if(openNewAutomacaoBtn) openNewAutomacaoBtn.addEventListener('click', openNewAutomacao);
+  app.querySelectorAll('[data-action="open-edit-automacao"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openEditAutomacao(btn.dataset.automacaoId));
+  });
+  app.querySelectorAll('[data-action="toggle-automacao"]').forEach(el=>{
+    el.addEventListener('click', ()=> toggleAutomacaoAtiva(el.dataset.automacaoId));
+  });
+  app.querySelectorAll('[data-action="delete-automacao"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.automacaoId;
+      showConfirm({
+        message: 'Excluir esta automação? Ela para de rodar imediatamente.',
+        onConfirm: ()=>{ excluirAutomacao(id); closeConfirm(); },
+      });
+    });
+  });
 
   /* -- Relatórios -- */
   const relatorioFunilSelect = document.getElementById('relatorio-funil-select');
@@ -2656,10 +2785,35 @@ function renderDisparosPage(){
 
       <div class="settings-page-section">
         <h3>Mensagem</h3>
-        <div class="field">
-          <textarea id="disparo-texto" rows="4" placeholder="Escreva a mensagem que será enviada...">${esc(disparoTexto)}</textarea>
-        </div>
-        <p class="settings-page-note">⚠️ Só chega de verdade pra quem te escreveu nas últimas 24h — é uma regra da própria Meta, não dá pra contornar sem um modelo de mensagem aprovado.</p>
+        <label class="settings-toggle-row">
+          <span>Usar modelo de mensagem (alcança leads frios)</span>
+          <span class="switch ${disparoUsarTemplate?'on':''}" data-action="toggle-disparo-template">
+            <span class="switch-knob"></span>
+          </span>
+        </label>
+        ${disparoUsarTemplate ? `
+          <div class="field-row">
+            <div class="field">
+              <label>Nome do modelo</label>
+              <input type="text" id="disparo-template-nome" value="${esc(disparoTemplateNome)}" placeholder="ex: boas_vindas" />
+            </div>
+            <div class="field">
+              <label>Idioma</label>
+              <input type="text" id="disparo-template-idioma" value="${esc(disparoTemplateIdioma)}" placeholder="pt_BR" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Variáveis do modelo (opcional, separadas por vírgula, na ordem certa)</label>
+            <input type="text" id="disparo-template-variaveis" value="${esc(disparoTemplateVariaveis)}" placeholder="Ex: João, 15/08" />
+          </div>
+          <button class="btn-outline" data-action="carregar-templates">Carregar modelos aprovados</button>
+          ${disparoTemplatesDisponiveis.length ? `<p class="settings-page-note">Modelos encontrados: ${disparoTemplatesDisponiveis.map(t=>esc(t.nome)).join(', ')}</p>` : ''}
+        ` : `
+          <div class="field">
+            <textarea id="disparo-texto" rows="4" placeholder="Escreva a mensagem que será enviada...">${esc(disparoTexto)}</textarea>
+          </div>
+        `}
+        <p class="settings-page-note">⚠️ Texto livre só chega pra quem te escreveu nas últimas 24h — regra da própria Meta. Modelo de mensagem funciona pra qualquer lead, inclusive frio, mas precisa estar aprovado no Meta Business Manager antes.</p>
         ${disparoResultado ? `<p class="settings-page-msg ${disparoResultado.falha ? 'erro' : 'ok'}">${disparoResultado.sucesso} enviada(s)${disparoResultado.falha ? `, ${disparoResultado.falha} falharam` : ''}.</p>` : ''}
         <button class="btn-primary" data-action="enviar-disparo" ${disparoEnviando?'disabled':''}>${disparoEnviando ? 'Enviando…' : `Enviar para ${disparoSelecionados.size} lead(s)`}</button>
       </div>
@@ -2873,6 +3027,47 @@ function renderSupervisaoPage(){
   `;
 }
 
+/* ---------- página: Automações ---------- */
+function renderAutomacoesPage(){
+  if(!automacoesLoaded){
+    return `<div class="page-head"><div><h1>Automações</h1><p>Carregando…</p></div></div>`;
+  }
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Automações</h1>
+        <p>Ações automáticas quando um cliente entra numa coluna</p>
+      </div>
+      <button class="btn-primary" data-action="open-new-automacao">+ Nova automação</button>
+    </div>
+    ${automacoes.length ? `
+      <div class="automacoes-list">
+        ${automacoes.map(a=>{
+          const coluna = board.columns.find(c=>c.id===a.colunaGatilhoId);
+          const acaoTexto = a.acaoTipo === 'criar_tarefa'
+            ? `cria a tarefa "${esc((a.acaoParams&&a.acaoParams.titulo)||'Follow-up automático')}"`
+            : `move pra "${esc((board.columns.find(c=>c.id===(a.acaoParams&&a.acaoParams.colunaDestinoId))||{}).nome || '—')}"`;
+          return `
+            <div class="automacao-card ${a.ativa?'':'automacao-inativa'}">
+              <div class="contrato-card-head">
+                <div>
+                  <h3 class="contrato-card-title">${esc(a.nome)}</h3>
+                  <p class="contrato-card-note">Quando entra em <b>${esc(coluna?coluna.nome:'coluna removida')}</b> → ${acaoTexto}</p>
+                </div>
+                <div class="contrato-card-actions">
+                  <span class="switch ${a.ativa?'on':''}" data-action="toggle-automacao" data-automacao-id="${a.id}" title="${a.ativa?'Ativa':'Inativa'}"><span class="switch-knob"></span></span>
+                  <button class="icon-btn" data-action="open-edit-automacao" data-automacao-id="${a.id}" title="Editar">${ICON_EDIT}</button>
+                  <button class="icon-btn" data-action="delete-automacao" data-automacao-id="${a.id}" title="Excluir">${ICON_TRASH}</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : `<div class="tasks-empty">Nenhuma automação criada ainda.</div>`}
+  `;
+}
+
 /* ---------- página: Suporte ---------- */
 function renderSuportePage(){
   return `
@@ -3011,6 +3206,125 @@ function renderContratoModal(){
   }
 }
 
+/* ---------- modal de automação ---------- */
+function openNewAutomacao(){
+  automacaoModalForm = {
+    __isNew:true, id:null, nome:'',
+    colunaGatilhoId: (board.columns[0]||{}).id || '',
+    acaoTipo:'criar_tarefa',
+    acaoParams:{ titulo:'', diasParaVencimento:3, colunaDestinoId:(board.columns[0]||{}).id || '' },
+  };
+  renderAutomacaoModal();
+}
+function openEditAutomacao(id){
+  const a = automacoes.find(x=>x.id===id);
+  if(!a) return;
+  automacaoModalForm = {
+    __isNew:false, id:a.id, nome:a.nome, colunaGatilhoId:a.colunaGatilhoId, acaoTipo:a.acaoTipo,
+    acaoParams:{ titulo:'', diasParaVencimento:3, colunaDestinoId:'', ...(a.acaoParams||{}) },
+  };
+  renderAutomacaoModal();
+}
+function closeAutomacaoModal(){ automacaoModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+
+function renderAutomacaoAcaoParams(f){
+  if(f.acaoTipo === 'criar_tarefa'){
+    return `
+      <div class="field">
+        <label>Título da tarefa</label>
+        <input type="text" id="am-tarefa-titulo" value="${esc(f.acaoParams.titulo||'')}" placeholder="Ex: Ligar pra confirmar interesse" />
+      </div>
+      <div class="field">
+        <label>Vencimento (dias a partir de quando a tarefa é criada)</label>
+        <input type="number" id="am-tarefa-dias" value="${f.acaoParams.diasParaVencimento||3}" min="1" />
+      </div>
+    `;
+  }
+  return `
+    <div class="field">
+      <label>Coluna de destino</label>
+      <select id="am-coluna-destino">
+        ${board.columns.map(c=>`<option value="${c.id}" ${f.acaoParams.colunaDestinoId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+function bindAutomacaoAcaoParams(){
+  const tituloEl = document.getElementById('am-tarefa-titulo');
+  if(tituloEl) tituloEl.addEventListener('input', (e)=> automacaoModalForm.acaoParams.titulo = e.target.value);
+  const diasEl = document.getElementById('am-tarefa-dias');
+  if(diasEl) diasEl.addEventListener('input', (e)=> automacaoModalForm.acaoParams.diasParaVencimento = parseInt(e.target.value,10)||3);
+  const destinoEl = document.getElementById('am-coluna-destino');
+  if(destinoEl) destinoEl.addEventListener('change', (e)=> automacaoModalForm.acaoParams.colunaDestinoId = e.target.value);
+}
+
+function renderAutomacaoModal(){
+  const root = document.getElementById('modal-root');
+  if(!automacaoModalForm){ root.innerHTML=''; return; }
+  const f = automacaoModalForm;
+
+  root.innerHTML = `
+    <div class="overlay" id="automacao-modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>${f.__isNew ? 'Nova automação' : 'Editar automação'}</h3>
+          <button id="automacao-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Nome</label>
+            <input type="text" id="am-nome" value="${esc(f.nome)}" placeholder="Ex: Agendar follow-up de propostas" />
+          </div>
+          <div class="field">
+            <label>Quando o cliente entrar nesta coluna</label>
+            <select id="am-coluna-gatilho">
+              ${board.columns.map(c=>`<option value="${c.id}" ${f.colunaGatilhoId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Ação</label>
+            <select id="am-acao-tipo">
+              <option value="criar_tarefa" ${f.acaoTipo==='criar_tarefa'?'selected':''}>Criar uma tarefa</option>
+              <option value="mover_coluna" ${f.acaoTipo==='mover_coluna'?'selected':''}>Mover pra outra coluna</option>
+            </select>
+          </div>
+          <div id="am-acao-params">${renderAutomacaoAcaoParams(f)}</div>
+        </div>
+        <div class="modal-foot">
+          ${!f.__isNew ? `<button class="delete-link" id="am-delete">🗑 Excluir</button>` : '<span></span>'}
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="am-cancel">Cancelar</button>
+            <button class="btn-save" id="am-save">Salvar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('automacao-modal-close').addEventListener('click', closeAutomacaoModal);
+  document.getElementById('am-cancel').addEventListener('click', closeAutomacaoModal);
+  document.getElementById('automacao-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='automacao-modal-overlay') closeAutomacaoModal(); });
+
+  document.getElementById('am-nome').addEventListener('input', (e)=> automacaoModalForm.nome = e.target.value);
+  document.getElementById('am-coluna-gatilho').addEventListener('change', (e)=> automacaoModalForm.colunaGatilhoId = e.target.value);
+  document.getElementById('am-acao-tipo').addEventListener('change', (e)=>{
+    automacaoModalForm.acaoTipo = e.target.value;
+    document.getElementById('am-acao-params').innerHTML = renderAutomacaoAcaoParams(automacaoModalForm);
+    bindAutomacaoAcaoParams();
+  });
+  bindAutomacaoAcaoParams();
+
+  document.getElementById('am-save').addEventListener('click', salvarAutomacao);
+  if(!f.__isNew){
+    document.getElementById('am-delete').addEventListener('click', ()=>{
+      showConfirm({
+        message: 'Excluir esta automação? Ela para de rodar imediatamente.',
+        onConfirm: ()=>{ excluirAutomacao(f.id); closeAutomacaoModal(); closeConfirm(); },
+      });
+    });
+  }
+}
+
 /* ---------- confirmação genérica ---------- */
 function showConfirm({ message, onConfirm }){
   confirmState = { message, onConfirm };
@@ -3043,4 +3357,5 @@ if(getToken()){
   loadWhatsappStatus();
   loadConversas();
   loadEquipe();
+  loadAutomacoes();
 }
