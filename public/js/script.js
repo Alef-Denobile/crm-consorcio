@@ -53,6 +53,11 @@ const ICON_TASKS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" 
 const ICON_COMISSOES = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="16" r="3"/><line x1="19" y1="5" x2="5" y2="19"/></svg>`;
 const ICON_SETTINGS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`;
 const ICON_SPARKLE = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6L12 2Z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14Z"/><path d="M5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14Z"/></svg>`;
+const ICON_BELL = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+const ICON_CONVERSAS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
+const ICON_DISPAROS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
+const ICON_RELATORIOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`;
+const ICON_SUPORTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -152,6 +157,15 @@ let calendarSyncedOnce = false;
 let whatsappConnected = false;
 let whatsappSalvando = false;
 let whatsappConfigMsg = null;
+let conversas = [];
+let conversasLoaded = false;
+let notifOpen = false;
+let disparoFiltroColuna = '';
+let disparoFiltroTemp = '';
+let disparoSelecionados = new Set();
+let disparoTexto = '';
+let disparoEnviando = false;
+let disparoResultado = null;
 let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
@@ -331,6 +345,105 @@ function renderConversaWhatsapp(mensagens){
   };
   enviarBtn.addEventListener('click', enviar);
   input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') enviar(); });
+}
+
+function formatDateHora(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+async function loadConversas(){
+  try{
+    const data = await apiRequest('GET', '/whatsapp/conversas');
+    conversas = data.conversas || [];
+  }catch(e){
+    conversas = [];
+  }
+  conversasLoaded = true;
+  renderApp();
+}
+
+// Notificações são calculadas na hora, a partir do que já está carregado
+// (tarefas, leads e conversas) — não existe uma tabela própria pra isso.
+function computarNotificacoes(){
+  const notifs = [];
+  const fimHoje = new Date(); fimHoje.setHours(23,59,59,999);
+  tasks.forEach(t=>{
+    if(!t.concluida && t.vencimento && new Date(t.vencimento) <= fimHoje){
+      notifs.push({ texto:`Tarefa: ${t.titulo}`, timestamp: t.vencimento, cardId: t.leadId || null });
+    }
+  });
+  const ontem = new Date(Date.now() - 24*60*60*1000);
+  board.cards.forEach(c=>{
+    if(c.createdAt && new Date(c.createdAt) >= ontem){
+      notifs.push({ texto:`Novo lead: ${c.cliente}`, timestamp:c.createdAt, cardId:c.id });
+    }
+  });
+  const doisDias = new Date(Date.now() - 48*60*60*1000);
+  conversas.forEach(cv=>{
+    if(cv.direcaoUltima==='in' && cv.ultimaMensagemEm && new Date(cv.ultimaMensagemEm) >= doisDias){
+      notifs.push({ texto:`${cv.card.cliente}: ${(cv.ultimaMensagem||'').slice(0,60)}`, timestamp:cv.ultimaMensagemEm, cardId:cv.card.id });
+    }
+  });
+  return notifs.sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+}
+
+/* ---------- Disparos (mensagem em massa) ---------- */
+async function enviarDisparo(){
+  if(disparoSelecionados.size===0 || !disparoTexto.trim()) return;
+  disparoEnviando = true;
+  disparoResultado = null;
+  renderApp();
+  try{
+    const data = await apiRequest('POST', '/whatsapp/disparo', { cardIds: Array.from(disparoSelecionados), texto: disparoTexto });
+    disparoResultado = data;
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível enviar os disparos.';
+  }
+  disparoEnviando = false;
+  renderApp();
+}
+
+/* ---------- Relatórios ---------- */
+function relatoriosDadosMensais(mesesAtras){
+  const buckets = [];
+  const agora = new Date();
+  for(let i=mesesAtras-1;i>=0;i--){
+    const d = new Date(agora.getFullYear(), agora.getMonth()-i, 1);
+    buckets.push({ key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, novos:0 });
+  }
+  const porKey = new Map(buckets.map(b=>[b.key,b]));
+  board.cards.forEach(c=>{
+    if(!c.createdAt) return;
+    const bucket = porKey.get(c.createdAt.slice(0,7));
+    if(bucket) bucket.novos++;
+  });
+  return buckets;
+}
+function exportarCsv(){
+  const linhas = [['Nome','Telefone','Valor','Coluna','Temperatura','Mês'].join(',')];
+  board.cards.forEach(c=>{
+    const col = board.columns.find(k=>k.id===c.columnId);
+    linhas.push([
+      `"${(c.cliente||'').replace(/"/g,'""')}"`,
+      `"${(c.telefone||'').replace(/"/g,'""')}"`,
+      c.valor||0,
+      `"${col?col.nome.replace(/"/g,'""'):''}"`,
+      c.temperatura||'',
+      c.mes||'',
+    ].join(','));
+  });
+  const blob = new Blob([linhas.join('\n')], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `leads_${currentMonthKey()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 async function connectGoogleCalendar(){
   try{
@@ -958,20 +1071,45 @@ function renderApp(){
   if(currentPage === 'dashboard') pageHtml = renderDashboardPage();
   else if(currentPage === 'pipeline') pageHtml = renderPipelinePage();
   else if(currentPage === 'leads') pageHtml = renderLeadsPage();
+  else if(currentPage === 'conversas') pageHtml = renderConversasPage();
   else if(currentPage === 'comissoes') pageHtml = renderComissoesPage();
+  else if(currentPage === 'relatorios') pageHtml = renderRelatoriosPage();
+  else if(currentPage === 'disparos') pageHtml = renderDisparosPage();
   else if(currentPage === 'configuracoes') pageHtml = renderConfiguracoesPage();
+  else if(currentPage === 'suporte') pageHtml = renderSuportePage();
   else if(currentPage === 'tarefas') pageHtml = renderTarefasPage();
+
+  const notificacoes = computarNotificacoes();
 
   app.innerHTML = `
     <div class="app-shell ${sidebarOpen ? 'sidebar-open' : ''}">
       ${renderSidebar()}
       <div class="sidebar-backdrop" data-action="close-sidebar"></div>
       <div class="main-area">
-        <button class="hamburger-btn" data-action="toggle-sidebar" title="Menu">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
-        </button>
+        <div class="main-topbar">
+          <button class="hamburger-btn" data-action="toggle-sidebar" title="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+          <div class="notif-wrap">
+            <button class="notif-btn" data-action="toggle-notif" title="Notificações">
+              ${ICON_BELL}
+              ${notificacoes.length ? `<span class="notif-badge">${notificacoes.length > 9 ? '9+' : notificacoes.length}</span>` : ''}
+            </button>
+            ${notifOpen ? `
+              <div class="notif-panel">
+                <div class="notif-panel-title">Notificações</div>
+                ${notificacoes.length ? notificacoes.slice(0,8).map(n=>`
+                  <div class="notif-item" ${n.cardId ? `data-action="open-edit-card" data-card-id="${n.cardId}"` : ''}>
+                    <p>${esc(n.texto)}</p>
+                    <span>${formatDateHora(n.timestamp)}</span>
+                  </div>
+                `).join('') : '<p class="settings-page-note" style="padding:12px;">Nenhuma notificação por enquanto.</p>'}
+              </div>
+            ` : ''}
+          </div>
+        </div>
         ${errorMsg ? `<div class="error-banner" data-action="dismiss-error" title="Clique para fechar">⚠ ${esc(errorMsg)}</div>` : ''}
         ${pageHtml}
       </div>
@@ -986,7 +1124,10 @@ function renderSidebar(){
     ['dashboard', 'Dashboard', ICON_DASHBOARD],
     ['pipeline', 'Pipeline', ICON_PIPELINE],
     ['leads', 'Leads', ICON_LEADS],
+    ['conversas', 'Conversas', ICON_CONVERSAS],
     ['comissoes', 'Comissões', ICON_COMISSOES],
+    ['relatorios', 'Relatórios', ICON_RELATORIOS],
+    ['disparos', 'Disparos', ICON_DISPAROS],
     ['tarefas', 'Tarefas', ICON_TASKS],
   ];
   return `
@@ -1004,6 +1145,7 @@ function renderSidebar(){
         `).join('')}
       </nav>
       <div class="sidebar-footer">
+        <button class="nav-item ${currentPage==='suporte'?'active':''}" data-action="nav" data-page="suporte">${ICON_SUPORTE}<span>Suporte</span></button>
         <button class="nav-item ${currentPage==='configuracoes'?'active':''}" data-action="nav" data-page="configuracoes">${ICON_SETTINGS}<span>Configurações</span></button>
         <button class="nav-item logout-item" data-action="logout">${ICON_LOGOUT}<span>Sair</span></button>
       </div>
@@ -1598,6 +1740,8 @@ function bindAppEvents(){
   if(hamburgerBtn) hamburgerBtn.addEventListener('click', ()=>{ sidebarOpen = !sidebarOpen; renderApp(); });
   const closeSidebarEl = app.querySelector('[data-action="close-sidebar"]');
   if(closeSidebarEl) closeSidebarEl.addEventListener('click', ()=>{ sidebarOpen = false; renderApp(); });
+  const notifBtn = app.querySelector('[data-action="toggle-notif"]');
+  if(notifBtn) notifBtn.addEventListener('click', (e)=>{ e.stopPropagation(); notifOpen = !notifOpen; renderApp(); });
 
   const errorBanner = app.querySelector('[data-action="dismiss-error"]');
   if(errorBanner) errorBanner.addEventListener('click', ()=>{ errorMsg=null; renderApp(); });
@@ -1675,6 +1819,38 @@ function bindAppEvents(){
   });
   const toggleConcluidasEl = app.querySelector('[data-action="toggle-show-concluidas"]');
   if(toggleConcluidasEl) toggleConcluidasEl.addEventListener('click', ()=>{ tarefasShowConcluidas = !tarefasShowConcluidas; renderApp(); });
+
+  /* -- Disparos -- */
+  const disparoColunaSelect = document.getElementById('disparo-coluna');
+  if(disparoColunaSelect) disparoColunaSelect.addEventListener('change', (e)=>{ disparoFiltroColuna = e.target.value; renderApp(); });
+  const disparoTempSelect = document.getElementById('disparo-temp');
+  if(disparoTempSelect) disparoTempSelect.addEventListener('change', (e)=>{ disparoFiltroTemp = e.target.value; renderApp(); });
+  app.querySelectorAll('.disparo-lead-checkbox').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      if(cb.checked) disparoSelecionados.add(cb.dataset.cardId);
+      else disparoSelecionados.delete(cb.dataset.cardId);
+      renderApp();
+    });
+  });
+  const disparoTextoEl = document.getElementById('disparo-texto');
+  if(disparoTextoEl) disparoTextoEl.addEventListener('input', (e)=> disparoTexto = e.target.value);
+  const disparoSelTodosBtn = app.querySelector('[data-action="disparo-selecionar-todos"]');
+  if(disparoSelTodosBtn) disparoSelTodosBtn.addEventListener('click', ()=>{
+    board.cards.forEach(c=>{
+      const bateColuna = !disparoFiltroColuna || c.columnId===disparoFiltroColuna;
+      const bateTemp = !disparoFiltroTemp || c.temperatura===disparoFiltroTemp;
+      if(bateColuna && bateTemp && c.telefone) disparoSelecionados.add(c.id);
+    });
+    renderApp();
+  });
+  const disparoLimparBtn = app.querySelector('[data-action="disparo-limpar-selecao"]');
+  if(disparoLimparBtn) disparoLimparBtn.addEventListener('click', ()=>{ disparoSelecionados.clear(); renderApp(); });
+  const enviarDisparoBtn = app.querySelector('[data-action="enviar-disparo"]');
+  if(enviarDisparoBtn) enviarDisparoBtn.addEventListener('click', enviarDisparo);
+
+  /* -- Relatórios -- */
+  const exportarCsvBtn = app.querySelector('[data-action="exportar-csv"]');
+  if(exportarCsvBtn) exportarCsvBtn.addEventListener('click', exportarCsv);
 
   /* -- Comissões -- */
   app.querySelectorAll('[data-action="comissoes-mes"]').forEach(btn=>{
@@ -1856,6 +2032,9 @@ function closeMenusOnOutsideClick(e){
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
   }
+  if(notifOpen && !e.target.closest('.notif-panel') && !e.target.closest('[data-action="toggle-notif"]')){
+    notifOpen = false; renderApp();
+  }
 }
 
 /* ---------- modal do cliente ---------- */
@@ -1872,6 +2051,7 @@ function openEditCard(id){
   const card = board.cards.find(c=>c.id===id);
   if(!card) return;
   modalForm = { ...card, __isNew:false };
+  notifOpen = false;
   renderModal();
 }
 function closeModal(){ modalForm = null; document.getElementById('modal-root').innerHTML=''; }
@@ -2086,6 +2266,174 @@ function renderTaskModal(){
   }
 }
 
+/* ---------- página: Conversas ---------- */
+function renderConversasPage(){
+  if(!conversasLoaded){
+    return `<div class="page-head"><div><h1>Conversas</h1><p>Carregando…</p></div></div>`;
+  }
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Conversas</h1>
+        <p>${conversas.length} conversa${conversas.length===1?'':'s'} no WhatsApp</p>
+      </div>
+    </div>
+    ${!whatsappConnected ? `<div class="tasks-empty">Conecte o WhatsApp Business em Configurações → Integrações para ver as conversas aqui.</div>` : (
+      conversas.length ? `
+        <div class="conversas-list">
+          ${conversas.map(cv=>`
+            <div class="conversa-item" data-action="open-edit-card" data-card-id="${cv.card.id}">
+              <div class="conversa-item-main">
+                <span class="conversa-item-nome">${esc(cv.card.cliente) || 'Sem nome'}</span>
+                <span class="conversa-item-preview">${cv.direcaoUltima==='out' ? 'Você: ' : ''}${esc((cv.ultimaMensagem||'').slice(0,90))}</span>
+              </div>
+              <span class="conversa-item-hora">${formatDateHora(cv.ultimaMensagemEm)}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : `<div class="tasks-empty">Nenhuma conversa ainda.</div>`
+    )}
+  `;
+}
+
+/* ---------- página: Disparos ---------- */
+function renderDisparosPage(){
+  const filtrados = board.cards.filter(c=>{
+    if(disparoFiltroColuna && c.columnId !== disparoFiltroColuna) return false;
+    if(disparoFiltroTemp && c.temperatura !== disparoFiltroTemp) return false;
+    return !!c.telefone;
+  });
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Disparos</h1>
+        <p>Envie a mesma mensagem para vários leads de uma vez</p>
+      </div>
+    </div>
+    ${!whatsappConnected ? `<div class="tasks-empty">Conecte o WhatsApp Business em Configurações → Integrações para usar os disparos.</div>` : `
+      <div class="settings-page-section" style="margin-bottom:20px;">
+        <h3>Filtrar leads</h3>
+        <div class="field-row">
+          <div class="field">
+            <label>Coluna</label>
+            <select id="disparo-coluna">
+              <option value="">Todas</option>
+              ${board.columns.map(c=>`<option value="${c.id}" ${disparoFiltroColuna===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Qualificação</label>
+            <select id="disparo-temp">
+              <option value="">Todas</option>
+              <option value="quente" ${disparoFiltroTemp==='quente'?'selected':''}>Quente</option>
+              <option value="morno" ${disparoFiltroTemp==='morno'?'selected':''}>Morno</option>
+              <option value="frio" ${disparoFiltroTemp==='frio'?'selected':''}>Frio</option>
+            </select>
+          </div>
+        </div>
+        <p class="settings-page-note">${filtrados.length} lead(s) com telefone encontrados. Marque quem vai receber:</p>
+        <div class="disparo-lista-leads">
+          ${filtrados.length ? filtrados.map(c=>`
+            <label class="disparo-lead-item">
+              <input type="checkbox" class="disparo-lead-checkbox" data-card-id="${c.id}" ${disparoSelecionados.has(c.id)?'checked':''} />
+              <span>${esc(c.cliente)} <span class="settings-page-note">${esc(c.telefone)}</span></span>
+            </label>
+          `).join('') : '<p class="dash-empty">Nenhum lead encontrado com esse filtro.</p>'}
+        </div>
+        <div class="settings-btn-row" style="margin-top:10px;">
+          <button class="btn-outline" data-action="disparo-selecionar-todos">Selecionar todos</button>
+          <button class="btn-outline" data-action="disparo-limpar-selecao">Limpar seleção</button>
+        </div>
+      </div>
+
+      <div class="settings-page-section">
+        <h3>Mensagem</h3>
+        <div class="field">
+          <textarea id="disparo-texto" rows="4" placeholder="Escreva a mensagem que será enviada...">${esc(disparoTexto)}</textarea>
+        </div>
+        <p class="settings-page-note">⚠️ Só chega de verdade pra quem te escreveu nas últimas 24h — é uma regra da própria Meta, não dá pra contornar sem um modelo de mensagem aprovado.</p>
+        ${disparoResultado ? `<p class="settings-page-msg ${disparoResultado.falha ? 'erro' : 'ok'}">${disparoResultado.sucesso} enviada(s)${disparoResultado.falha ? `, ${disparoResultado.falha} falharam` : ''}.</p>` : ''}
+        <button class="btn-primary" data-action="enviar-disparo" ${disparoEnviando?'disabled':''}>${disparoEnviando ? 'Enviando…' : `Enviar para ${disparoSelecionados.size} lead(s)`}</button>
+      </div>
+    `}
+  `;
+}
+
+/* ---------- página: Relatórios ---------- */
+function renderRelatoriosPage(){
+  const dados = relatoriosDadosMensais(6);
+  const maxNovos = Math.max(1, ...dados.map(d=>d.novos));
+  const totalGanho = board.cards.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='ganho' ? s+(Number(c.valor)||0) : s; },0);
+  const totalPerdido = board.cards.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='perdido' ? s+(Number(c.valor)||0) : s; },0);
+  const porTemp = ['quente','morno','frio'].map(t=>({ temp:t, count: board.cards.filter(c=>c.temperatura===t).length }));
+
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Relatórios</h1>
+        <p>Visão consolidada dos últimos 6 meses</p>
+      </div>
+      <button class="btn-outline" data-action="exportar-csv">Exportar CSV</button>
+    </div>
+
+    <div class="metric-grid">
+      <div class="metric-card"><div class="metric-card-top"><span>Total ganho</span></div><div class="metric-value">${fmtBRL(totalGanho)}</div></div>
+      <div class="metric-card"><div class="metric-card-top"><span>Total perdido</span></div><div class="metric-value">${fmtBRL(totalPerdido)}</div></div>
+      <div class="metric-card"><div class="metric-card-top"><span>Total de leads</span></div><div class="metric-value">${board.cards.length}</div></div>
+    </div>
+
+    <div class="dash-panel">
+      <div class="dash-panel-title">Novos leads por mês</div>
+      <div class="stage-list">
+        ${dados.map(d=>`
+          <div class="stage-row">
+            <div class="stage-row-top"><span>${monthLabel(d.key)}</span><span>${d.novos}</span></div>
+            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${d.novos/maxNovos*100}%"></div></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="dash-panel">
+      <div class="dash-panel-title">Leads por qualificação</div>
+      <div class="stage-list">
+        ${porTemp.map(t=>`
+          <div class="stage-row">
+            <div class="stage-row-top"><span>${TEMPS[t.temp].label}</span><span>${t.count}</span></div>
+            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${board.cards.length ? (t.count/board.cards.length*100) : 0}%"></div></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- página: Suporte ---------- */
+function renderSuportePage(){
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Suporte</h1>
+        <p>Dúvidas e contato</p>
+      </div>
+    </div>
+    <div class="settings-page-grid">
+      <div class="settings-page-section">
+        <h3>Perguntas frequentes</h3>
+        <p class="settings-page-note"><b>Como conecto o WhatsApp Business?</b><br/>Configurações → Integrações → WhatsApp Business API, seguindo o passo a passo do README do projeto.</p>
+        <p class="settings-page-note"><b>Por que uma mensagem de Disparo não chegou?</b><br/>A API do WhatsApp só permite texto livre pra quem te escreveu nas últimas 24h.</p>
+        <p class="settings-page-note"><b>Como mudo a cor do painel?</b><br/>Configurações → Aparência.</p>
+        <p class="settings-page-note"><b>Como conecto a Google Agenda?</b><br/>Configurações → Integrações → Google Agenda.</p>
+      </div>
+      <div class="settings-page-section">
+        <h3>Contato</h3>
+        <p class="settings-page-note">Encontrou um problema ou tem uma sugestão pro painel? Fale com quem administra esse CRM.</p>
+        <a class="btn-primary" href="mailto:?subject=Painel%20CRM%20-%20Suporte" style="display:inline-block; text-decoration:none; text-align:center;">Enviar e-mail</a>
+      </div>
+    </div>
+  `;
+}
+
 /* ---------- modal do contrato de comissão ---------- */
 function openNewContrato(){
   contratoModalForm = { __isNew:true, id:null, desc:'', scope:'Pessoal', creditoValor:0, date: comissoesMonth + '-01' };
@@ -2227,4 +2575,5 @@ if(getToken()){
   loadCalendarStatus();
   loadContratos();
   loadWhatsappStatus();
+  loadConversas();
 }

@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Card = require('../models/Card');
@@ -15,6 +16,29 @@ function normalizarTelefone(str) {
   if (!digitos) return null;
   if (digitos.length <= 11) digitos = '55' + digitos;
   return digitos;
+}
+
+// Envia uma mensagem de texto via Graph API e devolve a resposta da Meta.
+// Usado tanto pelo envio individual quanto pelo disparo em massa.
+async function enviarMensagemGraph(user, card, texto) {
+  const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${user.whatsappBusiness.accessToken}`,
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: card.telefoneNormalizado,
+      type: 'text',
+      text: { body: texto },
+    }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    throw new Error((data.error && data.error.message) || 'Erro ao enviar mensagem pelo WhatsApp.');
+  }
+  return data;
 }
 
 /* ===================== rotas públicas (chamadas pela Meta) ===================== */
@@ -138,6 +162,48 @@ router.post('/desconectar', auth, async (req, res) => {
   }
 });
 
+// GET /api/whatsapp/conversas -> lista todas as conversas, ordenadas pela mensagem mais recente
+// (rota mais específica antes da /conversas/:cardId, senão o Express tentaria casar "conversas" como :cardId)
+router.get('/conversas', auth, async (req, res) => {
+  try {
+    const userObjectId = new mongoose.Types.ObjectId(req.userId);
+    const agregadas = await Message.aggregate([
+      { $match: { userId: userObjectId } },
+      { $sort: { timestamp: -1 } },
+      {
+        $group: {
+          _id: '$cardId',
+          ultimaMensagem: { $first: '$texto' },
+          ultimaMensagemEm: { $first: '$timestamp' },
+          direcaoUltima: { $first: '$direction' },
+        },
+      },
+    ]);
+
+    const cardIds = agregadas.map((a) => a._id);
+    const cards = await Card.find({ _id: { $in: cardIds }, userId: req.userId });
+    const cardMap = new Map(cards.map((c) => [c._id.toString(), c]));
+
+    const conversas = agregadas
+      .map((a) => {
+        const card = cardMap.get(a._id.toString());
+        if (!card) return null;
+        return {
+          card: { id: card._id.toString(), cliente: card.cliente, telefone: card.telefone },
+          ultimaMensagem: a.ultimaMensagem,
+          ultimaMensagemEm: a.ultimaMensagemEm,
+          direcaoUltima: a.direcaoUltima,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.ultimaMensagemEm) - new Date(a.ultimaMensagemEm));
+
+    res.json({ conversas });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao carregar as conversas.' });
+  }
+});
+
 // GET /api/whatsapp/conversas/:cardId -> histórico de mensagens de um cliente
 router.get('/conversas/:cardId', auth, async (req, res) => {
   try {
@@ -164,23 +230,7 @@ router.post('/enviar', auth, async (req, res) => {
     if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
     if (!card.telefoneNormalizado) return res.status(400).json({ error: 'Esse cliente não tem telefone cadastrado.' });
 
-    const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${user.whatsappBusiness.accessToken}`,
-      },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: card.telefoneNormalizado,
-        type: 'text',
-        text: { body: texto },
-      }),
-    });
-    const data = await resp.json();
-    if (!resp.ok) {
-      throw new Error((data.error && data.error.message) || 'Erro ao enviar mensagem pelo WhatsApp.');
-    }
+    const data = await enviarMensagemGraph(user, card, texto);
 
     const msg = await Message.create({
       userId: req.userId,
@@ -194,6 +244,50 @@ router.post('/enviar', auth, async (req, res) => {
     res.status(201).json(msg.toJSON());
   } catch (err) {
     res.status(500).json({ error: err.message || 'Erro ao enviar mensagem.' });
+  }
+});
+
+// POST /api/whatsapp/disparo -> envia a mesma mensagem pra vários clientes de uma vez
+router.post('/disparo', auth, async (req, res) => {
+  try {
+    const { cardIds, texto } = req.body;
+    if (!texto || !texto.trim()) return res.status(400).json({ error: 'Mensagem vazia.' });
+    if (!Array.isArray(cardIds) || !cardIds.length) {
+      return res.status(400).json({ error: 'Selecione ao menos um lead.' });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) {
+      return res.status(400).json({ error: 'WhatsApp Business não está conectado.' });
+    }
+
+    let sucesso = 0;
+    let falha = 0;
+    for (const cardId of cardIds) {
+      try {
+        const card = await Card.findOne({ _id: cardId, userId: req.userId });
+        if (!card || !card.telefoneNormalizado) {
+          falha++;
+          continue;
+        }
+        const data = await enviarMensagemGraph(user, card, texto);
+        await Message.create({
+          userId: req.userId,
+          cardId: card._id,
+          direction: 'out',
+          texto,
+          whatsappMessageId: data.messages && data.messages[0] && data.messages[0].id,
+          status: 'sent',
+          timestamp: new Date(),
+        });
+        sucesso++;
+      } catch (e) {
+        falha++;
+      }
+    }
+    res.json({ sucesso, falha });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao disparar mensagens.' });
   }
 });
 

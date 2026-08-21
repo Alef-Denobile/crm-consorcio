@@ -144,10 +144,23 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   10 parcelas × 0,00103388 + 3 parcelas × 0,00190561)
 - **Tarefas** — lista de tarefas com prioridade, vencimento e lead
   relacionado
+- **Conversas** — todas as conversas do WhatsApp Business, ordenadas
+  pela mensagem mais recente; clicar numa abre o card do cliente
+- **Relatórios** — novos leads por mês (últimos 6 meses), leads por
+  qualificação, totais de ganho/perdido, e exportação em CSV
+- **Disparos** — envia a mesma mensagem de WhatsApp para vários leads
+  de uma vez, com filtro por coluna e qualificação
+- **Suporte** — perguntas frequentes e um link de contato por e-mail.
+  Fica no rodapé da barra lateral, junto com Configurações
 - **Configurações** — uma página só, em três seções na ordem Perfil →
   Integrações → Aparência. Os botões no topo rolam a tela até a seção
   correspondente. O botão de acesso fica no rodapé da barra lateral,
   separado dos outros, acima do "Sair"
+
+Também tem um **sino de notificações** no topo de todas as páginas,
+com tarefas vencendo, leads novos e mensagens recebidas nas últimas
+48h — calculado na hora a partir do que já está carregado, sem
+nenhuma tabela nova no banco.
 
 ## Configurar a API do WhatsApp Business (opcional)
 
@@ -269,4 +282,6 @@ de erro ao clicar.
 - `POST /api/whatsapp/desconectar` — (exige token)
 - `GET  /api/whatsapp/conversas/:cardId` — histórico de mensagens do cliente (exige token)
 - `POST /api/whatsapp/enviar` — `{ cardId, texto }` → envia mensagem (exige token)
+- `GET  /api/whatsapp/conversas` — lista todas as conversas, ordenadas pela mais recente (exige token)
+- `POST /api/whatsapp/disparo` — `{ cardIds, texto }` → envia a mesma mensagem para vários leads (exige token)
 # crm-consorcio
