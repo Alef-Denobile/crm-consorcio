@@ -230,7 +230,7 @@ main{ padding:24px; overflow-x:auto; }
 ================================================================= */
 .app-shell{ display:flex; min-height:100vh; background:var(--bg); }
 
-.sidebar{ width:232px; flex-shrink:0; background:var(--paper); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:22px 14px; position:sticky; top:0; height:100vh; overflow-y:auto; }
+.sidebar{ width:232px; flex-shrink:0; background:var(--paper); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:22px 14px; position:fixed; left:0; top:0; height:100vh; overflow-y:auto; z-index:200; transform:translateX(0); transition:transform .25s ease; }
 .sidebar-brand{ display:flex; align-items:center; gap:10px; padding:4px 10px 22px; }
 .sidebar-logo{ width:30px; height:30px; border-radius:9px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
 .sidebar-greeting{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; letter-spacing:-.01em; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -250,7 +250,7 @@ main{ padding:24px; overflow-x:auto; }
 .logout-item{ color:var(--danger); }
 .logout-item:hover{ background:var(--danger-soft); color:var(--danger); }
 
-.main-area{ flex:1; min-width:0; padding:28px 32px 48px; }
+.main-area{ flex:1; min-width:0; margin-left:232px; padding:28px 32px 48px; }
 .page-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:24px; flex-wrap:wrap; }
 .page-head h1{ font-family:'Fraunces',serif; font-size:24px; font-weight:600; margin:0; letter-spacing:-.01em; }
 .page-head p{ font-size:12px; color:var(--ink-soft); margin:4px 0 0; }
@@ -265,8 +265,7 @@ main{ padding:24px; overflow-x:auto; }
 @media (max-width:1024px){
   .hamburger-btn{ display:flex; }
   .sidebar{
-    position:fixed; left:0; top:0; height:100vh; width:240px; z-index:200;
-    transform:translateX(-100%); transition:transform .25s ease;
+    transform:translateX(-100%);
     box-shadow:0 0 40px rgba(0,0,0,.3);
   }
   .app-shell.sidebar-open .sidebar{ transform:translateX(0); }
@@ -277,7 +276,7 @@ main{ padding:24px; overflow-x:auto; }
     backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
   }
   .app-shell.sidebar-open .sidebar-backdrop{ opacity:1; pointer-events:auto; }
-  .main-area{ padding:20px 16px 40px; }
+  .main-area{ margin-left:0; padding:20px 16px 40px; }
 }
 
 /* ---------- Dashboard ---------- */
