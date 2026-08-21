@@ -58,6 +58,8 @@ const ICON_CONVERSAS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="no
 const ICON_DISPAROS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 const ICON_RELATORIOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`;
 const ICON_SUPORTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+const ICON_CHAT_INTERNO = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
+const ICON_SUPERVISAO = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -172,6 +174,17 @@ let funilAtualId = null;
 let editingFunilId = null;
 let editingFunilName = '';
 let relatorioFunilId = '';
+let equipe = null;
+let equipeLoaded = false;
+let equipeNomeNovo = '';
+let equipeCodigoEntrar = '';
+let equipeMsg = null;
+let chatMensagens = [];
+let chatLoaded = false;
+let chatTexto = '';
+let chatEnviando = false;
+let supervisaoMembros = [];
+let supervisaoLoaded = false;
 let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
@@ -431,6 +444,125 @@ async function loadConversas(){
     conversas = [];
   }
   conversasLoaded = true;
+  renderApp();
+}
+
+/* ---------- Equipe (Chat Interno + Supervisão) ---------- */
+async function loadEquipe(){
+  try{
+    const data = await apiRequest('GET', '/equipe');
+    equipe = data.equipe;
+  }catch(e){
+    equipe = null;
+  }
+  equipeLoaded = true;
+  renderApp();
+  if(equipe){
+    if(currentPage === 'chat-interno' && !chatLoaded) loadChat();
+    if(currentPage === 'supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
+  }
+}
+async function loadChat(){
+  if(!equipe){ chatLoaded = true; renderApp(); return; }
+  try{
+    const data = await apiRequest('GET', '/equipe/chat');
+    chatMensagens = data.mensagens || [];
+  }catch(e){
+    chatMensagens = [];
+  }
+  chatLoaded = true;
+  renderApp();
+}
+async function loadSupervisao(){
+  if(!equipe || !equipe.souSupervisor){ supervisaoLoaded = true; renderApp(); return; }
+  try{
+    const data = await apiRequest('GET', '/equipe/supervisao');
+    supervisaoMembros = data.membros || [];
+  }catch(e){
+    supervisaoMembros = [];
+  }
+  supervisaoLoaded = true;
+  renderApp();
+}
+async function criarEquipe(){
+  const nome = equipeNomeNovo.trim();
+  if(!nome){ equipeMsg = { tipo:'erro', texto:'Digite um nome para a equipe.' }; renderApp(); return; }
+  try{
+    await apiRequest('POST', '/equipe', { nome });
+    equipeNomeNovo = '';
+    equipeMsg = null;
+    await loadEquipe();
+  }catch(e){
+    equipeMsg = { tipo:'erro', texto: e.message || 'Não foi possível criar a equipe.' };
+    renderApp();
+  }
+}
+async function entrarNaEquipe(){
+  const codigo = equipeCodigoEntrar.trim();
+  if(!codigo){ equipeMsg = { tipo:'erro', texto:'Digite o código de convite.' }; renderApp(); return; }
+  try{
+    await apiRequest('POST', '/equipe/entrar', { codigo });
+    equipeCodigoEntrar = '';
+    equipeMsg = null;
+    await loadEquipe();
+  }catch(e){
+    equipeMsg = { tipo:'erro', texto: e.message || 'Não foi possível entrar na equipe.' };
+    renderApp();
+  }
+}
+async function sairDaEquipe(){
+  try{
+    await apiRequest('POST', '/equipe/sair');
+    equipe = null;
+    chatMensagens = [];
+    chatLoaded = false;
+    supervisaoMembros = [];
+    supervisaoLoaded = false;
+    renderApp();
+  }catch(e){
+    errorMsg = 'Não foi possível sair da equipe.';
+    renderApp();
+  }
+}
+async function regenerarCodigoEquipe(){
+  try{
+    const data = await apiRequest('POST', '/equipe/regenerar-codigo');
+    if(equipe) equipe.codigoConvite = data.codigoConvite;
+  }catch(e){
+    errorMsg = 'Não foi possível gerar um novo código.';
+  }
+  renderApp();
+}
+async function alterarPapelMembro(userId, papel){
+  try{
+    await apiRequest('PUT', `/equipe/membro/${userId}/papel`, { papel });
+    await loadEquipe();
+  }catch(e){
+    errorMsg = 'Não foi possível alterar o papel do membro.';
+    renderApp();
+  }
+}
+async function removerMembro(userId){
+  try{
+    await apiRequest('DELETE', `/equipe/membro/${userId}`);
+    await loadEquipe();
+  }catch(e){
+    errorMsg = 'Não foi possível remover o membro.';
+    renderApp();
+  }
+}
+async function enviarMensagemChat(){
+  if(!chatTexto.trim()) return;
+  chatEnviando = true;
+  renderApp();
+  try{
+    await apiRequest('POST', '/equipe/chat', { texto: chatTexto });
+    chatTexto = '';
+    await loadChat();
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível enviar a mensagem.';
+  }
+  chatEnviando = false;
   renderApp();
 }
 
@@ -752,6 +884,14 @@ function goToPage(page){
     senhaMsg = null; senhaAtualVal = ''; senhaNovaVal = '';
     importResultado = null;
     refreshCurrentUser();
+  }
+  if(page === 'chat-interno'){
+    equipeMsg = null;
+    if(equipe && !chatLoaded) loadChat();
+  }
+  if(page === 'supervisao'){
+    equipeMsg = null;
+    if(equipe && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
   }
 }
 async function refreshCurrentUser(){
@@ -1150,6 +1290,8 @@ function renderApp(){
   else if(currentPage === 'disparos') pageHtml = renderDisparosPage();
   else if(currentPage === 'configuracoes') pageHtml = renderConfiguracoesPage();
   else if(currentPage === 'suporte') pageHtml = renderSuportePage();
+  else if(currentPage === 'chat-interno') pageHtml = renderChatInternoPage();
+  else if(currentPage === 'supervisao') pageHtml = renderSupervisaoPage();
   else if(currentPage === 'tarefas') pageHtml = renderTarefasPage();
 
   const notificacoes = computarNotificacoes();
@@ -1202,6 +1344,8 @@ function renderSidebar(){
     ['relatorios', 'Relatórios', ICON_RELATORIOS],
     ['disparos', 'Disparos', ICON_DISPAROS],
     ['tarefas', 'Tarefas', ICON_TASKS],
+    ['chat-interno', 'Chat Interno', ICON_CHAT_INTERNO],
+    ['supervisao', 'Supervisão', ICON_SUPERVISAO],
   ];
   return `
     <aside class="sidebar">
@@ -1941,11 +2085,49 @@ function bindAppEvents(){
   if(enviarDisparoBtn) enviarDisparoBtn.addEventListener('click', enviarDisparo);
 
   /* -- Relatórios -- */
-  /* -- Relatórios -- */
   const relatorioFunilSelect = document.getElementById('relatorio-funil-select');
   if(relatorioFunilSelect) relatorioFunilSelect.addEventListener('change', (e)=>{ relatorioFunilId = e.target.value; renderApp(); });
   const exportarCsvBtn = app.querySelector('[data-action="exportar-csv"]');
   if(exportarCsvBtn) exportarCsvBtn.addEventListener('click', exportarCsv);
+
+  /* -- Equipe / Chat Interno / Supervisão -- */
+  const equipeNomeInput = document.getElementById('equipe-nome-novo');
+  if(equipeNomeInput) equipeNomeInput.addEventListener('input', (e)=> equipeNomeNovo = e.target.value);
+  const criarEquipeBtn = app.querySelector('[data-action="criar-equipe"]');
+  if(criarEquipeBtn) criarEquipeBtn.addEventListener('click', criarEquipe);
+  const equipeCodigoInput = document.getElementById('equipe-codigo-entrar');
+  if(equipeCodigoInput) equipeCodigoInput.addEventListener('input', (e)=> equipeCodigoEntrar = e.target.value);
+  const entrarEquipeBtn = app.querySelector('[data-action="entrar-equipe"]');
+  if(entrarEquipeBtn) entrarEquipeBtn.addEventListener('click', entrarNaEquipe);
+  const sairEquipeBtn = app.querySelector('[data-action="sair-equipe"]');
+  if(sairEquipeBtn) sairEquipeBtn.addEventListener('click', ()=>{
+    showConfirm({
+      message: 'Sair dessa equipe? Você perde acesso ao chat interno e à supervisão dela — seu funil continua intocado.',
+      onConfirm: ()=>{ sairDaEquipe(); closeConfirm(); },
+    });
+  });
+  const regenerarCodigoBtn = app.querySelector('[data-action="regenerar-codigo-equipe"]');
+  if(regenerarCodigoBtn) regenerarCodigoBtn.addEventListener('click', regenerarCodigoEquipe);
+  app.querySelectorAll('[data-action="alterar-papel-membro"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> alterarPapelMembro(btn.dataset.userId, btn.dataset.papel));
+  });
+  app.querySelectorAll('[data-action="remover-membro"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      showConfirm({
+        message: 'Remover esse membro da equipe? O funil dele continua intocado, só perde acesso ao chat e à supervisão.',
+        onConfirm: ()=>{ removerMembro(btn.dataset.userId); closeConfirm(); },
+      });
+    });
+  });
+  const chatInternoInput = document.getElementById('chat-interno-input');
+  if(chatInternoInput){
+    chatInternoInput.addEventListener('input', (e)=> chatTexto = e.target.value);
+    chatInternoInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') enviarMensagemChat(); });
+  }
+  const enviarChatBtn = app.querySelector('[data-action="enviar-chat-interno"]');
+  if(enviarChatBtn) enviarChatBtn.addEventListener('click', enviarMensagemChat);
+  const chatMsgsEl = document.getElementById('chat-interno-mensagens');
+  if(chatMsgsEl) chatMsgsEl.scrollTop = chatMsgsEl.scrollHeight;
 
   /* -- Comissões -- */
   app.querySelectorAll('[data-action="comissoes-mes"]').forEach(btn=>{
@@ -2546,6 +2728,151 @@ function renderRelatoriosPage(){
   `;
 }
 
+/* ---------- tela compartilhada: criar/entrar numa equipe ---------- */
+function renderEquipeSetup(tituloPagina, subtitulo){
+  return `
+    <div class="page-head">
+      <div>
+        <h1>${tituloPagina}</h1>
+        <p>${subtitulo}</p>
+      </div>
+    </div>
+    <div class="settings-page-grid">
+      <div class="settings-page-section">
+        <h3>Criar uma equipe</h3>
+        <p class="settings-page-note">Você vira supervisor(a) automaticamente e ganha um código pra convidar outras pessoas. O funil de cada um continua separado — só o chat e a supervisão são compartilhados.</p>
+        <div class="field">
+          <input type="text" id="equipe-nome-novo" placeholder="Nome da equipe" value="${esc(equipeNomeNovo)}" />
+        </div>
+        <button class="btn-primary" data-action="criar-equipe">Criar equipe</button>
+      </div>
+      <div class="settings-page-section">
+        <h3>Entrar numa equipe existente</h3>
+        <p class="settings-page-note">Peça o código de convite pra quem já criou a equipe.</p>
+        <div class="field">
+          <input type="text" id="equipe-codigo-entrar" placeholder="Código de convite" value="${esc(equipeCodigoEntrar)}" />
+        </div>
+        <button class="btn-outline" data-action="entrar-equipe">Entrar</button>
+      </div>
+    </div>
+    ${equipeMsg ? `<p class="settings-page-msg ${equipeMsg.tipo}" style="margin-top:14px;">${esc(equipeMsg.texto)}</p>` : ''}
+  `;
+}
+
+/* ---------- página: Chat Interno ---------- */
+function renderChatInternoPage(){
+  if(!equipeLoaded){
+    return `<div class="page-head"><div><h1>Chat Interno</h1><p>Carregando…</p></div></div>`;
+  }
+  if(!equipe){
+    return renderEquipeSetup('Chat Interno', 'Você ainda não faz parte de uma equipe');
+  }
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Chat Interno</h1>
+        <p>${esc(equipe.nome)} · ${equipe.membros.length} membro${equipe.membros.length===1?'':'s'}</p>
+      </div>
+    </div>
+    <div class="chat-interno-wrap">
+      <div class="chat-interno-membros">
+        <div class="settings-page-subtitle">Membros</div>
+        ${equipe.membros.map(m=>`
+          <div class="chat-membro-item">${esc(m.nome||m.email)} ${m.papel==='supervisor'?'⭐':''}${m.souEu?' (você)':''}</div>
+        `).join('')}
+      </div>
+      <div class="chat-interno-main">
+        ${!chatLoaded ? `<p class="settings-page-note">Carregando conversa…</p>` : `
+          <div class="chat-interno-mensagens" id="chat-interno-mensagens">
+            ${chatMensagens.length ? chatMensagens.map(m=>`
+              <div class="wa-msg ${m.remetenteId===(currentUser&&currentUser.id)?'wa-msg-out':'wa-msg-in'}">
+                <p><b>${m.remetenteId===(currentUser&&currentUser.id)?'Você':esc(m.remetenteNome)}:</b> ${esc(m.texto)}</p>
+                <span>${formatDateHora(m.timestamp)}</span>
+              </div>
+            `).join('') : '<p class="settings-page-note">Nenhuma mensagem ainda. Diga oi pra equipe!</p>'}
+          </div>
+          <div class="wa-conversa-input-row">
+            <input type="text" id="chat-interno-input" placeholder="Escreva uma mensagem..." value="${esc(chatTexto)}" />
+            <button class="btn-primary" data-action="enviar-chat-interno" ${chatEnviando?'disabled':''}>Enviar</button>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- página: Supervisão ---------- */
+function renderSupervisaoPage(){
+  if(!equipeLoaded){
+    return `<div class="page-head"><div><h1>Supervisão</h1><p>Carregando…</p></div></div>`;
+  }
+  if(!equipe){
+    return renderEquipeSetup('Supervisão', 'Você ainda não faz parte de uma equipe');
+  }
+  if(!equipe.souSupervisor){
+    return `
+      <div class="page-head"><div><h1>Supervisão</h1><p>${esc(equipe.nome)}</p></div></div>
+      <div class="tasks-empty">Só supervisores da equipe podem ver essa página. Se precisar de acesso, fale com quem administra a equipe "${esc(equipe.nome)}".</div>
+      <button class="btn-outline" data-action="sair-equipe" style="margin-top:14px;">Sair da equipe</button>
+    `;
+  }
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Supervisão</h1>
+        <p>${esc(equipe.nome)}</p>
+      </div>
+    </div>
+
+    <div class="settings-page-section" style="margin-bottom:20px;">
+      <h3>Convidar pessoas</h3>
+      <p class="settings-page-note">Compartilhe esse código — quem entrar com ele vira membro da equipe, mantendo o funil próprio dele:</p>
+      <div class="settings-page-row"><span>Código de convite</span><span style="font-family:'IBM Plex Mono',monospace; font-weight:700; letter-spacing:.05em;">${esc(equipe.codigoConvite||'')}</span></div>
+      <button class="btn-outline" data-action="regenerar-codigo-equipe">Gerar novo código</button>
+    </div>
+
+    <div class="settings-page-section" style="margin-bottom:20px;">
+      <h3>Membros</h3>
+      <div class="disparo-lista-leads" style="max-height:none;">
+        ${equipe.membros.map(m=>`
+          <div class="disparo-lead-item" style="cursor:default; justify-content:space-between;">
+            <span>${esc(m.nome||m.email)} — ${m.papel==='supervisor'?'⭐ Supervisor':'Membro'}${m.souEu?' (você)':''}</span>
+            ${!m.souEu ? `
+              <div class="settings-btn-row">
+                <button class="btn-outline" data-action="alterar-papel-membro" data-user-id="${m.id}" data-papel="${m.papel==='supervisor'?'membro':'supervisor'}">${m.papel==='supervisor'?'Rebaixar':'Promover'}</button>
+                <button class="btn-outline" data-action="remover-membro" data-user-id="${m.id}">Remover</button>
+              </div>
+            ` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn-outline" data-action="sair-equipe" style="margin-top:10px;">Sair da equipe</button>
+    </div>
+
+    <div class="settings-page-section">
+      <h3>Desempenho por membro</h3>
+      ${!supervisaoLoaded ? `<p class="settings-page-note">Carregando…</p>` : `
+        <div class="leads-table-wrap" style="border:none;">
+          <table class="leads-table">
+            <thead><tr><th>Nome</th><th>Leads</th><th>Em negociação</th><th>Ganho</th><th>Perdido</th></tr></thead>
+            <tbody>
+              ${supervisaoMembros.map(m=>`
+                <tr>
+                  <td>${esc(m.nome)} ${m.papel==='supervisor'?'⭐':''}</td>
+                  <td>${m.totalLeads}</td>
+                  <td>${fmtBRL(m.abertoValor)}</td>
+                  <td>${fmtBRL(m.ganhoValor)}</td>
+                  <td>${fmtBRL(m.perdidoValor)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+}
+
 /* ---------- página: Suporte ---------- */
 function renderSuportePage(){
   return `
@@ -2715,4 +3042,5 @@ if(getToken()){
   loadContratos();
   loadWhatsappStatus();
   loadConversas();
+  loadEquipe();
 }

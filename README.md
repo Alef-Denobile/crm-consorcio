@@ -156,6 +156,12 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   seletor para ver "Todos os funis" ou um específico
 - **Disparos** — envia a mesma mensagem de WhatsApp para vários leads
   de uma vez, com filtro por coluna e qualificação
+- **Chat Interno** — um canal de conversa único por equipe, entre quem
+  faz parte dela
+- **Supervisão** — visível só pra quem é supervisor(a) da equipe:
+  código de convite, gerenciar membros (promover/rebaixar/remover) e
+  um resumo do desempenho de cada um (leads, em negociação, ganho,
+  perdido) — nunca os clientes/negociações em si, só os totais
 - **Suporte** — perguntas frequentes e um link de contato por e-mail.
   Fica no rodapé da barra lateral, junto com Configurações
 - **Configurações** — uma página só, em três seções na ordem Perfil →
@@ -216,6 +222,23 @@ texto livre, pra quando o cliente inicia ou responde).
 ⚠️ **Custo:** a Meta cobra por conversa iniciada (varia por categoria e
 país), geralmente com uma cota gratuita mensal. Consulte a página de
 preços da Meta antes de usar em produção.
+
+## Equipes (Chat Interno e Supervisão)
+
+Diferente de tudo mais no projeto, isso não é uma funcionalidade "por
+usuário" — é uma camada nova, sem mexer em nenhum dado que já existia:
+
+- Cada pessoa continua com seu **funil totalmente separado** (colunas,
+  clientes, tarefas — nada disso é compartilhado)
+- Uma equipe é só um agrupamento: quem cria vira **supervisor(a)**
+  automaticamente e ganha um código de convite
+- Quem entra com o código vira **membro** — o funil dele continua
+  100% dele, só ganha acesso ao chat interno da equipe
+- Só supervisores veem a página **Supervisão**, com um resumo agregado
+  (quantos leads, quanto está em negociação/ganho/perdido) de cada
+  membro — nunca os clientes individuais de ninguém
+- Uma pessoa só pode estar em **uma equipe por vez**. Sair da equipe
+  (ou ser removido) não apaga nada do funil dela
 
 ## Recursos de IA
 
@@ -283,6 +306,18 @@ de erro ao clicar.
 - `POST /api/ai/mensagem` — `{ cardId }` → sugere mensagem de WhatsApp para o cliente
 - `POST /api/ai/insights` — gera de 2 a 4 alertas curtos sobre o funil atual
 - `POST /api/ai/sugerir-tarefa` — `{ cardId }` → sugere título e prazo de uma tarefa de acompanhamento
+
+**Equipes (exigem token):**
+- `GET  /api/equipe` — dados da equipe do usuário logado (ou `null`)
+- `POST /api/equipe` — `{ nome }` → cria equipe (quem cria vira supervisor)
+- `POST /api/equipe/entrar` — `{ codigo }` → entra numa equipe existente
+- `POST /api/equipe/sair` — sai da equipe atual
+- `POST /api/equipe/regenerar-codigo` — gera novo código de convite (só supervisor)
+- `PUT  /api/equipe/membro/:userId/papel` — `{ papel }` → promove/rebaixa (só supervisor)
+- `DELETE /api/equipe/membro/:userId` — remove um membro (só supervisor)
+- `GET  /api/equipe/chat` — mensagens do chat interno
+- `POST /api/equipe/chat` — `{ texto }` → envia mensagem no chat interno
+- `GET  /api/equipe/supervisao` — resumo de desempenho de cada membro (só supervisor)
 
 **WhatsApp Business:**
 - `GET  /api/whatsapp/webhook` — verificação do webhook (chamada pela Meta, não chame direto)

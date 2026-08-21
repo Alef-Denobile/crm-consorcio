@@ -27,6 +27,8 @@ const userSchema = new mongoose.Schema(
     googleId: { type: String, default: null, unique: true, sparse: true },
     googleCalendar: { type: googleCalendarSchema, default: () => ({}) },
     whatsappBusiness: { type: whatsappBusinessSchema, default: () => ({}) },
+    equipeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipe', default: null },
+    papelEquipe: { type: String, enum: ['supervisor', 'membro'], default: 'membro' },
   },
   {
     timestamps: true,
@@ -41,6 +43,7 @@ const userSchema = new mongoose.Schema(
         delete ret.googleCalendar; // tokens nunca saem do servidor
         ret.whatsappConnected = !!(ret.whatsappBusiness && ret.whatsappBusiness.accessToken && ret.whatsappBusiness.phoneNumberId);
         delete ret.whatsappBusiness; // token de acesso nunca sai do servidor
+        ret.equipeId = ret.equipeId ? ret.equipeId.toString() : null;
       },
     },
   }
