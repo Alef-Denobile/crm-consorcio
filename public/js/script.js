@@ -160,6 +160,9 @@ let calendarSyncedOnce = false;
 let whatsappConnected = false;
 let whatsappSalvando = false;
 let whatsappConfigMsg = null;
+let instagramConnected = false;
+let instagramSalvando = false;
+let instagramConfigMsg = null;
 let conversas = [];
 let conversasLoaded = false;
 let notifOpen = false;
@@ -387,6 +390,50 @@ async function desconectarWhatsapp(){
   }
   renderApp();
 }
+
+/* ---------- Instagram (captação de leads) ---------- */
+async function loadInstagramStatus(){
+  try{
+    const data = await apiRequest('GET', '/instagram/status');
+    instagramConnected = !!data.connected;
+  }catch(e){
+    instagramConnected = false;
+  }
+  renderApp();
+}
+async function salvarInstagramConfig(){
+  const pageIdEl = document.getElementById('ig-page-id');
+  const tokenEl = document.getElementById('ig-page-token');
+  const pageId = pageIdEl ? pageIdEl.value.trim() : '';
+  const pageAccessToken = tokenEl ? tokenEl.value.trim() : '';
+  if(!pageId || !pageAccessToken){
+    instagramConfigMsg = { tipo:'erro', texto:'Preencha o Page ID e o Access Token da página.' };
+    renderApp();
+    return;
+  }
+  instagramSalvando = true;
+  instagramConfigMsg = null;
+  renderApp();
+  try{
+    await apiRequest('POST', '/instagram/configurar', { pageId, pageAccessToken });
+    instagramConnected = true;
+    instagramConfigMsg = { tipo:'ok', texto:'Conectado com sucesso.' };
+  }catch(e){
+    instagramConfigMsg = { tipo:'erro', texto: e.message || 'Não foi possível salvar a configuração.' };
+  }
+  instagramSalvando = false;
+  renderApp();
+}
+async function desconectarInstagram(){
+  try{
+    await apiRequest('POST', '/instagram/desconectar');
+    instagramConnected = false;
+  }catch(e){
+    errorMsg = 'Não foi possível desconectar o Instagram.';
+  }
+  renderApp();
+}
+
 async function abrirConversaWhatsapp(){
   const box = document.getElementById('f-wa-conversa');
   if(!box || !modalForm || modalForm.__isNew) return;
@@ -2025,6 +2072,30 @@ function renderConfiguracoesPage(){
         </div>
 
         <div class="settings-page-section">
+          <h3>Instagram (captação de leads)</h3>
+          <div class="settings-page-row">
+            <span>Status</span>
+            <span>${instagramConnected ? '✓ Conectado' : 'Não conectado'}</span>
+          </div>
+          ${instagramConnected ? `
+            <p class="settings-page-note">Toda vez que alguém preencher um formulário de anúncio do Instagram/Facebook, um lead novo é criado automaticamente na primeira coluna "em aberto".</p>
+            <button class="btn-outline" data-action="desconectar-instagram">Desconectar</button>
+          ` : `
+            <div class="field">
+              <label>Page ID</label>
+              <input type="text" id="ig-page-id" placeholder="ID da sua Página do Facebook" />
+            </div>
+            <div class="field">
+              <label>Access Token da página</label>
+              <input type="password" id="ig-page-token" placeholder="Token com permissão leads_retrieval" />
+            </div>
+            ${instagramConfigMsg ? `<p class="settings-page-msg ${instagramConfigMsg.tipo}">${esc(instagramConfigMsg.texto)}</p>` : ''}
+            <button class="btn-primary" data-action="salvar-instagram-config" ${instagramSalvando?'disabled':''}>${instagramSalvando?'Salvando…':'Conectar'}</button>
+          `}
+          <p class="settings-page-note">Requer o produto Marketing API no mesmo App do Meta usado no WhatsApp, com sua Página (e Instagram profissional vinculado) conectados. Passo a passo completo no README.</p>
+        </div>
+
+        <div class="settings-page-section">
           <h3>Importar leads</h3>
           <p class="settings-page-note">Envie um arquivo CSV com as colunas <b>Nome, Telefone, Valor</b> (nessa ordem, cabeçalho na primeira linha).</p>
           <div class="field">
@@ -2300,6 +2371,11 @@ function bindAppEvents(){
   if(salvarWaBtn) salvarWaBtn.addEventListener('click', salvarWhatsappConfig);
   const desconectarWaBtn = app.querySelector('[data-action="desconectar-whatsapp"]');
   if(desconectarWaBtn) desconectarWaBtn.addEventListener('click', desconectarWhatsapp);
+
+  const salvarIgBtn = app.querySelector('[data-action="salvar-instagram-config"]');
+  if(salvarIgBtn) salvarIgBtn.addEventListener('click', salvarInstagramConfig);
+  const desconectarIgBtn = app.querySelector('[data-action="desconectar-instagram"]');
+  if(desconectarIgBtn) desconectarIgBtn.addEventListener('click', desconectarInstagram);
 
   /* -- Leads -- */
   const openNewLeadBtn = app.querySelector('[data-action="open-new-lead"]');
@@ -3355,6 +3431,7 @@ if(getToken()){
   loadCalendarStatus();
   loadContratos();
   loadWhatsappStatus();
+  loadInstagramStatus();
   loadConversas();
   loadEquipe();
   loadAutomacoes();

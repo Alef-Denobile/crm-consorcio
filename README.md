@@ -228,6 +228,40 @@ texto livre, pra quando o cliente inicia ou responde).
 país), geralmente com uma cota gratuita mensal. Consulte a página de
 preços da Meta antes de usar em produção.
 
+## Configurar a captação de leads via Instagram/Facebook (opcional)
+
+Usa o mesmo App do Meta que você já criou pro WhatsApp Business — não
+precisa cadastrar outro. Toda vez que alguém preenche um formulário de
+anúncio (mesmo rodando no Instagram, ele é sempre vinculado a uma
+Página do Facebook), um lead novo é criado automaticamente na primeira
+coluna "em aberto".
+
+**No painel do Meta (mesmo App do WhatsApp):**
+
+1. Adicione o produto **Marketing API** ao App (Adicionar produto)
+2. Configurações da Empresa → Contas → Páginas → conecte sua Página do
+   Facebook (com o Instagram profissional já vinculado a ela) ao App
+3. Configurações da Empresa → Usuários do sistema → gere um **token de
+   acesso de página** com as permissões `leads_retrieval`,
+   `pages_manage_ads` e `pages_show_list`
+4. No produto Webhooks do App (o mesmo onde você cadastrou o do
+   WhatsApp): URL `https://seudominio.com.br/api/instagram/webhook`,
+   token de verificação = o mesmo valor que você colocar em
+   `INSTAGRAM_VERIFY_TOKEN` no `.env`/Render — e inscreva-se no campo
+   `leadgen`
+
+**No painel do CRM:**
+
+1. Configurações → Integrações → Instagram (captação de leads)
+2. Cole o Page ID e o Access Token da página → Conectar
+
+⚠️ Os nomes dos campos do formulário variam de anúncio pra anúncio.
+O sistema tenta reconhecer automaticamente nome, telefone e e-mail a
+partir dos nomes mais comuns (`full_name`, `phone_number`, `email`,
+entre outros) — se o seu formulário usar nomes de campo muito
+diferentes disso, talvez alguns dados não sejam capturados
+corretamente na primeira tentativa.
+
 ## Equipes (Chat Interno e Supervisão)
 
 Diferente de tudo mais no projeto, isso não é uma funcionalidade "por
@@ -342,4 +376,11 @@ de erro ao clicar.
 - `POST /api/automacoes` — `{ nome, colunaGatilhoId, acaoTipo, acaoParams }` → cria
 - `PUT  /api/automacoes/:id` — edita (nome, ativa/inativa, parâmetros da ação)
 - `DELETE /api/automacoes/:id` — exclui
+
+**Instagram/Facebook Lead Ads:**
+- `GET  /api/instagram/webhook` — verificação do webhook (chamada pela Meta, não chame direto)
+- `POST /api/instagram/webhook` — recebe eventos de novo lead (chamada pela Meta, pública)
+- `GET  /api/instagram/status` — diz se o usuário já conectou (exige token)
+- `POST /api/instagram/configurar` — `{ pageId, pageAccessToken }` (exige token)
+- `POST /api/instagram/desconectar` — (exige token)
 # crm-consorcio
