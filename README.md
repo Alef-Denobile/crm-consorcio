@@ -162,6 +162,12 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   cliente entra numa coluna" (na hora) ou "quando fica X dias parado
   numa coluna" (checado a cada hora pelo servidor). A ação pode ser
   criar uma tarefa ou mover pra outra coluna
+- **Fluxos** — uma versão mais forte das automações: em vez de uma
+  ação só, uma **sequência de etapas no tempo**, cada uma "X dias
+  depois do início" (enviar mensagem de WhatsApp, criar tarefa, ou
+  mover de coluna). Começa quando o cliente entra na coluna
+  escolhida, e o servidor confere a cada hora se já chegou a hora da
+  próxima etapa de cada cliente
 - **Chat Interno** — um canal de conversa único por equipe, entre quem
   faz parte dela
 - **Supervisão** — visível só pra quem é supervisor(a) da equipe:
@@ -315,6 +321,12 @@ conversa — pra nunca responder por cima de um atendimento humano em
 andamento. Pode ser desativado a qualquer momento, e o aviso de que
 está ativo fica visível na tela enquanto ligado.
 
+A etapa "Enviar mensagem" dos **Fluxos** usa a mesma trava de
+segurança (fica 30 min em silêncio se um humano respondeu
+manualmente) — mas é diferente do agente: aqui a mensagem é o texto
+exato que você escreveu, não algo gerado pela IA na hora. Ao criar ou
+ativar um fluxo com essa etapa, o painel avisa antes de confirmar.
+
 **Autenticação (públicas):**
 - `POST /api/auth/register` — `{ nome, email, senha }` → cria conta + funil padrão
 - `POST /api/auth/login` — `{ email, senha }` → retorna token
@@ -392,6 +404,12 @@ está ativo fica visível na tela enquanto ligado.
 - `POST /api/automacoes` — `{ nome, colunaGatilhoId, acaoTipo, acaoParams }` → cria
 - `PUT  /api/automacoes/:id` — edita (nome, ativa/inativa, parâmetros da ação)
 - `DELETE /api/automacoes/:id` — exclui
+
+**Fluxos (exigem token):**
+- `GET  /api/fluxos` — lista os fluxos do usuário, com quantos clientes estão em andamento em cada um
+- `POST /api/fluxos` — `{ nome, colunaGatilhoId, etapas }` → cria
+- `PUT  /api/fluxos/:id` — edita (nome, coluna, etapas, ativo/inativo)
+- `DELETE /api/fluxos/:id` — exclui (e apaga as execuções em andamento)
 
 **Instagram/Facebook Lead Ads:**
 - `GET  /api/instagram/webhook` — verificação do webhook (chamada pela Meta, não chame direto)

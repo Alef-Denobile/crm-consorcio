@@ -61,6 +61,7 @@ const ICON_SUPORTE = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none
 const ICON_CHAT_INTERNO = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`;
 const ICON_SUPERVISAO = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>`;
 const ICON_AUTOMACOES = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+const ICON_FLUXOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="12" r="2"/><path d="M5 8v8"/><path d="M7 6h6a4 4 0 0 1 4 4"/><path d="M7 18h6a4 4 0 0 0 4-4"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -198,6 +199,9 @@ let supervisaoLoaded = false;
 let automacoes = [];
 let automacoesLoaded = false;
 let automacaoModalForm = null;
+let fluxos = [];
+let fluxosLoaded = false;
+let fluxoModalForm = null;
 let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
@@ -613,6 +617,65 @@ async function excluirAutomacao(id){
   }catch(e){
     automacoes.splice(idx,0,removida);
     errorMsg = 'Não foi possível excluir a automação.';
+    renderApp();
+  }
+}
+
+/* ---------- Fluxos ---------- */
+async function loadFluxos(){
+  try{
+    const data = await apiRequest('GET', '/fluxos');
+    fluxos = data.fluxos || [];
+  }catch(e){
+    fluxos = [];
+  }
+  fluxosLoaded = true;
+  renderApp();
+}
+async function salvarFluxo(){
+  const f = fluxoModalForm;
+  if(!f.nome.trim() || !f.colunaGatilhoId || !f.etapas.length) return;
+  const dados = { nome: f.nome, colunaGatilhoId: f.colunaGatilhoId, etapas: f.etapas };
+  try{
+    if(f.__isNew){
+      const novo = await apiRequest('POST', '/fluxos', dados);
+      novo.emAndamento = 0;
+      fluxos.unshift(novo);
+    } else {
+      const atualizado = await apiRequest('PUT', `/fluxos/${f.id}`, dados);
+      const idx = fluxos.findIndex(x=>x.id===f.id);
+      if(idx>-1) fluxos[idx] = { ...fluxos[idx], ...atualizado };
+    }
+    closeFluxoModal();
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível salvar o fluxo.';
+  }
+  renderApp();
+}
+async function toggleFluxoAtivo(id){
+  const f = fluxos.find(x=>x.id===id);
+  if(!f) return;
+  const anterior = f.ativo;
+  f.ativo = !f.ativo;
+  renderApp();
+  try{
+    await apiRequest('PUT', `/fluxos/${id}`, { ativo: f.ativo });
+  }catch(e){
+    f.ativo = anterior;
+    errorMsg = 'Não foi possível atualizar o fluxo.';
+    renderApp();
+  }
+}
+async function excluirFluxo(id){
+  const idx = fluxos.findIndex(f=>f.id===id);
+  if(idx===-1) return;
+  const [removido] = fluxos.splice(idx,1);
+  renderApp();
+  try{
+    await apiRequest('DELETE', `/fluxos/${id}`);
+  }catch(e){
+    fluxos.splice(idx,0,removido);
+    errorMsg = 'Não foi possível excluir o fluxo.';
     renderApp();
   }
 }
@@ -1445,6 +1508,7 @@ function renderApp(){
   else if(currentPage === 'relatorios') pageHtml = renderRelatoriosPage();
   else if(currentPage === 'disparos') pageHtml = renderDisparosPage();
   else if(currentPage === 'automacoes') pageHtml = renderAutomacoesPage();
+  else if(currentPage === 'fluxos') pageHtml = renderFluxosPage();
   else if(currentPage === 'configuracoes') pageHtml = renderConfiguracoesPage();
   else if(currentPage === 'suporte') pageHtml = renderSuportePage();
   else if(currentPage === 'chat-interno') pageHtml = renderChatInternoPage();
@@ -1501,6 +1565,7 @@ function renderSidebar(){
     ['relatorios', 'Relatórios', ICON_RELATORIOS],
     ['disparos', 'Disparos', ICON_DISPAROS],
     ['automacoes', 'Automações', ICON_AUTOMACOES],
+    ['fluxos', 'Fluxos', ICON_FLUXOS],
     ['tarefas', 'Tarefas', ICON_TASKS],
     ['chat-interno', 'Chat Interno', ICON_CHAT_INTERNO],
     ['supervisao', 'Supervisão', ICON_SUPERVISAO],
@@ -2296,6 +2361,37 @@ function bindAppEvents(){
       showConfirm({
         message: 'Excluir esta automação? Ela para de rodar imediatamente.',
         onConfirm: ()=>{ excluirAutomacao(id); closeConfirm(); },
+      });
+    });
+  });
+
+  /* -- Fluxos -- */
+  const openNewFluxoBtn = app.querySelector('[data-action="open-new-fluxo"]');
+  if(openNewFluxoBtn) openNewFluxoBtn.addEventListener('click', openNewFluxo);
+  app.querySelectorAll('[data-action="open-edit-fluxo"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openEditFluxo(btn.dataset.fluxoId));
+  });
+  app.querySelectorAll('[data-action="toggle-fluxo"]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.dataset.fluxoId;
+      const f = fluxos.find(x=>x.id===id);
+      const temMensagem = f && (f.etapas||[]).some(e=>e.tipo==='mensagem');
+      if(f && !f.ativo && temMensagem){
+        showConfirm({
+          message: `Ativar o fluxo "${f.nome}"? Ele tem etapa(s) de envio de WhatsApp automático, sem revisão sua antes de mandar.`,
+          onConfirm: ()=>{ toggleFluxoAtivo(id); closeConfirm(); },
+        });
+      } else {
+        toggleFluxoAtivo(id);
+      }
+    });
+  });
+  app.querySelectorAll('[data-action="delete-fluxo"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.fluxoId;
+      showConfirm({
+        message: 'Excluir este fluxo? As execuções em andamento pra clientes atuais são interrompidas.',
+        onConfirm: ()=>{ excluirFluxo(id); closeConfirm(); },
       });
     });
   });
@@ -3175,6 +3271,50 @@ function renderAutomacoesPage(){
   `;
 }
 
+/* ---------- página: Fluxos ---------- */
+function renderFluxosPage(){
+  if(!fluxosLoaded){
+    return `<div class="page-head"><div><h1>Fluxos</h1><p>Carregando…</p></div></div>`;
+  }
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Fluxos</h1>
+        <p>Sequências de etapas ao longo do tempo, a partir de quando o cliente entra numa coluna</p>
+      </div>
+      <button class="btn-primary" data-action="open-new-fluxo">+ Novo fluxo</button>
+    </div>
+    ${fluxos.length ? `
+      <div class="automacoes-list">
+        ${fluxos.map(f=>{
+          const coluna = board.columns.find(c=>c.id===f.colunaGatilhoId);
+          const temMensagem = (f.etapas||[]).some(e=>e.tipo==='mensagem');
+          return `
+            <div class="automacao-card ${f.ativo?'':'automacao-inativa'}">
+              <div class="contrato-card-head">
+                <div>
+                  <h3 class="contrato-card-title">${esc(f.nome)}</h3>
+                  <p class="contrato-card-note">
+                    Começa quando entra em <b>${esc(coluna?coluna.nome:'coluna removida')}</b> ·
+                    ${(f.etapas||[]).length} etapa${(f.etapas||[]).length===1?'':'s'} ·
+                    ${f.emAndamento||0} cliente${(f.emAndamento||0)===1?'':'s'} em andamento
+                    ${temMensagem ? ' · <span style="color:var(--danger)">envia WhatsApp</span>' : ''}
+                  </p>
+                </div>
+                <div class="contrato-card-actions">
+                  <span class="switch ${f.ativo?'on':''}" data-action="toggle-fluxo" data-fluxo-id="${f.id}" title="${f.ativo?'Ativo':'Inativo'}"><span class="switch-knob"></span></span>
+                  <button class="icon-btn" data-action="open-edit-fluxo" data-fluxo-id="${f.id}" title="Editar">${ICON_EDIT}</button>
+                  <button class="icon-btn" data-action="delete-fluxo" data-fluxo-id="${f.id}" title="Excluir">${ICON_TRASH}</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : `<div class="tasks-empty">Nenhum fluxo criado ainda.</div>`}
+  `;
+}
+
 /* ---------- página: Suporte ---------- */
 function renderSuportePage(){
   return `
@@ -3455,6 +3595,188 @@ function renderAutomacaoModal(){
   }
 }
 
+/* ---------- modal de fluxo ---------- */
+function openNewFluxo(){
+  fluxoModalForm = {
+    __isNew:true, id:null, nome:'',
+    colunaGatilhoId: (board.columns[0]||{}).id || '',
+    etapas: [{ diasAposInicio:0, tipo:'mensagem', params:{ texto:'' } }],
+  };
+  renderFluxoModal();
+}
+function openEditFluxo(id){
+  const f = fluxos.find(x=>x.id===id);
+  if(!f) return;
+  fluxoModalForm = {
+    __isNew:false, id:f.id, nome:f.nome, colunaGatilhoId:f.colunaGatilhoId,
+    etapas: (f.etapas||[]).map(e=>({ diasAposInicio:e.diasAposInicio, tipo:e.tipo, params:{...(e.params||{})} })),
+  };
+  renderFluxoModal();
+}
+function closeFluxoModal(){ fluxoModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+
+function renderFluxoEtapaParams(etapa, idx){
+  if(etapa.tipo === 'mensagem'){
+    return `<div class="field"><label>Mensagem</label><textarea class="fx-etapa-texto" data-idx="${idx}" rows="2" placeholder="Texto que será enviado pelo WhatsApp...">${esc((etapa.params&&etapa.params.texto)||'')}</textarea></div>`;
+  }
+  if(etapa.tipo === 'tarefa'){
+    return `
+      <div class="field-row">
+        <div class="field"><label>Título da tarefa</label><input type="text" class="fx-etapa-titulo" data-idx="${idx}" value="${esc((etapa.params&&etapa.params.titulo)||'')}" placeholder="Ex: Ligar pra confirmar" /></div>
+        <div class="field"><label>Vencimento (dias)</label><input type="number" class="fx-etapa-dias-venc" data-idx="${idx}" value="${(etapa.params&&etapa.params.diasParaVencimento)||1}" min="1" /></div>
+      </div>
+    `;
+  }
+  return `
+    <div class="field">
+      <label>Coluna de destino</label>
+      <select class="fx-etapa-coluna-destino" data-idx="${idx}">
+        ${board.columns.map(c=>`<option value="${c.id}" ${(etapa.params&&etapa.params.colunaDestinoId)===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+function renderFluxoEtapa(etapa, idx){
+  return `
+    <div class="fluxo-etapa-card">
+      <div class="fluxo-etapa-head">
+        <span class="fluxo-etapa-numero">${idx+1}</span>
+        <div class="field fluxo-etapa-dias-field">
+          <label>Dias após o início</label>
+          <input type="number" class="fx-etapa-dias" data-idx="${idx}" value="${etapa.diasAposInicio}" min="0" />
+        </div>
+        <div class="field" style="flex:1;">
+          <label>O que fazer</label>
+          <select class="fx-etapa-tipo" data-idx="${idx}">
+            <option value="mensagem" ${etapa.tipo==='mensagem'?'selected':''}>Enviar mensagem de WhatsApp</option>
+            <option value="tarefa" ${etapa.tipo==='tarefa'?'selected':''}>Criar tarefa</option>
+            <option value="mover_coluna" ${etapa.tipo==='mover_coluna'?'selected':''}>Mover pra outra coluna</option>
+          </select>
+        </div>
+        <button type="button" class="icon-btn fx-etapa-remover" data-idx="${idx}" title="Remover etapa">${ICON_TRASH}</button>
+      </div>
+      ${renderFluxoEtapaParams(etapa, idx)}
+    </div>
+  `;
+}
+
+function bindFluxoModalEvents(){
+  document.getElementById('fluxo-modal-close').addEventListener('click', closeFluxoModal);
+  document.getElementById('fx-cancel').addEventListener('click', closeFluxoModal);
+  document.getElementById('fluxo-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='fluxo-modal-overlay') closeFluxoModal(); });
+
+  document.getElementById('fx-nome').addEventListener('input', (e)=> fluxoModalForm.nome = e.target.value);
+  document.getElementById('fx-coluna-gatilho').addEventListener('change', (e)=> fluxoModalForm.colunaGatilhoId = e.target.value);
+
+  document.getElementById('fx-add-etapa').addEventListener('click', ()=>{
+    fluxoModalForm.etapas.push({ diasAposInicio:1, tipo:'mensagem', params:{ texto:'' } });
+    renderFluxoModal();
+  });
+  document.querySelectorAll('.fx-etapa-remover').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      fluxoModalForm.etapas.splice(parseInt(btn.dataset.idx,10),1);
+      renderFluxoModal();
+    });
+  });
+  document.querySelectorAll('.fx-etapa-dias').forEach(el=>{
+    el.addEventListener('input', (e)=>{ fluxoModalForm.etapas[parseInt(el.dataset.idx,10)].diasAposInicio = parseInt(e.target.value,10)||0; });
+  });
+  document.querySelectorAll('.fx-etapa-tipo').forEach(el=>{
+    el.addEventListener('change', (e)=>{
+      const idx = parseInt(el.dataset.idx,10);
+      fluxoModalForm.etapas[idx].tipo = e.target.value;
+      fluxoModalForm.etapas[idx].params = {};
+      renderFluxoModal();
+    });
+  });
+  document.querySelectorAll('.fx-etapa-texto').forEach(el=>{
+    el.addEventListener('input', (e)=>{
+      const idx = parseInt(el.dataset.idx,10);
+      fluxoModalForm.etapas[idx].params.texto = e.target.value;
+    });
+  });
+  document.querySelectorAll('.fx-etapa-titulo').forEach(el=>{
+    el.addEventListener('input', (e)=>{
+      const idx = parseInt(el.dataset.idx,10);
+      fluxoModalForm.etapas[idx].params.titulo = e.target.value;
+    });
+  });
+  document.querySelectorAll('.fx-etapa-dias-venc').forEach(el=>{
+    el.addEventListener('input', (e)=>{
+      const idx = parseInt(el.dataset.idx,10);
+      fluxoModalForm.etapas[idx].params.diasParaVencimento = parseInt(e.target.value,10)||1;
+    });
+  });
+  document.querySelectorAll('.fx-etapa-coluna-destino').forEach(el=>{
+    el.addEventListener('change', (e)=>{
+      const idx = parseInt(el.dataset.idx,10);
+      fluxoModalForm.etapas[idx].params.colunaDestinoId = e.target.value;
+    });
+  });
+
+  document.getElementById('fx-save').addEventListener('click', ()=>{
+    const temMensagem = fluxoModalForm.etapas.some(e=>e.tipo==='mensagem');
+    if(fluxoModalForm.__isNew && temMensagem){
+      showConfirm({
+        message: 'Este fluxo já nasce ativo e tem etapa(s) de envio de WhatsApp automático, sem revisão sua antes de mandar. Quer criar mesmo assim?',
+        onConfirm: ()=>{ salvarFluxo(); closeConfirm(); },
+      });
+    } else {
+      salvarFluxo();
+    }
+  });
+  if(!fluxoModalForm.__isNew){
+    document.getElementById('fx-delete').addEventListener('click', ()=>{
+      showConfirm({
+        message: 'Excluir este fluxo? As execuções em andamento pra clientes atuais são interrompidas.',
+        onConfirm: ()=>{ excluirFluxo(fluxoModalForm.id); closeFluxoModal(); closeConfirm(); },
+      });
+    });
+  }
+}
+
+function renderFluxoModal(){
+  const root = document.getElementById('modal-root');
+  if(!fluxoModalForm){ root.innerHTML=''; return; }
+  const f = fluxoModalForm;
+
+  root.innerHTML = `
+    <div class="overlay" id="fluxo-modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-head">
+          <h3>${f.__isNew ? 'Novo fluxo' : 'Editar fluxo'}</h3>
+          <button id="fluxo-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Nome</label>
+            <input type="text" id="fx-nome" value="${esc(f.nome)}" placeholder="Ex: Sequência de boas-vindas" />
+          </div>
+          <div class="field">
+            <label>Começa quando o cliente entra nesta coluna</label>
+            <select id="fx-coluna-gatilho">
+              ${board.columns.map(c=>`<option value="${c.id}" ${f.colunaGatilhoId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+            </select>
+          </div>
+          <p class="settings-page-msg erro">⚠️ Etapas de "Enviar mensagem" mandam pelo WhatsApp automaticamente, sem você revisar antes. Se você responder o cliente manualmente, o fluxo fica em silêncio por 30 min naquela conversa.</p>
+          <div class="fluxo-etapas-lista">
+            ${f.etapas.map((etapa, idx)=>renderFluxoEtapa(etapa, idx)).join('')}
+          </div>
+          <button type="button" class="btn-outline" id="fx-add-etapa">+ Adicionar etapa</button>
+        </div>
+        <div class="modal-foot">
+          ${!f.__isNew ? `<button class="delete-link" id="fx-delete">🗑 Excluir</button>` : '<span></span>'}
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="fx-cancel">Cancelar</button>
+            <button class="btn-save" id="fx-save">Salvar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  bindFluxoModalEvents();
+}
+
 /* ---------- confirmação genérica ---------- */
 function showConfirm({ message, onConfirm }){
   confirmState = { message, onConfirm };
@@ -3489,4 +3811,5 @@ if(getToken()){
   loadConversas();
   loadEquipe();
   loadAutomacoes();
+  loadFluxos();
 }

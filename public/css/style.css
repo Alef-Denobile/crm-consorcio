@@ -477,3 +477,11 @@ main{ padding:24px; overflow-x:auto; }
 .automacoes-list{ display:flex; flex-direction:column; gap:14px; }
 .automacao-card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px; }
 .automacao-card.automacao-inativa{ opacity:.55; }
+
+/* ---------- Fluxos ---------- */
+.modal-lg{ max-width:620px; }
+.fluxo-etapas-lista{ display:flex; flex-direction:column; gap:12px; margin:14px 0; }
+.fluxo-etapa-card{ background:var(--col-bg); border:1px solid var(--line); border-radius:10px; padding:14px; }
+.fluxo-etapa-head{ display:flex; align-items:flex-end; gap:10px; margin-bottom:10px; }
+.fluxo-etapa-numero{ flex-shrink:0; width:24px; height:24px; border-radius:999px; background:var(--accent); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-bottom:9px; }
+.fluxo-etapa-dias-field{ flex:0 0 130px; }

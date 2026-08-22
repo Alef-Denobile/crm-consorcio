@@ -17,6 +17,7 @@ const funisRoutes = require('./routes/funis');
 const equipeRoutes = require('./routes/equipe');
 const automacoesRoutes = require('./routes/automacoes');
 const instagramRoutes = require('./routes/instagram');
+const fluxosRoutes = require('./routes/fluxos');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,11 +40,13 @@ app.use('/api/funis', funisRoutes);
 app.use('/api/equipe', equipeRoutes);
 app.use('/api/automacoes', automacoesRoutes);
 app.use('/api/instagram', instagramRoutes);
+app.use('/api/fluxos', fluxosRoutes);
 
 // front-end estático (a pasta public com index.html, css e js)
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const { verificarAutomacoesPorTempo } = require('./utils/automacaoScheduler');
+const { processarFluxos } = require('./utils/fluxoScheduler');
 const UMA_HORA = 60 * 60 * 1000;
 
 async function start() {
@@ -56,6 +59,8 @@ async function start() {
     // primeira checagem logo após subir (sem esperar 1h), depois de hora em hora
     setTimeout(verificarAutomacoesPorTempo, 30 * 1000);
     setInterval(verificarAutomacoesPorTempo, UMA_HORA);
+    setTimeout(processarFluxos, 45 * 1000);
+    setInterval(processarFluxos, UMA_HORA);
   } catch (err) {
     console.error('Falha ao conectar no MongoDB:', err.message);
     process.exit(1);

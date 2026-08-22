@@ -5,9 +5,27 @@ const Card = require('../models/Card');
 const Column = require('../models/Column');
 const Automacao = require('../models/Automacao');
 const Task = require('../models/Task');
+const Fluxo = require('../models/Fluxo');
+const FluxoExecucao = require('../models/FluxoExecucao');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
+
+// Roda depois que um card entra numa coluna que tem fluxo(s) ativo(s) — inicia a
+// execução do zero pra esse cliente (se já não tiver uma rodando pra esse mesmo fluxo).
+async function iniciarFluxosDaColuna(userId, colunaId, card) {
+  try {
+    const fluxos = await Fluxo.find({ userId, colunaGatilhoId: colunaId, ativo: true });
+    for (const fluxo of fluxos) {
+      if (!fluxo.etapas || !fluxo.etapas.length) continue;
+      const jaExiste = await FluxoExecucao.findOne({ fluxoId: fluxo._id, cardId: card._id, concluido: false });
+      if (jaExiste) continue;
+      await FluxoExecucao.create({ userId, fluxoId: fluxo._id, cardId: card._id, etapaAtual: 0, iniciadoEm: new Date() });
+    }
+  } catch (e) {
+    console.error('Erro ao iniciar fluxos:', e.message);
+  }
+}
 
 // Roda depois que um card entra numa coluna — nunca deixa erro aqui quebrar a resposta principal
 async function executarAutomacoesDaColuna(userId, colunaId, card) {
@@ -74,6 +92,7 @@ router.post('/', async (req, res) => {
     const card = await Card.create({ ...dados, userId: req.userId });
     res.status(201).json(card.toJSON());
     executarAutomacoesDaColuna(req.userId, dados.columnId, card);
+    iniciarFluxosDaColuna(req.userId, dados.columnId, card);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao criar cliente.' });
   }
@@ -123,6 +142,7 @@ router.put('/:id/move', async (req, res) => {
     if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
     res.json(card.toJSON());
     executarAutomacoesDaColuna(req.userId, columnId, card);
+    iniciarFluxosDaColuna(req.userId, columnId, card);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao mover cliente.' });
   }
