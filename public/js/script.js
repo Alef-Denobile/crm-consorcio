@@ -160,6 +160,7 @@ let calendarSyncedOnce = false;
 let whatsappConnected = false;
 let whatsappSalvando = false;
 let whatsappConfigMsg = null;
+let agenteIaAtivo = false;
 let instagramConnected = false;
 let instagramSalvando = false;
 let instagramConfigMsg = null;
@@ -351,8 +352,18 @@ async function loadWhatsappStatus(){
   try{
     const data = await apiRequest('GET', '/whatsapp/status');
     whatsappConnected = !!data.connected;
+    agenteIaAtivo = !!data.agenteIaAtivo;
   }catch(e){
     whatsappConnected = false;
+  }
+  renderApp();
+}
+async function definirAgenteIa(ativo){
+  try{
+    await apiRequest('POST', '/whatsapp/agente-ia', { ativo });
+    agenteIaAtivo = ativo;
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível atualizar o agente de IA.';
   }
   renderApp();
 }
@@ -562,7 +573,7 @@ async function loadAutomacoes(){
 async function salvarAutomacao(){
   const f = automacaoModalForm;
   if(!f.nome.trim() || !f.colunaGatilhoId) return;
-  const dados = { nome: f.nome, colunaGatilhoId: f.colunaGatilhoId, acaoTipo: f.acaoTipo, acaoParams: f.acaoParams };
+  const dados = { nome: f.nome, colunaGatilhoId: f.colunaGatilhoId, gatilhoTipo: f.gatilhoTipo, acaoTipo: f.acaoTipo, acaoParams: f.acaoParams };
   try{
     if(f.__isNew){
       const nova = await apiRequest('POST', '/automacoes', dados);
@@ -2051,6 +2062,11 @@ function renderConfiguracoesPage(){
           </div>
           ${whatsappConnected ? `
             <p class="settings-page-note">Conversas ficam registradas dentro do card de cada cliente. Pra reconfigurar, desconecte e conecte de novo com os dados atualizados.</p>
+            <div class="settings-page-row">
+              <span>Agente IA (responde clientes sozinho)</span>
+              <span class="switch ${agenteIaAtivo?'on':''}" data-action="toggle-agente-ia" title="${agenteIaAtivo?'Ativado':'Desativado'}"><span class="switch-knob"></span></span>
+            </div>
+            ${agenteIaAtivo ? `<p class="settings-page-msg erro">⚠️ O agente está respondendo mensagens automaticamente, sem revisão sua. Ele fica em silêncio por 30 min sempre que você responder um cliente manualmente. Desative quando quiser assumir de vez.</p>` : `<p class="settings-page-note">Quando ativado, a IA responde sozinha as mensagens novas do WhatsApp — sem você revisar antes de enviar.</p>`}
             <button class="btn-outline" data-action="desconectar-whatsapp">Desconectar</button>
           ` : `
             <div class="field">
@@ -2371,6 +2387,18 @@ function bindAppEvents(){
   if(salvarWaBtn) salvarWaBtn.addEventListener('click', salvarWhatsappConfig);
   const desconectarWaBtn = app.querySelector('[data-action="desconectar-whatsapp"]');
   if(desconectarWaBtn) desconectarWaBtn.addEventListener('click', desconectarWhatsapp);
+
+  const toggleAgenteIaEl = app.querySelector('[data-action="toggle-agente-ia"]');
+  if(toggleAgenteIaEl) toggleAgenteIaEl.addEventListener('click', ()=>{
+    if(!agenteIaAtivo){
+      showConfirm({
+        message: 'Ativar o agente de IA? Ele vai responder mensagens de WhatsApp automaticamente, sem você revisar antes de enviar. Sempre que você responder um cliente manualmente, o agente fica em silêncio por 30 minutos naquela conversa. Pode desativar a qualquer momento.',
+        onConfirm: ()=>{ definirAgenteIa(true); closeConfirm(); },
+      });
+    } else {
+      definirAgenteIa(false);
+    }
+  });
 
   const salvarIgBtn = app.querySelector('[data-action="salvar-instagram-config"]');
   if(salvarIgBtn) salvarIgBtn.addEventListener('click', salvarInstagramConfig);
@@ -3120,6 +3148,9 @@ function renderAutomacoesPage(){
       <div class="automacoes-list">
         ${automacoes.map(a=>{
           const coluna = board.columns.find(c=>c.id===a.colunaGatilhoId);
+          const gatilhoTexto = a.gatilhoTipo === 'tempo_parado'
+            ? `fica <b>${(a.acaoParams&&a.acaoParams.diasParado)||5}+ dias parado</b> em`
+            : `entra em`;
           const acaoTexto = a.acaoTipo === 'criar_tarefa'
             ? `cria a tarefa "${esc((a.acaoParams&&a.acaoParams.titulo)||'Follow-up automático')}"`
             : `move pra "${esc((board.columns.find(c=>c.id===(a.acaoParams&&a.acaoParams.colunaDestinoId))||{}).nome || '—')}"`;
@@ -3128,7 +3159,7 @@ function renderAutomacoesPage(){
               <div class="contrato-card-head">
                 <div>
                   <h3 class="contrato-card-title">${esc(a.nome)}</h3>
-                  <p class="contrato-card-note">Quando entra em <b>${esc(coluna?coluna.nome:'coluna removida')}</b> → ${acaoTexto}</p>
+                  <p class="contrato-card-note">Quando o cliente ${gatilhoTexto} <b>${esc(coluna?coluna.nome:'coluna removida')}</b> → ${acaoTexto}</p>
                 </div>
                 <div class="contrato-card-actions">
                   <span class="switch ${a.ativa?'on':''}" data-action="toggle-automacao" data-automacao-id="${a.id}" title="${a.ativa?'Ativa':'Inativa'}"><span class="switch-knob"></span></span>
@@ -3287,8 +3318,9 @@ function openNewAutomacao(){
   automacaoModalForm = {
     __isNew:true, id:null, nome:'',
     colunaGatilhoId: (board.columns[0]||{}).id || '',
+    gatilhoTipo:'entrada_coluna',
     acaoTipo:'criar_tarefa',
-    acaoParams:{ titulo:'', diasParaVencimento:3, colunaDestinoId:(board.columns[0]||{}).id || '' },
+    acaoParams:{ titulo:'', diasParaVencimento:3, diasParado:5, colunaDestinoId:(board.columns[0]||{}).id || '' },
   };
   renderAutomacaoModal();
 }
@@ -3296,8 +3328,9 @@ function openEditAutomacao(id){
   const a = automacoes.find(x=>x.id===id);
   if(!a) return;
   automacaoModalForm = {
-    __isNew:false, id:a.id, nome:a.nome, colunaGatilhoId:a.colunaGatilhoId, acaoTipo:a.acaoTipo,
-    acaoParams:{ titulo:'', diasParaVencimento:3, colunaDestinoId:'', ...(a.acaoParams||{}) },
+    __isNew:false, id:a.id, nome:a.nome, colunaGatilhoId:a.colunaGatilhoId,
+    gatilhoTipo: a.gatilhoTipo || 'entrada_coluna', acaoTipo:a.acaoTipo,
+    acaoParams:{ titulo:'', diasParaVencimento:3, diasParado:5, colunaDestinoId:'', ...(a.acaoParams||{}) },
   };
   renderAutomacaoModal();
 }
@@ -3352,10 +3385,24 @@ function renderAutomacaoModal(){
             <input type="text" id="am-nome" value="${esc(f.nome)}" placeholder="Ex: Agendar follow-up de propostas" />
           </div>
           <div class="field">
-            <label>Quando o cliente entrar nesta coluna</label>
+            <label>Coluna</label>
             <select id="am-coluna-gatilho">
               ${board.columns.map(c=>`<option value="${c.id}" ${f.colunaGatilhoId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
             </select>
+          </div>
+          <div class="field">
+            <label>Disparar quando</label>
+            <select id="am-gatilho-tipo">
+              <option value="entrada_coluna" ${f.gatilhoTipo==='entrada_coluna'?'selected':''}>O cliente entrar nessa coluna</option>
+              <option value="tempo_parado" ${f.gatilhoTipo==='tempo_parado'?'selected':''}>O cliente ficar parado nessa coluna por X dias</option>
+            </select>
+          </div>
+          <div id="am-dias-parado-wrap" style="${f.gatilhoTipo==='tempo_parado'?'':'display:none;'}">
+            <div class="field">
+              <label>Depois de quantos dias parado</label>
+              <input type="number" id="am-dias-parado" value="${f.acaoParams.diasParado||5}" min="1" />
+            </div>
+            <p class="settings-page-note">Checado a cada hora pelo servidor — não é em tempo real.</p>
           </div>
           <div class="field">
             <label>Ação</label>
@@ -3383,6 +3430,13 @@ function renderAutomacaoModal(){
 
   document.getElementById('am-nome').addEventListener('input', (e)=> automacaoModalForm.nome = e.target.value);
   document.getElementById('am-coluna-gatilho').addEventListener('change', (e)=> automacaoModalForm.colunaGatilhoId = e.target.value);
+  document.getElementById('am-gatilho-tipo').addEventListener('change', (e)=>{
+    automacaoModalForm.gatilhoTipo = e.target.value;
+    const wrap = document.getElementById('am-dias-parado-wrap');
+    if(wrap) wrap.style.display = e.target.value === 'tempo_parado' ? '' : 'none';
+  });
+  const diasParadoEl = document.getElementById('am-dias-parado');
+  if(diasParadoEl) diasParadoEl.addEventListener('input', (e)=> automacaoModalForm.acaoParams.diasParado = parseInt(e.target.value,10)||5);
   document.getElementById('am-acao-tipo').addEventListener('change', (e)=>{
     automacaoModalForm.acaoTipo = e.target.value;
     document.getElementById('am-acao-params').innerHTML = renderAutomacaoAcaoParams(automacaoModalForm);

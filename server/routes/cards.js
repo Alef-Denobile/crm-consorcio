@@ -12,7 +12,13 @@ router.use(auth); // todas as rotas de card exigem login
 // Roda depois que um card entra numa coluna — nunca deixa erro aqui quebrar a resposta principal
 async function executarAutomacoesDaColuna(userId, colunaId, card) {
   try {
-    const automacoes = await Automacao.find({ userId, colunaGatilhoId: colunaId, ativa: true });
+    const automacoes = await Automacao.find({
+      userId,
+      colunaGatilhoId: colunaId,
+      ativa: true,
+      // automações antigas (de antes desse campo existir) não têm gatilhoTipo salvo — tratamos como entrada_coluna
+      $or: [{ gatilhoTipo: 'entrada_coluna' }, { gatilhoTipo: { $exists: false } }],
+    });
     for (const auto of automacoes) {
       try {
         if (auto.acaoTipo === 'criar_tarefa') {

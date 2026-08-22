@@ -158,9 +158,10 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   de uma vez, com filtro por coluna e qualificação. Também aceita
   **modelos de mensagem aprovados** (necessário pra alcançar leads
   frios, fora da janela de 24h de texto livre)
-- **Automações** — cria regras do tipo "quando um cliente entra nesta
-  coluna → cria uma tarefa" ou "→ move pra outra coluna". Dispara
-  sozinho toda vez que um card muda (ou é criado) numa coluna
+- **Automações** — cria regras com dois gatilhos possíveis: "quando o
+  cliente entra numa coluna" (na hora) ou "quando fica X dias parado
+  numa coluna" (checado a cada hora pelo servidor). A ação pode ser
+  criar uma tarefa ou mover pra outra coluna
 - **Chat Interno** — um canal de conversa único por equipe, entre quem
   faz parte dela
 - **Supervisão** — visível só pra quem é supervisor(a) da equipe:
@@ -300,6 +301,20 @@ de erro ao clicar.
   gera sozinho, só quando você pede — pra não pesar a tela nem gastar
   chamadas de API à toa)
 
+### ⚠️ Agente IA autônomo (opcional, desligado por padrão)
+
+Diferente dos recursos acima (que só sugerem, você decide se envia),
+esse **responde o cliente sozinho, sem revisão humana**. Fica em
+Configurações → Integrações → WhatsApp Business API, só aparece
+depois de conectar o WhatsApp, e pede uma confirmação explícita antes
+de ligar.
+
+Regra de segurança embutida: sempre que você responder um cliente
+manualmente, o agente fica em silêncio por 30 minutos naquela
+conversa — pra nunca responder por cima de um atendimento humano em
+andamento. Pode ser desativado a qualquer momento, e o aviso de que
+está ativo fica visível na tela enquanto ligado.
+
 **Autenticação (públicas):**
 - `POST /api/auth/register` — `{ nome, email, senha }` → cria conta + funil padrão
 - `POST /api/auth/login` — `{ email, senha }` → retorna token
@@ -370,6 +385,7 @@ de erro ao clicar.
 - `POST /api/whatsapp/disparo` — `{ cardIds, texto }` ou `{ cardIds, usarTemplate:true, templateName, idioma, variaveis }` → envia (exige token)
 - `GET  /api/whatsapp/templates` — lista os modelos de mensagem aprovados (exige token e WABA ID configurado)
 - `POST /api/whatsapp/enviar-template` — `{ cardId, templateName, idioma, variaveis }` → envia um modelo (exige token)
+- `POST /api/whatsapp/agente-ia` — `{ ativo }` → liga/desliga o agente que responde clientes sozinho (exige token)
 
 **Automações (exigem token):**
 - `GET  /api/automacoes` — lista as automações do usuário

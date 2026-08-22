@@ -18,6 +18,8 @@ const cardSchema = new mongoose.Schema(
     telefoneNormalizado: { type: String, default: null, index: true }, // só dígitos, com DDI — usado pra casar mensagens do WhatsApp
     obs: { type: String, default: '' },
     mes: { type: String, default: '' }, // formato "YYYY-MM"
+    colunaDesde: { type: Date, default: Date.now }, // quando entrou na coluna atual — usado pelas automações por tempo
+    automacoesDisparadas: { type: [mongoose.Schema.Types.ObjectId], default: [] }, // evita repetir a mesma automação por tempo no mesmo card
   },
   {
     timestamps: true,
@@ -27,20 +29,30 @@ const cardSchema = new mongoose.Schema(
         ret.columnId = ret.columnId ? ret.columnId.toString() : null;
         delete ret._id;
         delete ret.__v;
+        delete ret.automacoesDisparadas; // detalhe interno, não precisa ir pro front-end
       },
     },
   }
 );
 
-// mantém telefoneNormalizado em dia tanto em .create()/.save() quanto em findOneAndUpdate()
+// mantém telefoneNormalizado em dia tanto em .create()/.save() quanto em findOneAndUpdate();
+// também reseta colunaDesde/automacoesDisparadas sempre que o card muda de coluna
 cardSchema.pre('save', function (next) {
   if (this.isModified('telefone')) this.telefoneNormalizado = normalizarTelefone(this.telefone);
+  if (this.isModified('columnId')) {
+    this.colunaDesde = new Date();
+    this.automacoesDisparadas = [];
+  }
   next();
 });
 cardSchema.pre('findOneAndUpdate', function (next) {
   const update = this.getUpdate();
   if (update && update.telefone !== undefined) {
     update.telefoneNormalizado = normalizarTelefone(update.telefone);
+  }
+  if (update && update.columnId !== undefined) {
+    update.colunaDesde = new Date();
+    update.automacoesDisparadas = [];
   }
   next();
 });

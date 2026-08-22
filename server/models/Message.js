@@ -9,6 +9,7 @@ const messageSchema = new mongoose.Schema(
     status: { type: String, default: null }, // sent | delivered | read | failed (só pra 'out')
     whatsappMessageId: { type: String, default: null },
     timestamp: { type: Date, default: Date.now },
+    enviadoPorAgente: { type: Boolean, default: false }, // true = respondida sozinha pelo agente de IA, não por um humano
   },
   {
     timestamps: true,

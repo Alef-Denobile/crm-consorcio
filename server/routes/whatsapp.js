@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
 const Message = require('../models/Message');
+const { perguntarClaude } = require('../utils/anthropic');
 
 const router = express.Router();
 
@@ -75,6 +76,63 @@ async function enviarTemplateGraph(user, card, nomeTemplate, idioma, variaveis) 
   return data;
 }
 
+// Gera a resposta do agente a partir do histórico recente da conversa.
+async function gerarRespostaAgente(card, mensagensRecentes, novaMensagem) {
+  const historico = mensagensRecentes
+    .slice(-6)
+    .map((m) => `${m.direction === 'in' ? 'Cliente' : 'Você'}: ${m.texto}`)
+    .join('\n');
+  const prompt = `Você é um assistente de vendas de consórcios no Brasil, respondendo pelo WhatsApp em nome da empresa. Seja cordial, direto, no máximo 3 frases. Não invente informações que você não tem (preços exatos, prazos, condições específicas) — se não souber, diga que um vendedor confirma em breve.
+
+Cliente: ${card.cliente}
+Qualificação: ${card.temperatura}
+
+Histórico recente da conversa:
+${historico}
+
+Nova mensagem do cliente: "${novaMensagem}"
+
+Responda só com o texto da mensagem, pronto para enviar, sem aspas nem explicações antes ou depois.`;
+  return perguntarClaude(prompt, { maxTokens: 250 });
+}
+
+// Decide se o agente deve responder e, se sim, gera e envia a mensagem sozinho.
+// Fica em silêncio se um humano respondeu esse cliente nos últimos 30 minutos —
+// pra nunca "brigar" com quem está atendendo manualmente.
+async function tentarResponderComAgente(user, card) {
+  try {
+    const ultimaHumana = await Message.findOne({
+      cardId: card._id,
+      direction: 'out',
+      enviadoPorAgente: { $ne: true },
+    }).sort({ timestamp: -1 });
+    if (ultimaHumana && Date.now() - new Date(ultimaHumana.timestamp).getTime() < 30 * 60 * 1000) {
+      return; // um humano assumiu a conversa recentemente
+    }
+
+    const mensagens = await Message.find({ cardId: card._id }).sort({ timestamp: 1 }).limit(20);
+    const ultimaMsg = mensagens[mensagens.length - 1];
+    if (!ultimaMsg || ultimaMsg.direction !== 'in') return;
+
+    const resposta = await gerarRespostaAgente(card, mensagens, ultimaMsg.texto);
+    if (!resposta || !resposta.trim()) return;
+
+    const data = await enviarMensagemGraph(user, card, resposta);
+    await Message.create({
+      userId: user._id,
+      cardId: card._id,
+      direction: 'out',
+      texto: resposta,
+      whatsappMessageId: data.messages && data.messages[0] && data.messages[0].id,
+      status: 'sent',
+      timestamp: new Date(),
+      enviadoPorAgente: true,
+    });
+  } catch (err) {
+    console.error('Erro ao gerar resposta do agente de IA:', err.message);
+  }
+}
+
 /* ===================== rotas públicas (chamadas pela Meta) ===================== */
 
 // GET /api/whatsapp/webhook -> verificação inicial exigida pela Meta ao cadastrar o webhook
@@ -135,6 +193,10 @@ router.post('/webhook', async (req, res) => {
         whatsappMessageId: msg.id,
         timestamp: msg.timestamp ? new Date(parseInt(msg.timestamp, 10) * 1000) : new Date(),
       });
+
+      if (user.whatsappBusiness.agenteIaAtivo) {
+        await tentarResponderComAgente(user, card);
+      }
     }
 
     // atualizações de status (entregue/lido) das mensagens que nós mandamos
@@ -158,9 +220,24 @@ router.get('/status', auth, async (req, res) => {
       user.whatsappBusiness.accessToken &&
       user.whatsappBusiness.phoneNumberId
     );
-    res.json({ connected: conectado });
+    const agenteIaAtivo = !!(user && user.whatsappBusiness && user.whatsappBusiness.agenteIaAtivo);
+    res.json({ connected: conectado, agenteIaAtivo });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao verificar a conexão com o WhatsApp.' });
+  }
+});
+
+// POST /api/whatsapp/agente-ia -> liga/desliga o agente que responde clientes sozinho
+router.post('/agente-ia', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) {
+      return res.status(400).json({ error: 'Conecte o WhatsApp Business antes de ativar o agente.' });
+    }
+    await User.findByIdAndUpdate(req.userId, { 'whatsappBusiness.agenteIaAtivo': !!req.body.ativo });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao atualizar o agente de IA.' });
   }
 });
 

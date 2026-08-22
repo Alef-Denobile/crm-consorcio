@@ -20,13 +20,18 @@ router.get('/', async (req, res) => {
 // POST /api/automacoes -> cria uma nova automação
 router.post('/', async (req, res) => {
   try {
-    const { nome, colunaGatilhoId, acaoTipo, acaoParams } = req.body;
+    const { nome, colunaGatilhoId, gatilhoTipo, acaoTipo, acaoParams } = req.body;
     if (!nome || !nome.trim()) return res.status(400).json({ error: 'Nome da automação é obrigatório.' });
     if (!colunaGatilhoId || !mongoose.isValidObjectId(colunaGatilhoId)) {
       return res.status(400).json({ error: 'Coluna de gatilho inválida.' });
     }
+    const tipoGatilhoFinal = ['entrada_coluna', 'tempo_parado'].includes(gatilhoTipo) ? gatilhoTipo : 'entrada_coluna';
     if (!['criar_tarefa', 'mover_coluna'].includes(acaoTipo)) {
       return res.status(400).json({ error: 'Tipo de ação inválido.' });
+    }
+    if (tipoGatilhoFinal === 'tempo_parado') {
+      const dias = Number(acaoParams && acaoParams.diasParado);
+      if (!dias || dias < 1) return res.status(400).json({ error: 'Informe depois de quantos dias parado a automação deve disparar.' });
     }
     const coluna = await Column.findOne({ _id: colunaGatilhoId, userId: req.userId });
     if (!coluna) return res.status(404).json({ error: 'Coluna de gatilho não encontrada.' });
@@ -44,6 +49,7 @@ router.post('/', async (req, res) => {
       userId: req.userId,
       nome: nome.trim(),
       colunaGatilhoId,
+      gatilhoTipo: tipoGatilhoFinal,
       acaoTipo,
       acaoParams: acaoParams || {},
     });
@@ -61,6 +67,13 @@ router.put('/:id', async (req, res) => {
     if (typeof req.body.nome === 'string') updates.nome = req.body.nome.trim();
     if (typeof req.body.ativa === 'boolean') updates.ativa = req.body.ativa;
     if (req.body.acaoParams) updates.acaoParams = req.body.acaoParams;
+    if (['entrada_coluna', 'tempo_parado'].includes(req.body.gatilhoTipo)) updates.gatilhoTipo = req.body.gatilhoTipo;
+    if (['criar_tarefa', 'mover_coluna'].includes(req.body.acaoTipo)) updates.acaoTipo = req.body.acaoTipo;
+    if (req.body.colunaGatilhoId && mongoose.isValidObjectId(req.body.colunaGatilhoId)) {
+      const coluna = await Column.findOne({ _id: req.body.colunaGatilhoId, userId: req.userId });
+      if (!coluna) return res.status(404).json({ error: 'Coluna de gatilho não encontrada.' });
+      updates.colunaGatilhoId = req.body.colunaGatilhoId;
+    }
 
     const automacao = await Automacao.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },

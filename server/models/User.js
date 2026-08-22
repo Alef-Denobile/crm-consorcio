@@ -15,6 +15,7 @@ const whatsappBusinessSchema = new mongoose.Schema(
     phoneNumberId: { type: String, default: null },
     accessToken: { type: String, default: null },
     wabaId: { type: String, default: null },
+    agenteIaAtivo: { type: Boolean, default: false }, // responde clientes sozinho, sem revisão humana
   },
   { _id: false }
 );

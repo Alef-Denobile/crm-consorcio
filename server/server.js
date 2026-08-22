@@ -43,6 +43,9 @@ app.use('/api/instagram', instagramRoutes);
 // front-end estático (a pasta public com index.html, css e js)
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+const { verificarAutomacoesPorTempo } = require('./utils/automacaoScheduler');
+const UMA_HORA = 60 * 60 * 1000;
+
 async function start() {
   try {
     await mongoose.connect(MONGODB_URI);
@@ -50,6 +53,9 @@ async function start() {
     app.listen(PORT, () => {
       console.log(`Servidor rodando em http://localhost:${PORT}`);
     });
+    // primeira checagem logo após subir (sem esperar 1h), depois de hora em hora
+    setTimeout(verificarAutomacoesPorTempo, 30 * 1000);
+    setInterval(verificarAutomacoesPorTempo, UMA_HORA);
   } catch (err) {
     console.error('Falha ao conectar no MongoDB:', err.message);
     process.exit(1);
