@@ -143,9 +143,14 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   desse recurso ganham automaticamente um "Funil Principal" com as
   colunas que já existiam — nada se perde. Toda vez que uma coluna
   nova é criada, abre um seletor pra escolher (um por um, ou "Selecionar
-  todos") quais clientes já existentes você quer puxar direto pra ela
-- **Leads** — todos os clientes em formato de tabela, com busca e
-  filtro por etapa
+  todos") quais clientes já existentes você quer puxar direto pra ela.
+  As estatísticas agora incluem **Ticket médio** e **Valor ponderado**
+  (esse último usa a "chance de fechar" de cada coluna, configurável
+  no menu dela — só faz sentido pras colunas "em aberto"). Tem também
+  um filtro **"🧊 Esfriando"** que mostra só os leads em aberto sem
+  nenhuma atualização há mais de 7 dias
+- **Leads** — todos os clientes em formato de tabela, com busca,
+  filtro por etapa e um botão de **exportar** em CSV
 - **Comissões** — contratos de comissão por mês, com cálculo automático
   das parcelas a partir do valor da carta de crédito vendida (regra fixa:
   10 parcelas × 0,00103388 + 3 parcelas × 0,00190561)
@@ -181,7 +186,11 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
 - **Configurações** — uma página só, em três seções na ordem Perfil →
   Integrações → Aparência. Os botões no topo rolam a tela até a seção
   correspondente. O botão de acesso fica no rodapé da barra lateral,
-  separado dos outros, acima do "Sair"
+  separado dos outros, acima do "Sair". Inclui **foto de perfil**
+  (redimensionada automaticamente pro navegador antes de enviar, com
+  fallback nas iniciais do nome quando não há foto) e **"Sessões
+  ativas"**, um botão que invalida todos os tokens de login já
+  emitidos — útil se perdeu um aparelho ou compartilhou a senha
 
 Também tem um **sino de notificações** no topo de todas as páginas,
 com tarefas vencendo, leads novos e mensagens recebidas nas últimas
@@ -335,6 +344,8 @@ ativar um fluxo com essa etapa, o painel avisa antes de confirmar.
 - `POST /api/auth/google` — `{ credential }` (token do Google) → cria/liga conta e retorna token
 - `GET  /api/auth/me` — dados do usuário logado (exige token)
 - `PUT  /api/auth/nome` — `{ nome }` → muda o nome de exibição da conta
+- `POST /api/auth/logout-all` — invalida todos os tokens de login já emitidos (exige token)
+- `PUT  /api/auth/avatar` — `{ avatarUrl }` → salva a foto de perfil, já em base64 pequeno (exige token)
 - `PUT  /api/auth/password` — `{ senhaAtual, senhaNova }` → troca (ou define) a senha da conta
 
 **Painel (exigem token, sempre isoladas por usuário):**

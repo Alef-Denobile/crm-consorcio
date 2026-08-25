@@ -133,6 +133,7 @@ let tasksLoaded = false;
 let errorMsg = null;
 let currentPage = 'dashboard';   // 'dashboard' | 'pipeline' | 'leads' | 'tarefas'
 let filterMonth = null;          // null = Geral (página Pipeline)
+let filtroEsfriando = false;
 let dashboardPeriod = 'mes';     // '7dias' | 'mes' | 'trimestre' | 'ano'
 let addingCol = false;
 let newColNameVal = '';
@@ -200,6 +201,10 @@ let contratoModalForm = null;
 let nomeNovoVal = '';
 let nomeMsg = null;
 let nomeSalvando = false;
+let logoutAllMsg = null;
+let logoutAllEnviando = false;
+let avatarSalvando = false;
+let avatarMsg = null;
 let senhaAtualVal = '';
 let senhaNovaVal = '';
 let senhaMsg = null; // { tipo:'ok'|'erro', texto }
@@ -837,9 +842,9 @@ function relatoriosDadosMensais(mesesAtras, cardsBase){
   });
   return buckets;
 }
-function exportarCsv(){
+function baixarCsv(cards, nomeArquivo){
   const linhas = [['Nome','Telefone','Valor','Coluna','Temperatura','Mês'].join(',')];
-  cardsParaRelatorio().forEach(c=>{
+  cards.forEach(c=>{
     const col = board.columns.find(k=>k.id===c.columnId);
     linhas.push([
       `"${(c.cliente||'').replace(/"/g,'""')}"`,
@@ -854,11 +859,17 @@ function exportarCsv(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `leads_${currentMonthKey()}.csv`;
+  a.download = nomeArquivo;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+function exportarCsv(){
+  baixarCsv(cardsParaRelatorio(), `leads_${currentMonthKey()}.csv`);
+}
+function exportarLeads(){
+  baixarCsv(filteredLeads(), `contatos_${currentMonthKey()}.csv`);
 }
 async function connectGoogleCalendar(){
   try{
@@ -906,7 +917,17 @@ function monthsList(){
   return Array.from(set).sort((a,b)=> a<b?1:-1);
 }
 function visibleCards(){
-  return filterMonth ? board.cards.filter(c=>c.mes===filterMonth) : board.cards;
+  let cards = filterMonth ? board.cards.filter(c=>c.mes===filterMonth) : board.cards;
+  if(filtroEsfriando){
+    const limite = Date.now() - 7*24*60*60*1000;
+    cards = cards.filter(c=>{
+      const col = board.columns.find(k=>k.id===c.columnId);
+      if(!col || col.tipo!=='aberto') return false;
+      const att = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
+      return att < limite;
+    });
+  }
+  return cards;
 }
 function cardsOf(colId){ return visibleCards().filter(c=>c.columnId===colId); }
 function sumByTipo(tipo){
@@ -926,6 +947,26 @@ function quentesAtivos(){
     const col = board.columns.find(k=>k.id===c.columnId);
     return col && col.tipo==='aberto' && col.funilId===funilAtualId && c.temperatura==='quente';
   }).length;
+}
+function cardsDoFunilAtual(){
+  return visibleCards().filter(c=>{
+    const col = board.columns.find(k=>k.id===c.columnId);
+    return col && col.funilId===funilAtualId;
+  });
+}
+function ticketMedioFunil(){
+  const cards = cardsDoFunilAtual();
+  if(!cards.length) return 0;
+  const total = cards.reduce((s,c)=> s + (Number(c.valor)||0), 0);
+  return total / cards.length;
+}
+function valorPonderadoFunil(){
+  return cardsDoFunilAtual().reduce((s,c)=>{
+    const col = board.columns.find(k=>k.id===c.columnId);
+    if(!col || col.tipo!=='aberto') return s;
+    const prob = (typeof col.probabilidade === 'number') ? col.probabilidade : 50;
+    return s + (Number(c.valor)||0) * (prob/100);
+  }, 0);
 }
 
 /* ---------- derivações (Dashboard) ---------- */
@@ -1096,6 +1137,8 @@ function goToPage(page){
   if(page === 'configuracoes'){
     senhaMsg = null; senhaAtualVal = ''; senhaNovaVal = '';
     nomeMsg = null; nomeNovoVal = (currentUser && currentUser.nome) || '';
+    logoutAllMsg = null;
+    avatarMsg = null;
     importResultado = null;
     refreshCurrentUser();
   }
@@ -1175,6 +1218,22 @@ async function changeTipo(id, tipo){
   }catch(e){
     col.tipo = anterior;
     errorMsg = 'Não foi possível alterar o tipo da coluna.';
+    renderApp();
+  }
+}
+async function salvarProbabilidadeColuna(id, valor){
+  const col = board.columns.find(c=>c.id===id);
+  if(!col) return;
+  const nova = Math.max(0, Math.min(100, parseInt(valor,10) || 0));
+  const anterior = col.probabilidade;
+  if(nova === anterior) return;
+  col.probabilidade = nova;
+  renderApp();
+  try{
+    await apiRequest('PUT', `/columns/${id}`, { probabilidade: nova });
+  }catch(e){
+    col.probabilidade = anterior;
+    errorMsg = 'Não foi possível salvar a probabilidade.';
     renderApp();
   }
 }
@@ -1359,6 +1418,78 @@ async function salvarNome(){
   }
   nomeSalvando = false;
   renderApp();
+}
+function iniciaisDoNome(nome){
+  const partes = (nome||'').trim().split(/\s+/).filter(Boolean);
+  if(!partes.length) return '?';
+  if(partes.length === 1) return partes[0][0].toUpperCase();
+  return (partes[0][0] + partes[partes.length-1][0]).toUpperCase();
+}
+function redimensionarImagem(file, tamanho){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const canvas = document.createElement('canvas');
+        canvas.width = tamanho;
+        canvas.height = tamanho;
+        const ctx = canvas.getContext('2d');
+        const lado = Math.min(img.width, img.height);
+        const sx = (img.width - lado)/2;
+        const sy = (img.height - lado)/2;
+        ctx.drawImage(img, sx, sy, lado, lado, 0, 0, tamanho, tamanho);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = ()=> reject(new Error('Não foi possível ler a imagem.'));
+      img.src = e.target.result;
+    };
+    reader.onerror = ()=> reject(new Error('Não foi possível ler o arquivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+async function handleAvatarFileSelected(file){
+  if(!file) return;
+  avatarMsg = null;
+  try{
+    const dataUrl = await redimensionarImagem(file, 128);
+    avatarSalvando = true;
+    renderApp();
+    await apiRequest('PUT', '/auth/avatar', { avatarUrl: dataUrl });
+    await refreshCurrentUser();
+    avatarMsg = { tipo:'ok', texto:'Foto atualizada.' };
+  }catch(e){
+    avatarMsg = { tipo:'erro', texto: e.message || 'Não foi possível enviar a foto.' };
+  }
+  avatarSalvando = false;
+  renderApp();
+}
+async function removerAvatar(){
+  avatarSalvando = true;
+  avatarMsg = null;
+  renderApp();
+  try{
+    await apiRequest('PUT', '/auth/avatar', { avatarUrl: null });
+    await refreshCurrentUser();
+    avatarMsg = { tipo:'ok', texto:'Foto removida.' };
+  }catch(e){
+    avatarMsg = { tipo:'erro', texto: e.message || 'Não foi possível remover a foto.' };
+  }
+  avatarSalvando = false;
+  renderApp();
+}
+async function desconectarTodosDispositivos(){
+  logoutAllEnviando = true;
+  logoutAllMsg = null;
+  renderApp();
+  try{
+    await apiRequest('POST', '/auth/logout-all');
+    logout(); // esse dispositivo também precisa entrar de novo
+  }catch(e){
+    logoutAllMsg = { tipo:'erro', texto: e.message || 'Não foi possível desconectar os dispositivos.' };
+    logoutAllEnviando = false;
+    renderApp();
+  }
 }
 async function salvarSenha(){
   if(!senhaNovaVal || senhaNovaVal.length < 6){
@@ -1591,7 +1722,7 @@ function renderSidebar(){
   return `
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <span class="sidebar-logo">◎</span>
+        <span class="sidebar-avatar">${currentUser && currentUser.avatarUrl ? `<img src="${currentUser.avatarUrl}" alt="" />` : esc(iniciaisDoNome((currentUser&&currentUser.nome)||''))}</span>
         <span class="sidebar-greeting">Olá, <span class="sidebar-brand-name">${esc((currentUser && currentUser.nome) || 'visitante')}</span></span>
       </div>
       <nav class="sidebar-nav">
@@ -1754,6 +1885,7 @@ function renderPipelinePage(){
           </div>
         ` : ''}
       </div>
+      <button class="tab-btn ${filtroEsfriando?'active':''}" data-action="toggle-esfriando" title="Leads em aberto sem atividade há mais de 7 dias">🧊 Esfriando</button>
     </div>
 
     <div class="stats-wrap">
@@ -1764,6 +1896,8 @@ function renderPipelinePage(){
           <div class="stat"><span class="lbl">Vendido</span><span class="val">${fmtBRL(sumByTipo('ganho'))}</span><span class="cnt">${countByTipo('ganho')} ${countByTipo('ganho')===1?'cliente':'clientes'}</span></div>
           <div class="stat"><span class="lbl">Perdido</span><span class="val" style="color:rgba(255,255,255,.45)">${fmtBRL(sumByTipo('perdido'))}</span><span class="cnt">${countByTipo('perdido')} ${countByTipo('perdido')===1?'cliente':'clientes'}</span></div>
           <div class="stat"><span class="lbl">Leads quentes</span><span class="val">${quentesAtivos()}</span></div>
+          <div class="stat"><span class="lbl">Ticket médio</span><span class="val">${fmtBRL(ticketMedioFunil())}</span></div>
+          <div class="stat"><span class="lbl">Valor ponderado</span><span class="val">${fmtBRL(valorPonderadoFunil())}</span></div>
         </div>
       </div>
     </div>
@@ -1820,6 +1954,14 @@ function renderColumn(col){
                 <span class="dot" style="background:${t.color}"></span>${t.label} ${col.tipo===key?'✓':''}
               </button>
             `).join('')}
+            ${col.tipo==='aberto' ? `
+              <div class="col-menu-sep">
+                <label class="col-menu-prob-label">
+                  Chance de fechar (%) — usado no valor ponderado
+                  <input type="number" class="col-menu-prob-input" data-col-id="${col.id}" value="${col.probabilidade!=null?col.probabilidade:50}" min="0" max="100" />
+                </label>
+              </div>
+            ` : ''}
             <div class="col-menu-sep">
               <button class="col-menu-item danger" data-action="delete-col" data-col-id="${col.id}">🗑 Excluir coluna</button>
             </div>
@@ -1894,6 +2036,7 @@ function renderLeadsPage(){
         <option value="">Todos os status</option>
         ${board.columns.map(c=>`<option value="${c.id}" ${leadsStatusFilter===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
       </select>
+      <button class="btn-outline" data-action="exportar-leads">Exportar</button>
     </div>
 
     <div class="leads-table-wrap">
@@ -2090,6 +2233,18 @@ function renderConfiguracoesPage(){
       <div class="settings-page-grid">
         <div class="settings-page-section">
           <h3>Seu perfil</h3>
+          <div class="avatar-upload-row">
+            <div class="avatar-preview">${currentUser && currentUser.avatarUrl ? `<img src="${currentUser.avatarUrl}" alt="Foto de perfil" />` : esc(iniciaisDoNome((currentUser&&currentUser.nome)||''))}</div>
+            <div>
+              <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/webp" style="display:none;" />
+              <div class="settings-btn-row">
+                <button class="btn-outline" id="avatar-upload-btn" ${avatarSalvando?'disabled':''}>${avatarSalvando?'Enviando…':'Enviar foto'}</button>
+                ${currentUser && currentUser.avatarUrl ? `<button class="btn-outline" id="avatar-remover-btn" ${avatarSalvando?'disabled':''}>Remover</button>` : ''}
+              </div>
+              <p class="settings-page-note">PNG, JPG ou WebP — redimensionamos automaticamente.</p>
+            </div>
+          </div>
+          ${avatarMsg ? `<p class="settings-page-msg ${avatarMsg.tipo}">${esc(avatarMsg.texto)}</p>` : ''}
           <div class="settings-page-row"><span>Nome</span><span>${esc((currentUser && currentUser.nome) || '—')}</span></div>
           <div class="settings-page-row"><span>E-mail</span><span>${esc((currentUser && currentUser.email) || '—')}</span></div>
         </div>
@@ -2118,6 +2273,13 @@ function renderConfiguracoesPage(){
           </div>
           ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
           <button class="btn-primary" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Mudar senha'}</button>
+        </div>
+
+        <div class="settings-page-section">
+          <h3>Sessões ativas</h3>
+          <p class="settings-page-note">Desconecte todos os dispositivos onde você está logado — útil se perdeu um aparelho ou compartilhou sua senha. Você vai precisar entrar de novo aqui também.</p>
+          ${logoutAllMsg ? `<p class="settings-page-msg ${logoutAllMsg.tipo}">${esc(logoutAllMsg.texto)}</p>` : ''}
+          <button class="btn-outline" data-action="desconectar-todos" ${logoutAllEnviando?'disabled':''}>${logoutAllEnviando?'Desconectando…':'Desconectar todos os dispositivos'}</button>
         </div>
       </div>
     </section>
@@ -2478,6 +2640,22 @@ function bindAppEvents(){
   if(nomeNovoInput) nomeNovoInput.addEventListener('input', (e)=> nomeNovoVal = e.target.value);
   const nomeSalvarBtn = document.getElementById('s-nome-salvar');
   if(nomeSalvarBtn) nomeSalvarBtn.addEventListener('click', salvarNome);
+  const avatarInput = document.getElementById('avatar-input');
+  const avatarUploadBtn = document.getElementById('avatar-upload-btn');
+  if(avatarUploadBtn && avatarInput) avatarUploadBtn.addEventListener('click', ()=> avatarInput.click());
+  if(avatarInput) avatarInput.addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(file) handleAvatarFileSelected(file);
+  });
+  const avatarRemoverBtn = document.getElementById('avatar-remover-btn');
+  if(avatarRemoverBtn) avatarRemoverBtn.addEventListener('click', removerAvatar);
+  const logoutAllBtn = app.querySelector('[data-action="desconectar-todos"]');
+  if(logoutAllBtn) logoutAllBtn.addEventListener('click', ()=>{
+    showConfirm({
+      message: 'Desconectar todos os dispositivos, incluindo este? Você vai precisar fazer login de novo.',
+      onConfirm: ()=>{ desconectarTodosDispositivos(); closeConfirm(); },
+    });
+  });
   const senhaAtualInput = document.getElementById('s-senha-atual');
   if(senhaAtualInput) senhaAtualInput.addEventListener('input', (e)=> senhaAtualVal = e.target.value);
   const senhaNovaInput = document.getElementById('s-senha-nova');
@@ -2515,6 +2693,8 @@ function bindAppEvents(){
   /* -- Leads -- */
   const openNewLeadBtn = app.querySelector('[data-action="open-new-lead"]');
   if(openNewLeadBtn) openNewLeadBtn.addEventListener('click', ()=> openNewCard());
+  const exportarLeadsBtn = app.querySelector('[data-action="exportar-leads"]');
+  if(exportarLeadsBtn) exportarLeadsBtn.addEventListener('click', exportarLeads);
   const leadsSearchInput = document.getElementById('leads-search-input');
   if(leadsSearchInput) leadsSearchInput.addEventListener('input', (e)=>{
     const cursorPos = e.target.selectionStart;
@@ -2569,6 +2749,8 @@ function bindAppEvents(){
   });
   const gotoInput = document.getElementById('goto-month-input');
   if(gotoInput) gotoInput.addEventListener('change', (e)=>{ if(e.target.value){ filterMonth = e.target.value; dateMenuOpen = false; renderApp(); } });
+  const esfriandoBtn = app.querySelector('[data-action="toggle-esfriando"]');
+  if(esfriandoBtn) esfriandoBtn.addEventListener('click', ()=>{ filtroEsfriando = !filtroEsfriando; renderApp(); });
 
   /* -- Pipeline: colunas -- */
   app.querySelectorAll('[data-action="edit-col-name"]').forEach(el=>{
@@ -2597,6 +2779,10 @@ function bindAppEvents(){
   });
   app.querySelectorAll('[data-action="set-col-tipo"]').forEach(btn=>{
     btn.addEventListener('click', ()=> changeTipo(btn.dataset.colId, btn.dataset.tipo));
+  });
+  document.querySelectorAll('.col-menu-prob-input').forEach(input=>{
+    input.addEventListener('blur', (e)=> salvarProbabilidadeColuna(input.dataset.colId, e.target.value));
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
   });
   app.querySelectorAll('[data-action="delete-col"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{

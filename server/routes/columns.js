@@ -45,6 +45,9 @@ router.put('/:id', async (req, res) => {
     if (typeof req.body.nome === 'string') updates.nome = req.body.nome.trim();
     if (typeof req.body.tipo === 'string') updates.tipo = req.body.tipo;
     if (typeof req.body.ordem === 'number') updates.ordem = req.body.ordem;
+    if (typeof req.body.probabilidade === 'number') {
+      updates.probabilidade = Math.max(0, Math.min(100, req.body.probabilidade));
+    }
 
     const coluna = await Column.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },

@@ -6,6 +6,7 @@ const columnSchema = new mongoose.Schema(
     funilId: { type: mongoose.Schema.Types.ObjectId, ref: 'Funil', default: null },
     nome: { type: String, required: true, trim: true },
     tipo: { type: String, enum: ['aberto', 'ganho', 'perdido'], default: 'aberto' },
+    probabilidade: { type: Number, default: 50, min: 0, max: 100 }, // % de chance de fechar, usado no valor ponderado
     ordem: { type: Number, default: 0 },
   },
   {

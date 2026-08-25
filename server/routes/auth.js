@@ -12,7 +12,7 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 function gerarToken(user) {
-  return jwt.sign({ sub: user._id.toString() }, JWT_SECRET, { expiresIn: '30d' });
+  return jwt.sign({ sub: user._id.toString(), tv: user.tokenVersion || 0 }, JWT_SECRET, { expiresIn: '30d' });
 }
 
 // POST /api/auth/register -> cria a conta e já devolve o token (login automático)
@@ -124,6 +124,34 @@ router.get('/me', auth, async (req, res) => {
     res.json({ user: user.toJSON() });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao buscar usuário.' });
+  }
+});
+
+// POST /api/auth/logout-all -> invalida todos os tokens já emitidos (desconecta todos os dispositivos)
+router.post('/logout-all', auth, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.userId, { $inc: { tokenVersion: 1 } });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao desconectar os dispositivos.' });
+  }
+});
+
+// PUT /api/auth/avatar -> salva a foto de perfil (recebe um data URL já pequeno, gerado no navegador)
+router.put('/avatar', auth, async (req, res) => {
+  try {
+    const { avatarUrl } = req.body;
+    if (avatarUrl && !/^data:image\/(png|jpeg|jpg|webp|gif);base64,/.test(avatarUrl)) {
+      return res.status(400).json({ error: 'Formato de imagem inválido.' });
+    }
+    if (avatarUrl && avatarUrl.length > 400000) {
+      return res.status(400).json({ error: 'Imagem muito grande. Tente uma foto menor.' });
+    }
+    const user = await User.findByIdAndUpdate(req.userId, { avatarUrl: avatarUrl || null }, { new: true });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    res.json({ user: user.toJSON() });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao salvar a foto de perfil.' });
   }
 });
 

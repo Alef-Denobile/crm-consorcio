@@ -39,6 +39,8 @@ const userSchema = new mongoose.Schema(
     instagramLeads: { type: instagramLeadsSchema, default: () => ({}) },
     equipeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipe', default: null },
     papelEquipe: { type: String, enum: ['supervisor', 'membro'], default: 'membro' },
+    tokenVersion: { type: Number, default: 0 }, // incrementar invalida todos os tokens já emitidos (logout geral)
+    avatarUrl: { type: String, default: null }, // imagem pequena em base64 (data URL)
   },
   {
     timestamps: true,
@@ -49,6 +51,7 @@ const userSchema = new mongoose.Schema(
         delete ret.__v;
         ret.temSenha = !!ret.senhaHash;
         delete ret.senhaHash; // nunca devolver o hash da senha pro front-end
+        delete ret.tokenVersion; // detalhe interno de segurança, não precisa ir pro front-end
         ret.googleCalendarConnected = !!(ret.googleCalendar && ret.googleCalendar.refreshToken);
         delete ret.googleCalendar; // tokens nunca saem do servidor
         ret.whatsappConnected = !!(ret.whatsappBusiness && ret.whatsappBusiness.accessToken && ret.whatsappBusiness.phoneNumberId);
