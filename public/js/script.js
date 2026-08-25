@@ -104,18 +104,8 @@ function setDarkMode(ligado){
 }
 setDarkMode(getDarkMode());
 
-/* ---------- nome do site (fixo) e saudação (editável) ---------- */
+/* ---------- nome do site (fixo) ---------- */
 document.title = 'Painel CRM';
-function getGreetingName(){
-  const custom = localStorage.getItem('greetingName');
-  if(custom) return custom;
-  return (currentUser && currentUser.nome) ? currentUser.nome : '';
-}
-function setGreetingName(nome){
-  const final = (nome || '').trim();
-  if(final) localStorage.setItem('greetingName', final);
-  else localStorage.removeItem('greetingName');
-}
 
 /* ---------- sessão / login ---------- */
 function getToken(){ return localStorage.getItem('token'); }
@@ -149,8 +139,6 @@ let newColNameVal = '';
 let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
-let editingGreeting = false;
-let greetingDraft = '';
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
@@ -202,10 +190,16 @@ let automacaoModalForm = null;
 let fluxos = [];
 let fluxosLoaded = false;
 let fluxoModalForm = null;
+let colunaLeadsPickerColId = null;
+let colunaLeadsSelecionados = new Set();
+let colunaLeadsMovendo = false;
 let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
 let contratoModalForm = null;
+let nomeNovoVal = '';
+let nomeMsg = null;
+let nomeSalvando = false;
 let senhaAtualVal = '';
 let senhaNovaVal = '';
 let senhaMsg = null; // { tipo:'ok'|'erro', texto }
@@ -1101,6 +1095,7 @@ function goToPage(page){
   }
   if(page === 'configuracoes'){
     senhaMsg = null; senhaAtualVal = ''; senhaNovaVal = '';
+    nomeMsg = null; nomeNovoVal = (currentUser && currentUser.nome) || '';
     importResultado = null;
     refreshCurrentUser();
   }
@@ -1231,6 +1226,9 @@ async function addColumn(){
   try{
     const novaCol = await apiRequest('POST', '/columns', { nome, tipo:'aberto', funilId: funilAtualId });
     board.columns.push(novaCol);
+    renderApp();
+    abrirPickerLeadsParaColuna(novaCol.id);
+    return;
   }catch(e){
     errorMsg = 'Não foi possível criar a coluna.';
   }
@@ -1342,6 +1340,26 @@ async function deleteContratoById(id){
 }
 
 /* ---------- mutações: senha e importação de leads ---------- */
+async function salvarNome(){
+  const nome = nomeNovoVal.trim();
+  if(!nome){
+    nomeMsg = { tipo:'erro', texto:'Digite um nome.' };
+    renderApp();
+    return;
+  }
+  nomeSalvando = true;
+  nomeMsg = null;
+  renderApp();
+  try{
+    await apiRequest('PUT', '/auth/nome', { nome });
+    nomeMsg = { tipo:'ok', texto:'Nome atualizado.' };
+    await refreshCurrentUser();
+  }catch(e){
+    nomeMsg = { tipo:'erro', texto: e.message || 'Não foi possível atualizar o nome.' };
+  }
+  nomeSalvando = false;
+  renderApp();
+}
 async function salvarSenha(){
   if(!senhaNovaVal || senhaNovaVal.length < 6){
     senhaMsg = { tipo:'erro', texto:'A nova senha precisa ter ao menos 6 caracteres.' };
@@ -1574,10 +1592,7 @@ function renderSidebar(){
     <aside class="sidebar">
       <div class="sidebar-brand">
         <span class="sidebar-logo">◎</span>
-        ${editingGreeting
-          ? `<span class="sidebar-greeting">Olá, <input class="sidebar-greeting-input" id="greeting-input" value="${esc(greetingDraft)}" placeholder="seu nome" /></span>`
-          : `<span class="sidebar-greeting">Olá, <span class="sidebar-brand-name" data-action="edit-greeting" title="Clique para editar">${esc(getGreetingName() || 'visitante')}</span><button class="edit-greeting-icon" data-action="edit-greeting" title="Editar nome">${ICON_EDIT}</button></span>`
-        }
+        <span class="sidebar-greeting">Olá, <span class="sidebar-brand-name">${esc((currentUser && currentUser.nome) || 'visitante')}</span></span>
       </div>
       <nav class="sidebar-nav">
         ${NAV.map(([key,label,icon])=>`
@@ -2081,6 +2096,15 @@ function renderConfiguracoesPage(){
 
         <div class="settings-page-section">
           <h3>Login e segurança</h3>
+          <div class="field">
+            <label>Nome</label>
+            <input type="text" id="s-nome" value="${esc(nomeNovoVal)}" placeholder="Seu nome" />
+          </div>
+          ${nomeMsg ? `<p class="settings-page-msg ${nomeMsg.tipo}">${esc(nomeMsg.texto)}</p>` : ''}
+          <button class="btn-outline" id="s-nome-salvar" ${nomeSalvando?'disabled':''}>${nomeSalvando?'Salvando…':'Mudar nome'}</button>
+
+          <div class="settings-sep-line"></div>
+
           ${currentUser && !currentUser.temSenha ? `
             <p class="settings-page-note">Esta conta ainda não tem senha (entra só com o Google). Você pode definir uma agora, se quiser.</p>
           ` : ''}
@@ -2093,7 +2117,7 @@ function renderConfiguracoesPage(){
             <input type="password" id="s-senha-nova" placeholder="Mínimo 6 caracteres" />
           </div>
           ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
-          <button class="btn-primary" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Salvar senha'}</button>
+          <button class="btn-primary" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Mudar senha'}</button>
         </div>
       </div>
     </section>
@@ -2240,23 +2264,6 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="nav"]').forEach(btn=>{
     btn.addEventListener('click', ()=> goToPage(btn.dataset.page));
   });
-
-  app.querySelectorAll('[data-action="edit-greeting"]').forEach(el=>{
-    el.addEventListener('click', ()=>{
-      editingGreeting = true;
-      greetingDraft = getGreetingName();
-      renderApp();
-      const input = document.getElementById('greeting-input');
-      if(input){ input.focus(); input.select(); }
-    });
-  });
-  const greetingInput = document.getElementById('greeting-input');
-  if(greetingInput){
-    greetingInput.addEventListener('input', (e)=>{ greetingDraft = e.target.value; });
-    const commitGreeting = ()=>{ editingGreeting = false; setGreetingName(greetingDraft); renderApp(); };
-    greetingInput.addEventListener('blur', commitGreeting);
-    greetingInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') e.target.blur(); });
-  }
 
   const darkModeSwitch = app.querySelector('[data-action="toggle-dark-mode"]');
   if(darkModeSwitch) darkModeSwitch.addEventListener('click', ()=>{
@@ -2467,6 +2474,10 @@ function bindAppEvents(){
       if(alvo) alvo.scrollIntoView({ behavior:'smooth', block:'start' });
     });
   });
+  const nomeNovoInput = document.getElementById('s-nome');
+  if(nomeNovoInput) nomeNovoInput.addEventListener('input', (e)=> nomeNovoVal = e.target.value);
+  const nomeSalvarBtn = document.getElementById('s-nome-salvar');
+  if(nomeSalvarBtn) nomeSalvarBtn.addEventListener('click', salvarNome);
   const senhaAtualInput = document.getElementById('s-senha-atual');
   if(senhaAtualInput) senhaAtualInput.addEventListener('input', (e)=> senhaAtualVal = e.target.value);
   const senhaNovaInput = document.getElementById('s-senha-nova');
@@ -3614,6 +3625,95 @@ function openEditFluxo(id){
   renderFluxoModal();
 }
 function closeFluxoModal(){ fluxoModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+
+/* ---------- modal: puxar leads existentes pra uma coluna recém-criada ---------- */
+function abrirPickerLeadsParaColuna(colId){
+  colunaLeadsPickerColId = colId;
+  colunaLeadsSelecionados = new Set();
+  renderColunaLeadsPickerModal();
+}
+function closeColunaLeadsPickerModal(){
+  colunaLeadsPickerColId = null;
+  document.getElementById('modal-root').innerHTML = '';
+}
+async function confirmarMoverLeadsParaColuna(){
+  if(colunaLeadsSelecionados.size === 0){ closeColunaLeadsPickerModal(); return; }
+  const colId = colunaLeadsPickerColId;
+  colunaLeadsMovendo = true;
+  renderColunaLeadsPickerModal();
+  for(const cardId of Array.from(colunaLeadsSelecionados)){
+    try{
+      const atualizado = await apiRequest('PUT', `/cards/${cardId}/move`, { columnId: colId });
+      const idx = board.cards.findIndex(c=>c.id===cardId);
+      if(idx>-1) board.cards[idx] = atualizado;
+    }catch(e){ /* segue tentando os demais selecionados */ }
+  }
+  colunaLeadsMovendo = false;
+  closeColunaLeadsPickerModal();
+  renderApp();
+}
+function renderColunaLeadsPickerModal(){
+  const root = document.getElementById('modal-root');
+  if(!colunaLeadsPickerColId){ root.innerHTML=''; return; }
+  const coluna = board.columns.find(c=>c.id===colunaLeadsPickerColId);
+  const candidatos = board.cards.filter(c=>c.columnId !== colunaLeadsPickerColId);
+
+  root.innerHTML = `
+    <div class="overlay" id="cl-picker-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-head">
+          <h3>Puxar leads pra "${esc(coluna?coluna.nome:'')}"</h3>
+          <button id="cl-picker-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-page-note">Escolha quem você quer mover pra essa coluna agora. Dá pra pular e arrastar manualmente depois, se preferir.</p>
+          <div class="settings-btn-row" style="margin-bottom:10px;">
+            <button class="btn-outline" id="cl-selecionar-todos">Selecionar todos</button>
+            <button class="btn-outline" id="cl-limpar-selecao">Limpar seleção</button>
+          </div>
+          <div class="disparo-lista-leads" style="max-height:320px;">
+            ${candidatos.length ? candidatos.map(c=>{
+              const colAtual = board.columns.find(k=>k.id===c.columnId);
+              return `
+                <label class="disparo-lead-item">
+                  <input type="checkbox" class="cl-lead-checkbox" data-card-id="${c.id}" ${colunaLeadsSelecionados.has(c.id)?'checked':''} />
+                  <span>${esc(c.cliente)||'Sem nome'} <span class="settings-page-note">${colAtual?esc(colAtual.nome):''}</span></span>
+                </label>
+              `;
+            }).join('') : '<p class="dash-empty">Nenhum outro lead cadastrado ainda.</p>'}
+          </div>
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="cl-pular">Pular por agora</button>
+            <button class="btn-save" id="cl-confirmar" ${colunaLeadsMovendo?'disabled':''}>${colunaLeadsMovendo ? 'Movendo…' : `Mover ${colunaLeadsSelecionados.size} lead(s)`}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('cl-picker-close').addEventListener('click', closeColunaLeadsPickerModal);
+  document.getElementById('cl-pular').addEventListener('click', closeColunaLeadsPickerModal);
+  document.getElementById('cl-picker-overlay').addEventListener('click', (e)=>{ if(e.target.id==='cl-picker-overlay') closeColunaLeadsPickerModal(); });
+  document.getElementById('cl-selecionar-todos').addEventListener('click', ()=>{
+    candidatos.forEach(c=>colunaLeadsSelecionados.add(c.id));
+    renderColunaLeadsPickerModal();
+  });
+  document.getElementById('cl-limpar-selecao').addEventListener('click', ()=>{
+    colunaLeadsSelecionados.clear();
+    renderColunaLeadsPickerModal();
+  });
+  document.querySelectorAll('.cl-lead-checkbox').forEach(cb=>{
+    cb.addEventListener('change', ()=>{
+      if(cb.checked) colunaLeadsSelecionados.add(cb.dataset.cardId);
+      else colunaLeadsSelecionados.delete(cb.dataset.cardId);
+      renderColunaLeadsPickerModal();
+    });
+  });
+  document.getElementById('cl-confirmar').addEventListener('click', confirmarMoverLeadsParaColuna);
+}
 
 function renderFluxoEtapaParams(etapa, idx){
   if(etapa.tipo === 'mensagem'){

@@ -127,6 +127,19 @@ router.get('/me', auth, async (req, res) => {
   }
 });
 
+// PUT /api/auth/nome -> muda o nome de exibição da conta
+router.put('/nome', auth, async (req, res) => {
+  try {
+    const { nome } = req.body;
+    if (!nome || !nome.trim()) return res.status(400).json({ error: 'Digite um nome.' });
+    const user = await User.findByIdAndUpdate(req.userId, { nome: nome.trim() }, { new: true });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    res.json({ user: user.toJSON() });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao atualizar o nome.' });
+  }
+});
+
 // PUT /api/auth/password -> troca (ou define, se a conta só tinha login com Google) a senha
 router.put('/password', auth, async (req, res) => {
   try {

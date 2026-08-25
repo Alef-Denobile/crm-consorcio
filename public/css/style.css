@@ -234,11 +234,7 @@ main{ padding:24px; overflow-x:auto; }
 .sidebar-brand{ display:flex; align-items:center; gap:10px; padding:4px 10px 22px; }
 .sidebar-logo{ width:30px; height:30px; border-radius:9px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0; }
 .sidebar-greeting{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; letter-spacing:-.01em; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.sidebar-brand-name{ cursor:text; }
-.sidebar-brand-name:hover{ text-decoration:underline dotted; }
-.edit-greeting-icon{ display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; padding:0; margin-left:2px; border:none; background:none; color:var(--ink-soft); cursor:pointer; border-radius:6px; vertical-align:middle; }
-.edit-greeting-icon:hover{ background:var(--hover-tint); color:var(--ink); }
-.sidebar-greeting-input{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; letter-spacing:-.01em; border:none; border-bottom:1px solid var(--ink); background:transparent; outline:none; width:120px; color:var(--ink); }
+
 
 .sidebar-nav{ display:flex; flex-direction:column; gap:2px; }
 .nav-item{ display:flex; align-items:center; gap:11px; padding:10px 12px; min-height:42px; border-radius:9px; border:none; background:none; font-size:13px; font-weight:500; color:var(--ink-soft); cursor:pointer; text-align:left; width:100%; }
@@ -485,3 +481,4 @@ main{ padding:24px; overflow-x:auto; }
 .fluxo-etapa-head{ display:flex; align-items:flex-end; gap:10px; margin-bottom:10px; }
 .fluxo-etapa-numero{ flex-shrink:0; width:24px; height:24px; border-radius:999px; background:var(--accent); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; margin-bottom:9px; }
 .fluxo-etapa-dias-field{ flex:0 0 130px; }
+.settings-sep-line{ border-top:1px solid var(--line); margin:16px 0; }

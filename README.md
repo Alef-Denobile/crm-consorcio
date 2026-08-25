@@ -141,7 +141,9 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   clientes. Dá pra ter, por exemplo, um funil "Consórcio Imóvel" e
   outro "Consórcio Auto" totalmente separados. Contas criadas antes
   desse recurso ganham automaticamente um "Funil Principal" com as
-  colunas que já existiam — nada se perde
+  colunas que já existiam — nada se perde. Toda vez que uma coluna
+  nova é criada, abre um seletor pra escolher (um por um, ou "Selecionar
+  todos") quais clientes já existentes você quer puxar direto pra ela
 - **Leads** — todos os clientes em formato de tabela, com busca e
   filtro por etapa
 - **Comissões** — contratos de comissão por mês, com cálculo automático
@@ -332,6 +334,7 @@ ativar um fluxo com essa etapa, o painel avisa antes de confirmar.
 - `POST /api/auth/login` — `{ email, senha }` → retorna token
 - `POST /api/auth/google` — `{ credential }` (token do Google) → cria/liga conta e retorna token
 - `GET  /api/auth/me` — dados do usuário logado (exige token)
+- `PUT  /api/auth/nome` — `{ nome }` → muda o nome de exibição da conta
 - `PUT  /api/auth/password` — `{ senhaAtual, senhaNova }` → troca (ou define) a senha da conta
 
 **Painel (exigem token, sempre isoladas por usuário):**
