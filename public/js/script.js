@@ -1939,7 +1939,7 @@ function renderColumn(col){
             ? `<input class="col-name-input" id="col-rename-${col.id}" value="${esc(editingColName)}" />`
             : `<span class="col-name" data-action="edit-col-name" data-col-id="${col.id}" title="Clique para renomear">${esc(col.nome)}</span>`
           }
-          <button class="col-add-btn" data-action="open-new-card" data-col-id="${col.id}" title="Adicionar cliente">+</button>
+          <button class="col-add-btn" data-action="open-add-lead-choice" data-col-id="${col.id}" title="Adicionar cliente">+</button>
           <button class="col-menu-btn" data-action="toggle-col-menu" data-col-id="${col.id}">▾</button>
         </div>
         <div class="col-meta">
@@ -2247,6 +2247,13 @@ function renderConfiguracoesPage(){
           ${avatarMsg ? `<p class="settings-page-msg ${avatarMsg.tipo}">${esc(avatarMsg.texto)}</p>` : ''}
           <div class="settings-page-row"><span>Nome</span><span>${esc((currentUser && currentUser.nome) || '—')}</span></div>
           <div class="settings-page-row"><span>E-mail</span><span>${esc((currentUser && currentUser.email) || '—')}</span></div>
+
+          <div class="settings-sep-line"></div>
+
+          <div class="settings-page-subtitle">Sessões ativas</div>
+          <p class="settings-page-note">Desconecte todos os dispositivos onde você está logado — útil se perdeu um aparelho ou compartilhou sua senha. Você vai precisar entrar de novo aqui também.</p>
+          ${logoutAllMsg ? `<p class="settings-page-msg ${logoutAllMsg.tipo}">${esc(logoutAllMsg.texto)}</p>` : ''}
+          <button class="btn-danger" data-action="desconectar-todos" ${logoutAllEnviando?'disabled':''}>${logoutAllEnviando?'Desconectando…':'Desconectar todos os dispositivos'}</button>
         </div>
 
         <div class="settings-page-section">
@@ -2273,13 +2280,6 @@ function renderConfiguracoesPage(){
           </div>
           ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
           <button class="btn-primary" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Mudar senha'}</button>
-        </div>
-
-        <div class="settings-page-section">
-          <h3>Sessões ativas</h3>
-          <p class="settings-page-note">Desconecte todos os dispositivos onde você está logado — útil se perdeu um aparelho ou compartilhou sua senha. Você vai precisar entrar de novo aqui também.</p>
-          ${logoutAllMsg ? `<p class="settings-page-msg ${logoutAllMsg.tipo}">${esc(logoutAllMsg.texto)}</p>` : ''}
-          <button class="btn-outline" data-action="desconectar-todos" ${logoutAllEnviando?'disabled':''}>${logoutAllEnviando?'Desconectando…':'Desconectar todos os dispositivos'}</button>
         </div>
       </div>
     </section>
@@ -2799,6 +2799,9 @@ function bindAppEvents(){
   });
 
   /* -- Pipeline / Leads: cards -- */
+  app.querySelectorAll('[data-action="open-add-lead-choice"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirEscolhaAdicionarLead(btn.dataset.colId));
+  });
   app.querySelectorAll('[data-action="open-new-card"]').forEach(btn=>{
     btn.addEventListener('click', ()=> openNewCard(btn.dataset.colId));
   });
@@ -3812,7 +3815,37 @@ function openEditFluxo(id){
 }
 function closeFluxoModal(){ fluxoModalForm = null; document.getElementById('modal-root').innerHTML=''; }
 
-/* ---------- modal: puxar leads existentes pra uma coluna recém-criada ---------- */
+/* ---------- modal: escolher entre novo cliente ou transferir existente ---------- */
+function abrirEscolhaAdicionarLead(colId){
+  const root = document.getElementById('modal-root');
+  const coluna = board.columns.find(c=>c.id===colId);
+  root.innerHTML = `
+    <div class="overlay" id="add-lead-choice-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Adicionar cliente em "${esc(coluna?coluna.nome:'')}"</h3>
+          <button id="add-lead-choice-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <button type="button" class="add-lead-choice-btn" id="add-lead-choice-novo">
+            <span class="add-lead-choice-title">+ Novo cliente</span>
+            <span class="add-lead-choice-desc">Cadastrar um cliente que ainda não existe no CRM</span>
+          </button>
+          <button type="button" class="add-lead-choice-btn" id="add-lead-choice-transferir">
+            <span class="add-lead-choice-title">Transferir cliente existente</span>
+            <span class="add-lead-choice-desc">Mover pra cá quem já está cadastrado em outra coluna ou funil</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('add-lead-choice-close').addEventListener('click', ()=>{ root.innerHTML=''; });
+  document.getElementById('add-lead-choice-overlay').addEventListener('click', (e)=>{ if(e.target.id==='add-lead-choice-overlay') root.innerHTML=''; });
+  document.getElementById('add-lead-choice-novo').addEventListener('click', ()=> openNewCard(colId));
+  document.getElementById('add-lead-choice-transferir').addEventListener('click', ()=> abrirPickerLeadsParaColuna(colId));
+}
+
+/* ---------- modal: puxar leads existentes pra uma coluna (recém-criada ou não) ---------- */
 function abrirPickerLeadsParaColuna(colId){
   colunaLeadsPickerColId = colId;
   colunaLeadsSelecionados = new Set();

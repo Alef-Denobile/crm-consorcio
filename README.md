@@ -141,9 +141,12 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   clientes. Dá pra ter, por exemplo, um funil "Consórcio Imóvel" e
   outro "Consórcio Auto" totalmente separados. Contas criadas antes
   desse recurso ganham automaticamente um "Funil Principal" com as
-  colunas que já existiam — nada se perde. Toda vez que uma coluna
-  nova é criada, abre um seletor pra escolher (um por um, ou "Selecionar
-  todos") quais clientes já existentes você quer puxar direto pra ela.
+  colunas que já existiam — nada se perde. O botão "+" no cabeçalho
+  de cada coluna agora pergunta primeiro "Novo cliente" ou "Transferir
+  cliente existente" — a segunda opção abre o mesmo seletor (um por
+  um, ou "Selecionar todos") usado ao criar uma coluna, mas disponível
+  a qualquer momento, em qualquer coluna — inclusive pra trazer um
+  cliente de volta de outro funil.
   As estatísticas agora incluem **Ticket médio** e **Valor ponderado**
   (esse último usa a "chance de fechar" de cada coluna, configurável
   no menu dela — só faz sentido pras colunas "em aberto"). Tem também
