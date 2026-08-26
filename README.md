@@ -142,11 +142,13 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
   outro "Consórcio Auto" totalmente separados. Contas criadas antes
   desse recurso ganham automaticamente um "Funil Principal" com as
   colunas que já existiam — nada se perde. O botão "+" no cabeçalho
-  de cada coluna agora pergunta primeiro "Novo cliente" ou "Transferir
-  cliente existente" — a segunda opção abre o mesmo seletor (um por
-  um, ou "Selecionar todos") usado ao criar uma coluna, mas disponível
-  a qualquer momento, em qualquer coluna — inclusive pra trazer um
-  cliente de volta de outro funil.
+  de cada coluna agora pergunta primeiro entre três opções: "Novo
+  cliente", "Transferir cliente existente" (move de verdade, some de
+  onde estava) ou "Copiar cliente existente" (cria uma cópia
+  independente aqui, mantendo o original intacto onde já estava —
+  útil pra acompanhar a mesma pessoa em mais de um funil). As duas
+  últimas usam o mesmo seletor (um por um, ou "Selecionar todos"),
+  disponível a qualquer momento, em qualquer coluna.
   As estatísticas agora incluem **Ticket médio** e **Valor ponderado**
   (esse último usa a "chance de fechar" de cada coluna, configurável
   no menu dela — só faz sentido pras colunas "em aberto"). Tem também
@@ -242,8 +244,11 @@ dentro do card — acessível pelo botão "Ver conversa" no modal de edição.
 ⚠️ **Sobre o primeiro contato:** a API só deixa mandar texto livre pra
 quem já te escreveu nas últimas 24h. Pra iniciar uma conversa com
 alguém que nunca falou com você, é preciso usar um "modelo de mensagem"
-aprovado pela Meta — isso não está implementado ainda (só o envio de
-texto livre, pra quando o cliente inicia ou responde).
+aprovado pela Meta — crie e acompanhe o status deles em Configurações
+→ Integrações → **Templates de mensagem** (cria e manda pra aprovação
+da Meta direto pelo painel; "Sincronizar da Meta" atualiza o status de
+cada um: aprovado, em análise ou rejeitado). Pra usar um template já
+aprovado, vá em Disparos e ligue a opção "Usar modelo de mensagem".
 
 ⚠️ **Custo:** a Meta cobra por conversa iniciada (varia por categoria e
 país), geralmente com uma cota gratuita mensal. Consulte a página de
@@ -320,6 +325,14 @@ de erro ao clicar.
   lista de 2 a 4 alertas curtos sobre o estado atual do funil (não
   gera sozinho, só quando você pede — pra não pesar a tela nem gastar
   chamadas de API à toa)
+- **IA proativa em Negociações** — diferente dos recursos acima (que
+  só geram quando você pede), essa analisa a conversa sozinha toda
+  vez que o cliente responde no WhatsApp e deixa uma sugestão de
+  mensagem de follow-up + tarefa prontas dentro do card — mas nunca
+  envia nada nem cria nada sozinha, sempre espera você confirmar.
+  Liga em Configurações → Integrações → WhatsApp Business API, sem
+  precisar de confirmação especial pra ativar (não tem risco de
+  mandar mensagem indevida, porque não manda nada)
 
 ### ⚠️ Agente IA autônomo (opcional, desligado por padrão)
 
@@ -340,6 +353,35 @@ segurança (fica 30 min em silêncio se um humano respondeu
 manualmente) — mas é diferente do agente: aqui a mensagem é o texto
 exato que você escreveu, não algo gerado pela IA na hora. Ao criar ou
 ativar um fluxo com essa etapa, o painel avisa antes de confirmar.
+
+## Menu de triagem (fluxo de primeiro contato)
+
+Em Configurações → Integrações → WhatsApp Business API: quando alguém
+manda mensagem pela primeira vez (número que ainda não é lead seu), o
+CRM responde automaticamente com uma mensagem de menu que você
+escreve (ex: "1 - Simulação, 2 - Já sou cliente..."). Quando a pessoa
+responde com um número que bate com uma das opções configuradas, o
+lead é movido pra coluna escolhida e (se você preencheu) uma mensagem
+de confirmação é enviada. Se a resposta não bater com nenhuma opção,
+o CRM simplesmente segue o fluxo normal (sem travar nada).
+
+⚠️ Como isso manda mensagem automática pra qualquer contato novo, o
+painel pede confirmação antes de salvar com o menu ativado.
+
+Limitação atual: mover o lead pela resposta do menu **não** dispara
+Automações nem Fluxos ligados àquela coluna (só o "arrastar" manual,
+criar direto na coluna, transferir/copiar, ou os processadores de
+Automações/Fluxos disparam isso hoje).
+
+## Mensagens agendadas
+
+Nova aba "Agendamentos" na barra lateral: agende uma mensagem de
+WhatsApp pra um cliente específico, numa data e hora futura. Um
+painel mostra quantas estão a enviar, já enviadas, canceladas ou que
+falharam. O servidor confere a cada **5 minutos** se alguma já passou
+do horário — é um pouco mais frequente que os outros verificadores
+(Automações e Fluxos rodam de hora em hora), justamente pra respeitar
+melhor o horário escolhido.
 
 **Autenticação (públicas):**
 - `POST /api/auth/register` — `{ nome, email, senha }` → cria conta + funil padrão
@@ -412,9 +454,13 @@ ativar um fluxo com essa etapa, o painel avisa antes de confirmar.
 - `POST /api/whatsapp/enviar` — `{ cardId, texto }` → envia mensagem (exige token)
 - `GET  /api/whatsapp/conversas` — lista todas as conversas, ordenadas pela mais recente (exige token)
 - `POST /api/whatsapp/disparo` — `{ cardIds, texto }` ou `{ cardIds, usarTemplate:true, templateName, idioma, variaveis }` → envia (exige token)
-- `GET  /api/whatsapp/templates` — lista os modelos de mensagem aprovados (exige token e WABA ID configurado)
+- `GET  /api/whatsapp/templates` — lista os modelos de mensagem com status (aprovado/em análise/rejeitado) (exige token e WABA ID configurado)
+- `POST /api/whatsapp/templates` — `{ nome, categoria, idioma, texto }` → cria um template e manda pra aprovação da Meta (exige token e WABA ID configurado)
 - `POST /api/whatsapp/enviar-template` — `{ cardId, templateName, idioma, variaveis }` → envia um modelo (exige token)
 - `POST /api/whatsapp/agente-ia` — `{ ativo }` → liga/desliga o agente que responde clientes sozinho (exige token)
+- `POST /api/whatsapp/ia-proativa` — `{ ativo }` → liga/desliga a IA que só sugere no card (exige token)
+- `GET  /api/whatsapp/menu-triagem` — configuração atual do menu de primeiro contato (exige token)
+- `PUT  /api/whatsapp/menu-triagem` — `{ ativo, mensagemInicial, opcoes }` → salva o menu de triagem (exige token)
 
 **Automações (exigem token):**
 - `GET  /api/automacoes` — lista as automações do usuário
@@ -427,6 +473,12 @@ ativar um fluxo com essa etapa, o painel avisa antes de confirmar.
 - `POST /api/fluxos` — `{ nome, colunaGatilhoId, etapas }` → cria
 - `PUT  /api/fluxos/:id` — edita (nome, coluna, etapas, ativo/inativo)
 - `DELETE /api/fluxos/:id` — exclui (e apaga as execuções em andamento)
+
+**Agendamentos (exigem token):**
+- `GET  /api/agendamentos` — lista as mensagens agendadas, com contagem por status
+- `POST /api/agendamentos` — `{ cardId, texto, agendadoPara }` → agenda uma nova mensagem
+- `POST /api/agendamentos/:id/cancelar` — cancela uma pendente
+- `DELETE /api/agendamentos/:id` — remove da lista (qualquer status)
 
 **Instagram/Facebook Lead Ads:**
 - `GET  /api/instagram/webhook` — verificação do webhook (chamada pela Meta, não chame direto)

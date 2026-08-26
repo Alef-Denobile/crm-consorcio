@@ -20,6 +20,13 @@ const cardSchema = new mongoose.Schema(
     mes: { type: String, default: '' }, // formato "YYYY-MM"
     colunaDesde: { type: Date, default: Date.now }, // quando entrou na coluna atual — usado pelas automações por tempo
     automacoesDisparadas: { type: [mongoose.Schema.Types.ObjectId], default: [] }, // evita repetir a mesma automação por tempo no mesmo card
+    sugestaoIA: {
+      texto: { type: String, default: null },
+      tarefaTitulo: { type: String, default: null },
+      tarefaDias: { type: Number, default: null },
+      geradaEm: { type: Date, default: null },
+    },
+    aguardandoMenuTriagem: { type: Boolean, default: false }, // true logo depois de mandar o menu de triagem, até a pessoa responder
   },
   {
     timestamps: true,

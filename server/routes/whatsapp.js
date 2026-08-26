@@ -97,6 +97,39 @@ Responda só com o texto da mensagem, pronto para enviar, sem aspas nem explica�
 }
 
 // Decide se o agente deve responder e, se sim, gera e envia a mensagem sozinho.
+// Gera uma sugestão (mensagem de follow-up + tarefa) a partir da conversa, e guarda
+// no card pro humano revisar quando quiser. Nunca envia nada sozinha.
+async function gerarSugestaoProativa(user, card) {
+  try {
+    const mensagens = await Message.find({ cardId: card._id }).sort({ timestamp: 1 }).limit(20);
+    const historico = mensagens
+      .slice(-8)
+      .map((m) => `${m.direction === 'in' ? 'Cliente' : 'Você'}: ${m.texto}`)
+      .join('\n');
+    const prompt = `Você é um assistente de vendas de consórcios. Com base na conversa abaixo, sugira o próximo passo. Responda em exatamente três linhas, nada além disso:
+Linha 1: uma mensagem de follow-up curta, pronta pra enviar, sem aspas
+Linha 2: um título curto de tarefa de acompanhamento
+Linha 3: só um número — em quantos dias essa tarefa deveria vencer
+
+Cliente: ${card.cliente}
+Qualificação: ${card.temperatura}
+Conversa recente:
+${historico}`;
+    const texto = await perguntarClaude(prompt, { maxTokens: 200 });
+    const linhas = texto.split('\n').map((l) => l.trim()).filter(Boolean);
+    await Card.findByIdAndUpdate(card._id, {
+      sugestaoIA: {
+        texto: linhas[0] || '',
+        tarefaTitulo: linhas[1] || '',
+        tarefaDias: parseInt((linhas[2] || '3').replace(/\D/g, ''), 10) || 3,
+        geradaEm: new Date(),
+      },
+    });
+  } catch (err) {
+    console.error('Erro ao gerar sugestão proativa:', err.message);
+  }
+}
+
 // Fica em silêncio se um humano respondeu esse cliente nos últimos 30 minutos —
 // pra nunca "brigar" com quem está atendendo manualmente.
 async function tentarResponderComAgente(user, card) {
@@ -164,6 +197,7 @@ router.post('/webhook', async (req, res) => {
     for (const msg of value.messages || []) {
       const telefone = normalizarTelefone(msg.from);
       let card = await Card.findOne({ userId: user._id, telefoneNormalizado: telefone });
+      let eraContatoNovo = false;
 
       if (!card) {
         // mensagem de um número que ainda não existe no funil — cria um lead novo automaticamente
@@ -182,6 +216,7 @@ router.post('/webhook', async (req, res) => {
           obs: '',
           mes: new Date().toISOString().slice(0, 7),
         });
+        eraContatoNovo = true;
       }
 
       const texto = msg.text ? msg.text.body : '[mensagem em formato não suportado]';
@@ -194,8 +229,49 @@ router.post('/webhook', async (req, res) => {
         timestamp: msg.timestamp ? new Date(parseInt(msg.timestamp, 10) * 1000) : new Date(),
       });
 
-      if (user.whatsappBusiness.agenteIaAtivo) {
+      let tratadoPeloMenu = false;
+
+      // contato novo + menu de triagem ativo -> manda o menu e espera a resposta
+      if (eraContatoNovo && user.menuTriagem && user.menuTriagem.ativo && user.menuTriagem.mensagemInicial) {
+        try {
+          await enviarMensagemGraph(user, card, user.menuTriagem.mensagemInicial);
+          await Message.create({
+            userId: user._id, cardId: card._id, direction: 'out',
+            texto: user.menuTriagem.mensagemInicial, status: 'sent', timestamp: new Date(), enviadoPorAgente: true,
+          });
+          await Card.findByIdAndUpdate(card._id, { aguardandoMenuTriagem: true });
+          tratadoPeloMenu = true;
+        } catch (e) {
+          console.error('Erro ao enviar menu de triagem:', e.message);
+        }
+      } else if (card.aguardandoMenuTriagem) {
+        // já mandamos o menu antes — confere se a resposta bate com alguma opção
+        const escolha = (texto || '').trim();
+        const opcao = (user.menuTriagem.opcoes || []).find((o) => o.numero === escolha);
+        if (opcao) {
+          await Card.findByIdAndUpdate(card._id, { columnId: opcao.colunaDestinoId, aguardandoMenuTriagem: false });
+          if (opcao.respostaConfirmacao) {
+            try {
+              await enviarMensagemGraph(user, card, opcao.respostaConfirmacao);
+              await Message.create({
+                userId: user._id, cardId: card._id, direction: 'out',
+                texto: opcao.respostaConfirmacao, status: 'sent', timestamp: new Date(), enviadoPorAgente: true,
+              });
+            } catch (e) {
+              console.error('Erro ao enviar confirmação do menu:', e.message);
+            }
+          }
+          tratadoPeloMenu = true;
+        } else {
+          await Card.findByIdAndUpdate(card._id, { aguardandoMenuTriagem: false }); // resposta não bateu — segue o fluxo normal
+        }
+      }
+
+      if (!tratadoPeloMenu && user.whatsappBusiness.agenteIaAtivo) {
         await tentarResponderComAgente(user, card);
+      }
+      if (!tratadoPeloMenu && user.whatsappBusiness.iaProativaAtiva) {
+        gerarSugestaoProativa(user, card); // roda em segundo plano, não precisa esperar
       }
     }
 
@@ -221,9 +297,66 @@ router.get('/status', auth, async (req, res) => {
       user.whatsappBusiness.phoneNumberId
     );
     const agenteIaAtivo = !!(user && user.whatsappBusiness && user.whatsappBusiness.agenteIaAtivo);
-    res.json({ connected: conectado, agenteIaAtivo });
+    const iaProativaAtiva = !!(user && user.whatsappBusiness && user.whatsappBusiness.iaProativaAtiva);
+    res.json({ connected: conectado, agenteIaAtivo, iaProativaAtiva });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao verificar a conexão com o WhatsApp.' });
+  }
+});
+
+// POST /api/whatsapp/ia-proativa -> liga/desliga a IA que só sugere no card (nunca envia nada)
+router.post('/ia-proativa', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) {
+      return res.status(400).json({ error: 'Conecte o WhatsApp Business antes de ativar a IA proativa.' });
+    }
+    await User.findByIdAndUpdate(req.userId, { 'whatsappBusiness.iaProativaAtiva': !!req.body.ativo });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao atualizar a IA proativa.' });
+  }
+});
+
+// GET /api/whatsapp/menu-triagem -> configuração atual do menu de triagem de primeiro contato
+router.get('/menu-triagem', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    res.json({ menuTriagem: (user && user.toJSON().menuTriagem) || { ativo: false, mensagemInicial: '', opcoes: [] } });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao carregar o menu de triagem.' });
+  }
+});
+
+// PUT /api/whatsapp/menu-triagem -> salva a configuração do menu de triagem
+router.put('/menu-triagem', auth, async (req, res) => {
+  try {
+    const { ativo, mensagemInicial, opcoes } = req.body;
+    if (ativo) {
+      if (!mensagemInicial || !mensagemInicial.trim()) {
+        return res.status(400).json({ error: 'Escreva a mensagem inicial do menu.' });
+      }
+      if (!Array.isArray(opcoes) || !opcoes.length) {
+        return res.status(400).json({ error: 'Adicione ao menos uma opção.' });
+      }
+      for (const op of opcoes) {
+        if (!op.numero || !op.colunaDestinoId || !mongoose.isValidObjectId(op.colunaDestinoId)) {
+          return res.status(400).json({ error: 'Cada opção precisa de um número e uma coluna de destino válida.' });
+        }
+      }
+    }
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      {
+        'menuTriagem.ativo': !!ativo,
+        'menuTriagem.mensagemInicial': mensagemInicial || '',
+        'menuTriagem.opcoes': Array.isArray(opcoes) ? opcoes : [],
+      },
+      { new: true, runValidators: true }
+    );
+    res.json({ menuTriagem: user.toJSON().menuTriagem });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao salvar o menu de triagem.' });
   }
 });
 
@@ -368,15 +501,60 @@ router.get('/templates', auth, async (req, res) => {
     if (!user.whatsappBusiness.wabaId) {
       return res.status(400).json({ error: 'Cadastre o WABA ID em Configurações pra listar os modelos automaticamente.' });
     }
-    const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.wabaId}/message_templates?fields=name,status,language&limit=100`, {
+    const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.wabaId}/message_templates?fields=name,status,language,category&limit=100`, {
       headers: { Authorization: `Bearer ${user.whatsappBusiness.accessToken}` },
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error((data.error && data.error.message) || 'Erro ao buscar os modelos.');
-    const aprovados = (data.data || []).filter((t) => t.status === 'APPROVED');
-    res.json({ templates: aprovados.map((t) => ({ nome: t.name, idioma: t.language })) });
+    const templates = (data.data || []).map((t) => ({
+      nome: t.name,
+      idioma: t.language,
+      status: t.status,
+      categoria: t.category,
+    }));
+    res.json({ templates });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Erro ao buscar os modelos de mensagem.' });
+  }
+});
+
+// POST /api/whatsapp/templates -> cria um novo template e manda pra aprovação da Meta
+router.post('/templates', auth, async (req, res) => {
+  try {
+    const { nome, categoria, idioma, texto } = req.body;
+    if (!nome || !nome.trim()) return res.status(400).json({ error: 'Informe o nome do template.' });
+    if (!texto || !texto.trim()) return res.status(400).json({ error: 'Informe o texto da mensagem.' });
+    const categoriasValidas = ['MARKETING', 'UTILITY', 'AUTHENTICATION'];
+    const categoriaFinal = categoriasValidas.includes(categoria) ? categoria : 'MARKETING';
+    const nomeFinal = nome.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+
+    const user = await User.findById(req.userId);
+    if (!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) {
+      return res.status(400).json({ error: 'WhatsApp Business não está conectado.' });
+    }
+    if (!user.whatsappBusiness.wabaId) {
+      return res.status(400).json({ error: 'Cadastre o WABA ID em Configurações antes de criar templates.' });
+    }
+
+    const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.wabaId}/message_templates`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user.whatsappBusiness.accessToken}`,
+      },
+      body: JSON.stringify({
+        name: nomeFinal,
+        language: idioma || 'pt_BR',
+        category: categoriaFinal,
+        components: [{ type: 'BODY', text: texto }],
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error((data.error && data.error.message) || 'Erro ao criar o template na Meta.');
+
+    res.status(201).json({ nome: nomeFinal, status: 'PENDING' });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao criar o template.' });
   }
 });
 

@@ -495,3 +495,18 @@ main{ padding:24px; overflow-x:auto; }
 .add-lead-choice-btn:hover{ border-color:var(--accent); background:var(--hover-tint); }
 .add-lead-choice-title{ font-size:14px; font-weight:700; color:var(--ink); }
 .add-lead-choice-desc{ font-size:12px; color:var(--ink-soft); }
+
+/* ---------- lista de templates de mensagem ---------- */
+.templates-list{ display:flex; flex-direction:column; gap:2px; margin-top:10px; }
+.template-item{ display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px; }
+.template-item:last-child{ border-bottom:none; }
+.template-item-nome{ color:var(--ink); font-weight:500; }
+.template-item-status{ font-size:11px; font-weight:600; }
+.template-status-approved{ color:#2ea043; }
+.template-status-pending{ color:#d4a72c; }
+.template-status-rejected{ color:var(--danger); }
+
+/* ---------- menu de triagem (opções) ---------- */
+.mt-opcoes-lista{ display:flex; flex-direction:column; gap:10px; margin:12px 0; }
+.mt-opcao-card{ background:var(--col-bg); border:1px solid var(--line); border-radius:10px; padding:12px; }
+.mt-opcao-numero-field{ flex:0 0 70px; }

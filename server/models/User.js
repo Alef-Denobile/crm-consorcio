@@ -16,6 +16,24 @@ const whatsappBusinessSchema = new mongoose.Schema(
     accessToken: { type: String, default: null },
     wabaId: { type: String, default: null },
     agenteIaAtivo: { type: Boolean, default: false }, // responde clientes sozinho, sem revisão humana
+    iaProativaAtiva: { type: Boolean, default: false }, // só sugere no card, nunca envia nada sozinha
+  },
+  { _id: false }
+);
+
+const menuTriagemOpcaoSchema = new mongoose.Schema(
+  {
+    numero: { type: String, required: true, trim: true },
+    colunaDestinoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Column', required: true },
+    respostaConfirmacao: { type: String, default: '' },
+  },
+  { _id: false }
+);
+const menuTriagemSchema = new mongoose.Schema(
+  {
+    ativo: { type: Boolean, default: false },
+    mensagemInicial: { type: String, default: '' },
+    opcoes: { type: [menuTriagemOpcaoSchema], default: [] },
   },
   { _id: false }
 );
@@ -37,6 +55,7 @@ const userSchema = new mongoose.Schema(
     googleCalendar: { type: googleCalendarSchema, default: () => ({}) },
     whatsappBusiness: { type: whatsappBusinessSchema, default: () => ({}) },
     instagramLeads: { type: instagramLeadsSchema, default: () => ({}) },
+    menuTriagem: { type: menuTriagemSchema, default: () => ({ opcoes: [] }) },
     equipeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipe', default: null },
     papelEquipe: { type: String, enum: ['supervisor', 'membro'], default: 'membro' },
     tokenVersion: { type: Number, default: 0 }, // incrementar invalida todos os tokens já emitidos (logout geral)
@@ -59,6 +78,11 @@ const userSchema = new mongoose.Schema(
         ret.instagramConnected = !!(ret.instagramLeads && ret.instagramLeads.pageAccessToken && ret.instagramLeads.pageId);
         delete ret.instagramLeads; // token de acesso nunca sai do servidor
         ret.equipeId = ret.equipeId ? ret.equipeId.toString() : null;
+        if (ret.menuTriagem && Array.isArray(ret.menuTriagem.opcoes)) {
+          ret.menuTriagem.opcoes.forEach((op) => {
+            if (op.colunaDestinoId) op.colunaDestinoId = op.colunaDestinoId.toString();
+          });
+        }
       },
     },
   }

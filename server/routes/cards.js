@@ -121,6 +121,24 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/cards/:id/sugestao-ia -> descarta a sugestão da IA proativa daquele card
+router.delete('/:id/sugestao-ia', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ error: 'ID inválido.' });
+    }
+    const card = await Card.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { sugestaoIA: { texto: null, tarefaTitulo: null, tarefaDias: null, geradaEm: null } },
+      { new: true }
+    );
+    if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    res.json(card.toJSON());
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao descartar a sugestão.' });
+  }
+});
+
 // PUT /api/cards/:id/move -> usado no drag and drop entre colunas
 router.put('/:id/move', async (req, res) => {
   try {

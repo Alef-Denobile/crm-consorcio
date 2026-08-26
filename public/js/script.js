@@ -62,6 +62,7 @@ const ICON_CHAT_INTERNO = `<svg width="17" height="17" viewBox="0 0 24 24" fill=
 const ICON_SUPERVISAO = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>`;
 const ICON_AUTOMACOES = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
 const ICON_FLUXOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="12" r="2"/><path d="M5 8v8"/><path d="M7 6h6a4 4 0 0 1 4 4"/><path d="M7 18h6a4 4 0 0 0 4-4"/></svg>`;
+const ICON_AGENDAMENTOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14v3l2 1"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -151,6 +152,17 @@ let whatsappConnected = false;
 let whatsappSalvando = false;
 let whatsappConfigMsg = null;
 let agenteIaAtivo = false;
+let iaProativaAtiva = false;
+let agendamentos = [];
+let agendamentosContagem = { pendente:0, enviada:0, cancelada:0, falhou:0 };
+let agendamentosLoaded = false;
+let agendamentoModalForm = null;
+let agendamentoSalvando = false;
+let agendamentoMsg = null;
+let menuTriagem = { ativo:false, mensagemInicial:'', opcoes:[] };
+let menuTriagemCarregado = false;
+let menuTriagemSalvando = false;
+let menuTriagemMsg = null;
 let instagramConnected = false;
 let instagramSalvando = false;
 let instagramConfigMsg = null;
@@ -168,6 +180,13 @@ let disparoTemplateNome = '';
 let disparoTemplateIdioma = 'pt_BR';
 let disparoTemplateVariaveis = '';
 let disparoTemplatesDisponiveis = [];
+let templatesList = [];
+let templatesCarregados = false;
+let templatesSincronizando = false;
+let templatesMsg = null;
+let templateModalForm = null;
+let templateSalvando = false;
+let templateMsg = null;
 let funis = [];
 let funisLoaded = false;
 let funilAtualId = null;
@@ -192,6 +211,7 @@ let fluxos = [];
 let fluxosLoaded = false;
 let fluxoModalForm = null;
 let colunaLeadsPickerColId = null;
+let colunaLeadsPickerModo = 'transferir';
 let colunaLeadsSelecionados = new Set();
 let colunaLeadsMovendo = false;
 let contratos = [];
@@ -356,9 +376,52 @@ async function loadWhatsappStatus(){
     const data = await apiRequest('GET', '/whatsapp/status');
     whatsappConnected = !!data.connected;
     agenteIaAtivo = !!data.agenteIaAtivo;
+    iaProativaAtiva = !!data.iaProativaAtiva;
   }catch(e){
     whatsappConnected = false;
   }
+  renderApp();
+}
+async function definirIaProativa(ativo){
+  try{
+    await apiRequest('POST', '/whatsapp/ia-proativa', { ativo });
+    iaProativaAtiva = ativo;
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível atualizar a IA proativa.';
+  }
+  renderApp();
+}
+
+/* ---------- Menu de triagem (fluxo de primeiro contato) ---------- */
+async function loadMenuTriagem(){
+  try{
+    const data = await apiRequest('GET', '/whatsapp/menu-triagem');
+    menuTriagem = data.menuTriagem || { ativo:false, mensagemInicial:'', opcoes:[] };
+  }catch(e){
+    menuTriagem = { ativo:false, mensagemInicial:'', opcoes:[] };
+  }
+  menuTriagemCarregado = true;
+  renderApp();
+}
+async function salvarMenuTriagem(){
+  if(menuTriagem.ativo){
+    if(!menuTriagem.mensagemInicial.trim() || !menuTriagem.opcoes.length){
+      menuTriagemMsg = { tipo:'erro', texto:'Escreva a mensagem inicial e adicione ao menos uma opção antes de ativar.' };
+      renderApp();
+      return;
+    }
+  }
+  menuTriagemSalvando = true;
+  menuTriagemMsg = null;
+  renderApp();
+  try{
+    const data = await apiRequest('PUT', '/whatsapp/menu-triagem', menuTriagem);
+    menuTriagem = data.menuTriagem;
+    menuTriagemMsg = { tipo:'ok', texto:'Menu salvo.' };
+  }catch(e){
+    menuTriagemMsg = { tipo:'erro', texto: e.message || 'Não foi possível salvar o menu.' };
+  }
+  menuTriagemSalvando = false;
   renderApp();
 }
 async function definirAgenteIa(ativo){
@@ -679,6 +742,110 @@ async function excluirFluxo(id){
   }
 }
 
+/* ---------- Agendamentos ---------- */
+async function loadAgendamentos(){
+  try{
+    const data = await apiRequest('GET', '/agendamentos');
+    agendamentos = data.mensagens || [];
+    agendamentosContagem = data.contagem || { pendente:0, enviada:0, cancelada:0, falhou:0 };
+  }catch(e){
+    agendamentos = [];
+  }
+  agendamentosLoaded = true;
+  renderApp();
+}
+function agendamentoStatusLabel(status){
+  if(status==='enviada') return '✓ Enviada';
+  if(status==='cancelada') return 'Cancelada';
+  if(status==='falhou') return '⚠ Falhou';
+  return '⏳ A enviar';
+}
+function openNewAgendamento(){
+  agendamentoModalForm = { cardId:'', texto:'', data:'', hora:'' };
+  agendamentoMsg = null;
+  renderAgendamentoModal();
+}
+function closeAgendamentoModal(){ agendamentoModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+async function salvarAgendamento(){
+  const f = agendamentoModalForm;
+  if(!f.cardId || !f.texto.trim() || !f.data || !f.hora){
+    agendamentoMsg = { tipo:'erro', texto:'Preencha o cliente, a data, a hora e a mensagem.' };
+    renderAgendamentoModal();
+    return;
+  }
+  const agendadoPara = new Date(`${f.data}T${f.hora}:00`);
+  agendamentoSalvando = true;
+  agendamentoMsg = null;
+  renderAgendamentoModal();
+  try{
+    await apiRequest('POST', '/agendamentos', { cardId: f.cardId, texto: f.texto, agendadoPara: agendadoPara.toISOString() });
+    closeAgendamentoModal();
+    await loadAgendamentos();
+  }catch(e){
+    agendamentoMsg = { tipo:'erro', texto: e.message || 'Não foi possível agendar a mensagem.' };
+    agendamentoSalvando = false;
+    renderAgendamentoModal();
+  }
+}
+async function cancelarAgendamento(id){
+  try{
+    await apiRequest('POST', `/agendamentos/${id}/cancelar`);
+    await loadAgendamentos();
+  }catch(e){
+    errorMsg = 'Não foi possível cancelar o agendamento.';
+    renderApp();
+  }
+}
+function renderAgendamentoModal(){
+  const root = document.getElementById('modal-root');
+  if(!agendamentoModalForm){ root.innerHTML=''; return; }
+  const f = agendamentoModalForm;
+  const candidatos = board.cards.filter(c=>c.telefone);
+  root.innerHTML = `
+    <div class="overlay" id="ag-modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Nova mensagem agendada</h3>
+          <button id="ag-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Cliente</label>
+            <select id="ag-cliente">
+              <option value="">Selecione</option>
+              ${candidatos.map(c=>`<option value="${c.id}" ${f.cardId===c.id?'selected':''}>${esc(c.cliente)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Data</label><input type="date" id="ag-data" value="${f.data}" /></div>
+            <div class="field"><label>Hora</label><input type="time" id="ag-hora" value="${f.hora}" /></div>
+          </div>
+          <div class="field">
+            <label>Mensagem</label>
+            <textarea id="ag-texto" rows="4" placeholder="Texto que será enviado pelo WhatsApp...">${esc(f.texto)}</textarea>
+          </div>
+          ${agendamentoMsg ? `<p class="settings-page-msg ${agendamentoMsg.tipo}">${esc(agendamentoMsg.texto)}</p>` : ''}
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="ag-cancel">Cancelar</button>
+            <button class="btn-save" id="ag-salvar" ${agendamentoSalvando?'disabled':''}>${agendamentoSalvando?'Agendando…':'Agendar'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('ag-modal-close').addEventListener('click', closeAgendamentoModal);
+  document.getElementById('ag-cancel').addEventListener('click', closeAgendamentoModal);
+  document.getElementById('ag-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='ag-modal-overlay') closeAgendamentoModal(); });
+  document.getElementById('ag-cliente').addEventListener('change', (e)=> agendamentoModalForm.cardId = e.target.value);
+  document.getElementById('ag-data').addEventListener('input', (e)=> agendamentoModalForm.data = e.target.value);
+  document.getElementById('ag-hora').addEventListener('input', (e)=> agendamentoModalForm.hora = e.target.value);
+  document.getElementById('ag-texto').addEventListener('input', (e)=> agendamentoModalForm.texto = e.target.value);
+  document.getElementById('ag-salvar').addEventListener('click', salvarAgendamento);
+}
+
 async function criarEquipe(){
   const nome = equipeNomeNovo.trim();
   if(!nome){ equipeMsg = { tipo:'erro', texto:'Digite um nome para a equipe.' }; renderApp(); return; }
@@ -818,11 +985,148 @@ async function enviarDisparo(){
 async function carregarTemplatesDisponiveis(){
   try{
     const data = await apiRequest('GET', '/whatsapp/templates');
-    disparoTemplatesDisponiveis = data.templates || [];
+    disparoTemplatesDisponiveis = (data.templates || []).filter(t=>t.status==='APPROVED');
   }catch(e){
     errorMsg = e.message || 'Não foi possível carregar os modelos.';
   }
   renderApp();
+}
+
+/* ---------- Templates (página) ---------- */
+function renderMenuTriagemOpcao(op, idx){
+  return `
+    <div class="mt-opcao-card">
+      <div class="field-row">
+        <div class="field mt-opcao-numero-field">
+          <label>Número</label>
+          <input type="text" class="mt-opcao-numero" data-idx="${idx}" value="${esc(op.numero)}" maxlength="3" />
+        </div>
+        <div class="field" style="flex:1;">
+          <label>Coluna de destino</label>
+          <select class="mt-opcao-coluna" data-idx="${idx}">
+            ${board.columns.map(c=>`<option value="${c.id}" ${op.colunaDestinoId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+          </select>
+        </div>
+        <button type="button" class="icon-btn mt-opcao-remover" data-idx="${idx}" title="Remover opção">${ICON_TRASH}</button>
+      </div>
+      <div class="field">
+        <label>Mensagem de confirmação (opcional)</label>
+        <input type="text" class="mt-opcao-confirmacao" data-idx="${idx}" value="${esc(op.respostaConfirmacao||'')}" placeholder="Ex: Perfeito! Já te chamo por aqui." />
+      </div>
+    </div>
+  `;
+}
+function statusTemplateLabel(status){
+  if(status==='APPROVED') return '✓ Aprovado';
+  if(status==='PENDING') return '⏳ Em análise';
+  if(status==='REJECTED') return '✕ Rejeitado';
+  return status || '—';
+}
+async function loadTemplates(){
+  try{
+    const data = await apiRequest('GET', '/whatsapp/templates');
+    templatesList = data.templates || [];
+  }catch(e){
+    templatesList = [];
+  }
+  templatesCarregados = true;
+  renderApp();
+}
+async function sincronizarTemplates(){
+  templatesSincronizando = true;
+  templatesMsg = null;
+  renderApp();
+  try{
+    const data = await apiRequest('GET', '/whatsapp/templates');
+    templatesList = data.templates || [];
+    templatesMsg = { tipo:'ok', texto:'Lista atualizada.' };
+  }catch(e){
+    templatesMsg = { tipo:'erro', texto: e.message || 'Não foi possível sincronizar.' };
+  }
+  templatesSincronizando = false;
+  renderApp();
+}
+function openNewTemplateModal(){
+  templateModalForm = { nome:'', categoria:'MARKETING', idioma:'pt_BR', texto:'' };
+  templateMsg = null;
+  renderTemplateModal();
+}
+function closeTemplateModal(){ templateModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+async function enviarNovoTemplate(){
+  const f = templateModalForm;
+  if(!f.nome.trim() || !f.texto.trim()){
+    templateMsg = { tipo:'erro', texto:'Preencha o nome e o texto da mensagem.' };
+    renderTemplateModal();
+    return;
+  }
+  templateSalvando = true;
+  templateMsg = null;
+  renderTemplateModal();
+  try{
+    await apiRequest('POST', '/whatsapp/templates', {
+      nome: f.nome, categoria: f.categoria, idioma: f.idioma || 'pt_BR', texto: f.texto,
+    });
+    closeTemplateModal();
+    await loadTemplates();
+  }catch(e){
+    templateMsg = { tipo:'erro', texto: e.message || 'Não foi possível enviar o template.' };
+    templateSalvando = false;
+    renderTemplateModal();
+  }
+}
+function renderTemplateModal(){
+  const root = document.getElementById('modal-root');
+  if(!templateModalForm){ root.innerHTML=''; return; }
+  const f = templateModalForm;
+  root.innerHTML = `
+    <div class="overlay" id="tpl-modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Novo template</h3>
+          <button id="tpl-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Nome (só letras minúsculas e "_", sem espaço)</label>
+            <input type="text" id="tpl-nome" value="${esc(f.nome)}" placeholder="Ex: boas_vindas" />
+          </div>
+          <div class="field">
+            <label>Categoria</label>
+            <select id="tpl-categoria">
+              <option value="MARKETING" ${f.categoria==='MARKETING'?'selected':''}>Marketing</option>
+              <option value="UTILITY" ${f.categoria==='UTILITY'?'selected':''}>Utilidade</option>
+              <option value="AUTHENTICATION" ${f.categoria==='AUTHENTICATION'?'selected':''}>Autenticação</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Idioma</label>
+            <input type="text" id="tpl-idioma" value="${esc(f.idioma)}" placeholder="pt_BR" />
+          </div>
+          <div class="field">
+            <label>Texto da mensagem</label>
+            <textarea id="tpl-texto" rows="4" placeholder="Use {{1}}, {{2}} pra variáveis. Ex: Olá {{1}}, sua proposta está pronta!">${esc(f.texto)}</textarea>
+          </div>
+          <p class="settings-page-note">Depois de enviado, a Meta pode levar de minutos a alguns dias pra aprovar. Use "Sincronizar" na lista pra ver o status atualizado.</p>
+          ${templateMsg ? `<p class="settings-page-msg ${templateMsg.tipo}">${esc(templateMsg.texto)}</p>` : ''}
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="tpl-cancel">Cancelar</button>
+            <button class="btn-save" id="tpl-enviar" ${templateSalvando?'disabled':''}>${templateSalvando?'Enviando…':'Enviar pra aprovação'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('tpl-modal-close').addEventListener('click', closeTemplateModal);
+  document.getElementById('tpl-cancel').addEventListener('click', closeTemplateModal);
+  document.getElementById('tpl-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='tpl-modal-overlay') closeTemplateModal(); });
+  document.getElementById('tpl-nome').addEventListener('input', (e)=> templateModalForm.nome = e.target.value);
+  document.getElementById('tpl-categoria').addEventListener('change', (e)=> templateModalForm.categoria = e.target.value);
+  document.getElementById('tpl-idioma').addEventListener('input', (e)=> templateModalForm.idioma = e.target.value);
+  document.getElementById('tpl-texto').addEventListener('input', (e)=> templateModalForm.texto = e.target.value);
+  document.getElementById('tpl-enviar').addEventListener('click', enviarNovoTemplate);
 }
 
 /* ---------- Relatórios ---------- */
@@ -1658,6 +1962,7 @@ function renderApp(){
   else if(currentPage === 'disparos') pageHtml = renderDisparosPage();
   else if(currentPage === 'automacoes') pageHtml = renderAutomacoesPage();
   else if(currentPage === 'fluxos') pageHtml = renderFluxosPage();
+  else if(currentPage === 'agendamentos') pageHtml = renderAgendamentosPage();
   else if(currentPage === 'configuracoes') pageHtml = renderConfiguracoesPage();
   else if(currentPage === 'suporte') pageHtml = renderSuportePage();
   else if(currentPage === 'chat-interno') pageHtml = renderChatInternoPage();
@@ -1715,6 +2020,7 @@ function renderSidebar(){
     ['disparos', 'Disparos', ICON_DISPAROS],
     ['automacoes', 'Automações', ICON_AUTOMACOES],
     ['fluxos', 'Fluxos', ICON_FLUXOS],
+    ['agendamentos', 'Agendamentos', ICON_AGENDAMENTOS],
     ['tarefas', 'Tarefas', ICON_TASKS],
     ['chat-interno', 'Chat Interno', ICON_CHAT_INTERNO],
     ['supervisao', 'Supervisão', ICON_SUPERVISAO],
@@ -2318,6 +2624,15 @@ function renderConfiguracoesPage(){
               <span class="switch ${agenteIaAtivo?'on':''}" data-action="toggle-agente-ia" title="${agenteIaAtivo?'Ativado':'Desativado'}"><span class="switch-knob"></span></span>
             </div>
             ${agenteIaAtivo ? `<p class="settings-page-msg erro">⚠️ O agente está respondendo mensagens automaticamente, sem revisão sua. Ele fica em silêncio por 30 min sempre que você responder um cliente manualmente. Desative quando quiser assumir de vez.</p>` : `<p class="settings-page-note">Quando ativado, a IA responde sozinha as mensagens novas do WhatsApp — sem você revisar antes de enviar.</p>`}
+
+            <div class="settings-sep-line"></div>
+
+            <div class="settings-page-row">
+              <span>IA proativa (sugestões automáticas)</span>
+              <span class="switch ${iaProativaAtiva?'on':''}" data-action="toggle-ia-proativa" title="${iaProativaAtiva?'Ativada':'Desativada'}"><span class="switch-knob"></span></span>
+            </div>
+            <p class="settings-page-note">Analisa a conversa quando o cliente responde e deixa uma sugestão de mensagem e tarefa prontas no card — nunca envia nada sozinha, é sempre você quem decide usar.</p>
+
             <button class="btn-outline" data-action="desconectar-whatsapp">Desconectar</button>
           ` : `
             <div class="field">
@@ -2336,6 +2651,49 @@ function renderConfiguracoesPage(){
             <button class="btn-primary" data-action="salvar-whatsapp-config" ${whatsappSalvando?'disabled':''}>${whatsappSalvando?'Salvando…':'Conectar'}</button>
           `}
           <p class="settings-page-note">Requer conta comercial no Meta com o produto WhatsApp ativado. Passo a passo completo no README.</p>
+        </div>
+
+        <div class="settings-page-section">
+          <h3>Menu de triagem (primeiro contato)</h3>
+          <p class="settings-page-note">Quando alguém escreve pela primeira vez, manda esse menu automaticamente e move o lead pra coluna certa conforme a resposta (digitando o número da opção).</p>
+          <div class="field">
+            <label>Mensagem inicial</label>
+            <textarea id="mt-mensagem" rows="3" placeholder="Ex: Oi! Sobre o que você quer falar?&#10;1 - Simulação&#10;2 - Já sou cliente&#10;3 - Outro assunto">${esc(menuTriagem.mensagemInicial)}</textarea>
+          </div>
+          <div class="mt-opcoes-lista">
+            ${menuTriagem.opcoes.map((op, idx)=>renderMenuTriagemOpcao(op, idx)).join('')}
+          </div>
+          <button type="button" class="btn-outline" id="mt-add-opcao">+ Adicionar opção</button>
+
+          <div class="settings-sep-line"></div>
+
+          <div class="settings-page-row">
+            <span>Ativar menu de triagem</span>
+            <span class="switch ${menuTriagem.ativo?'on':''}" data-action="toggle-menu-triagem"><span class="switch-knob"></span></span>
+          </div>
+          ${menuTriagem.ativo ? `<p class="settings-page-msg erro">⚠️ O menu é enviado automaticamente pra qualquer contato novo, sem revisão sua.</p>` : ''}
+          ${menuTriagemMsg ? `<p class="settings-page-msg ${menuTriagemMsg.tipo}">${esc(menuTriagemMsg.texto)}</p>` : ''}
+          <button class="btn-primary" id="mt-salvar" ${menuTriagemSalvando?'disabled':''}>${menuTriagemSalvando?'Salvando…':'Salvar menu'}</button>
+        </div>
+
+        <div class="settings-page-section">
+          <h3>Templates de mensagem</h3>
+          <p class="settings-page-note">Crie modelos e envie pra aprovação da Meta. "Sincronizar" atualiza o status de cada um (aprovado, em análise ou rejeitado).</p>
+          <div class="settings-btn-row">
+            <button class="btn-outline" data-action="sincronizar-templates" ${templatesSincronizando?'disabled':''}>${templatesSincronizando?'Sincronizando…':'Sincronizar da Meta'}</button>
+            <button class="btn-primary" data-action="open-new-template">+ Novo template</button>
+          </div>
+          ${templatesMsg ? `<p class="settings-page-msg ${templatesMsg.tipo}">${esc(templatesMsg.texto)}</p>` : ''}
+          ${!templatesCarregados ? `<p class="settings-page-note">Carregando…</p>` : (templatesList.length ? `
+            <div class="templates-list">
+              ${templatesList.map(t=>`
+                <div class="template-item">
+                  <span class="template-item-nome">${esc(t.nome)}</span>
+                  <span class="template-item-status template-status-${(t.status||'').toLowerCase()}">${statusTemplateLabel(t.status)}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : `<p class="dash-empty">Nenhum template ainda. Crie o primeiro pra começar.</p>`)}
         </div>
 
         <div class="settings-page-section">
@@ -2565,6 +2923,19 @@ function bindAppEvents(){
     });
   });
 
+  /* -- Agendamentos -- */
+  const openNewAgendamentoBtn = app.querySelector('[data-action="open-new-agendamento"]');
+  if(openNewAgendamentoBtn) openNewAgendamentoBtn.addEventListener('click', openNewAgendamento);
+  app.querySelectorAll('[data-action="cancelar-agendamento"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.agendamentoId;
+      showConfirm({
+        message: 'Cancelar essa mensagem agendada?',
+        onConfirm: ()=>{ cancelarAgendamento(id); closeConfirm(); },
+      });
+    });
+  });
+
   /* -- Relatórios -- */
   const relatorioFunilSelect = document.getElementById('relatorio-funil-select');
   if(relatorioFunilSelect) relatorioFunilSelect.addEventListener('change', (e)=>{ relatorioFunilId = e.target.value; renderApp(); });
@@ -2684,11 +3055,53 @@ function bindAppEvents(){
       definirAgenteIa(false);
     }
   });
+  const toggleIaProativaEl = app.querySelector('[data-action="toggle-ia-proativa"]');
+  if(toggleIaProativaEl) toggleIaProativaEl.addEventListener('click', ()=> definirIaProativa(!iaProativaAtiva));
+
+  const mtMensagemEl = document.getElementById('mt-mensagem');
+  if(mtMensagemEl) mtMensagemEl.addEventListener('input', (e)=> menuTriagem.mensagemInicial = e.target.value);
+  const mtAddOpcaoBtn = document.getElementById('mt-add-opcao');
+  if(mtAddOpcaoBtn) mtAddOpcaoBtn.addEventListener('click', ()=>{
+    menuTriagem.opcoes.push({ numero: String(menuTriagem.opcoes.length+1), colunaDestinoId: (board.columns[0]||{}).id || '', respostaConfirmacao:'' });
+    renderApp();
+  });
+  document.querySelectorAll('.mt-opcao-remover').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      menuTriagem.opcoes.splice(parseInt(btn.dataset.idx,10),1);
+      renderApp();
+    });
+  });
+  document.querySelectorAll('.mt-opcao-numero').forEach(el=>{
+    el.addEventListener('input', (e)=>{ menuTriagem.opcoes[parseInt(el.dataset.idx,10)].numero = e.target.value; });
+  });
+  document.querySelectorAll('.mt-opcao-coluna').forEach(el=>{
+    el.addEventListener('change', (e)=>{ menuTriagem.opcoes[parseInt(el.dataset.idx,10)].colunaDestinoId = e.target.value; });
+  });
+  document.querySelectorAll('.mt-opcao-confirmacao').forEach(el=>{
+    el.addEventListener('input', (e)=>{ menuTriagem.opcoes[parseInt(el.dataset.idx,10)].respostaConfirmacao = e.target.value; });
+  });
+  const toggleMenuTriagemEl = app.querySelector('[data-action="toggle-menu-triagem"]');
+  if(toggleMenuTriagemEl) toggleMenuTriagemEl.addEventListener('click', ()=>{ menuTriagem.ativo = !menuTriagem.ativo; renderApp(); });
+  const salvarMenuTriagemBtn = document.getElementById('mt-salvar');
+  if(salvarMenuTriagemBtn) salvarMenuTriagemBtn.addEventListener('click', ()=>{
+    if(menuTriagem.ativo){
+      showConfirm({
+        message: 'Salvar e manter o menu de triagem ativo? Ele vai responder automaticamente qualquer contato novo no WhatsApp, sem revisão sua.',
+        onConfirm: ()=>{ salvarMenuTriagem(); closeConfirm(); },
+      });
+    } else {
+      salvarMenuTriagem();
+    }
+  });
 
   const salvarIgBtn = app.querySelector('[data-action="salvar-instagram-config"]');
   if(salvarIgBtn) salvarIgBtn.addEventListener('click', salvarInstagramConfig);
   const desconectarIgBtn = app.querySelector('[data-action="desconectar-instagram"]');
   if(desconectarIgBtn) desconectarIgBtn.addEventListener('click', desconectarInstagram);
+  const sincronizarTemplatesBtn = app.querySelector('[data-action="sincronizar-templates"]');
+  if(sincronizarTemplatesBtn) sincronizarTemplatesBtn.addEventListener('click', sincronizarTemplates);
+  const openNewTemplateBtn = app.querySelector('[data-action="open-new-template"]');
+  if(openNewTemplateBtn) openNewTemplateBtn.addEventListener('click', openNewTemplateModal);
 
   /* -- Leads -- */
   const openNewLeadBtn = app.querySelector('[data-action="open-new-lead"]');
@@ -2956,6 +3369,20 @@ function renderModal(){
             ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-tarefa">${ICON_SPARKLE} Sugerir tarefa de acompanhamento</button>` : ''}
             <div class="ai-result" id="f-ai-tarefa-result" style="display:none;"></div>
           </div>
+          ${!f.__isNew && f.sugestaoIA && f.sugestaoIA.texto ? `
+            <div class="field">
+              <div class="ai-result" style="display:block;">
+                <p class="settings-page-subtitle">✨ Sugestão da IA proativa</p>
+                <p>${esc(f.sugestaoIA.texto)}</p>
+                ${f.sugestaoIA.tarefaTitulo ? `<p class="settings-page-note">Tarefa sugerida: <b>${esc(f.sugestaoIA.tarefaTitulo)}</b> (${f.sugestaoIA.tarefaDias||3} dia(s))</p>` : ''}
+                <div class="ai-result-actions">
+                  <button type="button" class="btn-outline" id="f-sugestao-copiar">Copiar mensagem</button>
+                  ${f.sugestaoIA.tarefaTitulo ? `<button type="button" class="btn-outline" id="f-sugestao-criar-tarefa">Criar tarefa sugerida</button>` : ''}
+                  <button type="button" class="btn-outline" id="f-sugestao-descartar">Descartar</button>
+                </div>
+              </div>
+            </div>
+          ` : ''}
         </div>
         <div class="modal-foot">
           ${!f.__isNew ? `<button class="delete-link" id="f-delete">🗑 Excluir</button>` : '<span></span>'}
@@ -2985,6 +3412,40 @@ function renderModal(){
   if(aiMensagemBtn) aiMensagemBtn.addEventListener('click', sugerirMensagemIA);
   const aiTarefaBtn = document.getElementById('f-ai-tarefa');
   if(aiTarefaBtn) aiTarefaBtn.addEventListener('click', sugerirTarefaIA);
+  const sugestaoCopiarBtn = document.getElementById('f-sugestao-copiar');
+  if(sugestaoCopiarBtn) sugestaoCopiarBtn.addEventListener('click', ()=>{
+    navigator.clipboard.writeText(modalForm.sugestaoIA.texto).catch(()=>{});
+  });
+  const sugestaoCriarTarefaBtn = document.getElementById('f-sugestao-criar-tarefa');
+  if(sugestaoCriarTarefaBtn) sugestaoCriarTarefaBtn.addEventListener('click', async ()=>{
+    sugestaoCriarTarefaBtn.disabled = true;
+    try{
+      const venc = new Date();
+      venc.setDate(venc.getDate() + (modalForm.sugestaoIA.tarefaDias||3));
+      const nova = await apiRequest('POST', '/tasks', {
+        titulo: modalForm.sugestaoIA.tarefaTitulo, vencimento: venc.toISOString().slice(0,10),
+        prioridade:'media', leadId: modalForm.id, descricao:'',
+      });
+      tasks.push(nova);
+      sugestaoCriarTarefaBtn.textContent = '✓ Tarefa criada';
+    }catch(e){
+      errorMsg = 'Não foi possível criar a tarefa.';
+      renderApp();
+    }
+  });
+  const sugestaoDescartarBtn = document.getElementById('f-sugestao-descartar');
+  if(sugestaoDescartarBtn) sugestaoDescartarBtn.addEventListener('click', async ()=>{
+    try{
+      const atualizado = await apiRequest('DELETE', `/cards/${modalForm.id}/sugestao-ia`);
+      const idx = board.cards.findIndex(c=>c.id===modalForm.id);
+      if(idx>-1) board.cards[idx] = atualizado;
+      modalForm.sugestaoIA = atualizado.sugestaoIA;
+      renderModal();
+    }catch(e){
+      errorMsg = 'Não foi possível descartar a sugestão.';
+      renderApp();
+    }
+  });
   const verConversaBtn = document.getElementById('f-ver-conversa');
   if(verConversaBtn) verConversaBtn.addEventListener('click', abrirConversaWhatsapp);
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
@@ -3515,6 +3976,46 @@ function renderFluxosPage(){
   `;
 }
 
+/* ---------- página: Agendamentos ---------- */
+function renderAgendamentosPage(){
+  if(!agendamentosLoaded){
+    return `<div class="page-head"><div><h1>Agendamentos</h1><p>Carregando…</p></div></div>`;
+  }
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Agendamentos</h1>
+        <p>Tudo que está programado pra enviar, o que já saiu, e o que foi cancelado ou falhou</p>
+      </div>
+      <button class="btn-primary" data-action="open-new-agendamento">+ Nova mensagem</button>
+    </div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="metric-card-top"><span>A enviar</span></div><div class="metric-value">${agendamentosContagem.pendente||0}</div></div>
+      <div class="metric-card"><div class="metric-card-top"><span>Enviadas</span></div><div class="metric-value">${agendamentosContagem.enviada||0}</div></div>
+      <div class="metric-card"><div class="metric-card-top"><span>Canceladas</span></div><div class="metric-value">${agendamentosContagem.cancelada||0}</div></div>
+      <div class="metric-card"><div class="metric-card-top"><span>Falhas</span></div><div class="metric-value">${agendamentosContagem.falhou||0}</div></div>
+    </div>
+    ${agendamentos.length ? `
+      <div class="leads-table-wrap">
+        <table class="leads-table">
+          <thead><tr><th>Cliente</th><th>Mensagem</th><th>Data/hora</th><th>Status</th><th>Ações</th></tr></thead>
+          <tbody>
+            ${agendamentos.map(a=>`
+              <tr>
+                <td>${esc(a.clienteNome)}</td>
+                <td>${esc((a.texto||'').slice(0,60))}${(a.texto||'').length>60?'…':''}</td>
+                <td>${formatDateHora(a.agendadoPara)}</td>
+                <td>${agendamentoStatusLabel(a.status)}${a.status==='falhou' && a.erro ? ` <span class="settings-page-note">(${esc(a.erro)})</span>` : ''}</td>
+                <td>${a.status==='pendente' ? `<button class="icon-btn" data-action="cancelar-agendamento" data-agendamento-id="${a.id}" title="Cancelar">${ICON_TRASH}</button>` : ''}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : `<div class="tasks-empty">Nenhuma mensagem agendada ainda.</div>`}
+  `;
+}
+
 /* ---------- página: Suporte ---------- */
 function renderSuportePage(){
   return `
@@ -3835,6 +4336,10 @@ function abrirEscolhaAdicionarLead(colId){
             <span class="add-lead-choice-title">Transferir cliente existente</span>
             <span class="add-lead-choice-desc">Mover pra cá quem já está cadastrado em outra coluna ou funil</span>
           </button>
+          <button type="button" class="add-lead-choice-btn" id="add-lead-choice-copiar">
+            <span class="add-lead-choice-title">Copiar cliente existente</span>
+            <span class="add-lead-choice-desc">Cria uma cópia aqui, mantendo o original intacto no outro lugar</span>
+          </button>
         </div>
       </div>
     </div>
@@ -3842,12 +4347,14 @@ function abrirEscolhaAdicionarLead(colId){
   document.getElementById('add-lead-choice-close').addEventListener('click', ()=>{ root.innerHTML=''; });
   document.getElementById('add-lead-choice-overlay').addEventListener('click', (e)=>{ if(e.target.id==='add-lead-choice-overlay') root.innerHTML=''; });
   document.getElementById('add-lead-choice-novo').addEventListener('click', ()=> openNewCard(colId));
-  document.getElementById('add-lead-choice-transferir').addEventListener('click', ()=> abrirPickerLeadsParaColuna(colId));
+  document.getElementById('add-lead-choice-transferir').addEventListener('click', ()=> abrirPickerLeadsParaColuna(colId, 'transferir'));
+  document.getElementById('add-lead-choice-copiar').addEventListener('click', ()=> abrirPickerLeadsParaColuna(colId, 'copiar'));
 }
 
-/* ---------- modal: puxar leads existentes pra uma coluna (recém-criada ou não) ---------- */
-function abrirPickerLeadsParaColuna(colId){
+/* ---------- modal: puxar leads existentes pra uma coluna (transferir ou copiar) ---------- */
+function abrirPickerLeadsParaColuna(colId, modo){
   colunaLeadsPickerColId = colId;
+  colunaLeadsPickerModo = modo || 'transferir';
   colunaLeadsSelecionados = new Set();
   renderColunaLeadsPickerModal();
 }
@@ -3858,13 +4365,25 @@ function closeColunaLeadsPickerModal(){
 async function confirmarMoverLeadsParaColuna(){
   if(colunaLeadsSelecionados.size === 0){ closeColunaLeadsPickerModal(); return; }
   const colId = colunaLeadsPickerColId;
+  const copiando = colunaLeadsPickerModo === 'copiar';
   colunaLeadsMovendo = true;
   renderColunaLeadsPickerModal();
   for(const cardId of Array.from(colunaLeadsSelecionados)){
     try{
-      const atualizado = await apiRequest('PUT', `/cards/${cardId}/move`, { columnId: colId });
-      const idx = board.cards.findIndex(c=>c.id===cardId);
-      if(idx>-1) board.cards[idx] = atualizado;
+      if(copiando){
+        const original = board.cards.find(c=>c.id===cardId);
+        if(!original) continue;
+        const copia = await apiRequest('POST', '/cards', {
+          columnId: colId, cliente: original.cliente, valor: original.valor,
+          temperatura: original.temperatura, telefone: original.telefone,
+          obs: original.obs, mes: original.mes,
+        });
+        board.cards.push(copia);
+      } else {
+        const atualizado = await apiRequest('PUT', `/cards/${cardId}/move`, { columnId: colId });
+        const idx = board.cards.findIndex(c=>c.id===cardId);
+        if(idx>-1) board.cards[idx] = atualizado;
+      }
     }catch(e){ /* segue tentando os demais selecionados */ }
   }
   colunaLeadsMovendo = false;
@@ -3875,17 +4394,20 @@ function renderColunaLeadsPickerModal(){
   const root = document.getElementById('modal-root');
   if(!colunaLeadsPickerColId){ root.innerHTML=''; return; }
   const coluna = board.columns.find(c=>c.id===colunaLeadsPickerColId);
-  const candidatos = board.cards.filter(c=>c.columnId !== colunaLeadsPickerColId);
+  const copiando = colunaLeadsPickerModo === 'copiar';
+  const candidatos = copiando ? board.cards.slice() : board.cards.filter(c=>c.columnId !== colunaLeadsPickerColId);
 
   root.innerHTML = `
     <div class="overlay" id="cl-picker-overlay">
       <div class="modal modal-lg">
         <div class="modal-head">
-          <h3>Puxar leads pra "${esc(coluna?coluna.nome:'')}"</h3>
+          <h3>${copiando ? 'Copiar' : 'Transferir'} leads pra "${esc(coluna?coluna.nome:'')}"</h3>
           <button id="cl-picker-close">✕</button>
         </div>
         <div class="modal-body">
-          <p class="settings-page-note">Escolha quem você quer mover pra essa coluna agora. Dá pra pular e arrastar manualmente depois, se preferir.</p>
+          <p class="settings-page-note">${copiando
+            ? 'Escolha quem você quer copiar pra essa coluna. O original continua intacto onde já está.'
+            : 'Escolha quem você quer mover pra essa coluna agora. Dá pra pular e arrastar manualmente depois, se preferir.'}</p>
           <div class="settings-btn-row" style="margin-bottom:10px;">
             <button class="btn-outline" id="cl-selecionar-todos">Selecionar todos</button>
             <button class="btn-outline" id="cl-limpar-selecao">Limpar seleção</button>
@@ -3906,7 +4428,7 @@ function renderColunaLeadsPickerModal(){
           <span></span>
           <div class="modal-foot-actions">
             <button class="btn-outline" id="cl-pular">Pular por agora</button>
-            <button class="btn-save" id="cl-confirmar" ${colunaLeadsMovendo?'disabled':''}>${colunaLeadsMovendo ? 'Movendo…' : `Mover ${colunaLeadsSelecionados.size} lead(s)`}</button>
+            <button class="btn-save" id="cl-confirmar" ${colunaLeadsMovendo?'disabled':''}>${colunaLeadsMovendo ? (copiando?'Copiando…':'Movendo…') : `${copiando?'Copiar':'Mover'} ${colunaLeadsSelecionados.size} lead(s)`}</button>
           </div>
         </div>
       </div>
@@ -4127,6 +4649,9 @@ if(getToken()){
   loadContratos();
   loadWhatsappStatus();
   loadInstagramStatus();
+  loadTemplates();
+  loadAgendamentos();
+  loadMenuTriagem();
   loadConversas();
   loadEquipe();
   loadAutomacoes();

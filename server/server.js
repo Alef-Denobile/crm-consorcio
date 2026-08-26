@@ -18,6 +18,7 @@ const equipeRoutes = require('./routes/equipe');
 const automacoesRoutes = require('./routes/automacoes');
 const instagramRoutes = require('./routes/instagram');
 const fluxosRoutes = require('./routes/fluxos');
+const agendamentosRoutes = require('./routes/agendamentos');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -41,13 +42,16 @@ app.use('/api/equipe', equipeRoutes);
 app.use('/api/automacoes', automacoesRoutes);
 app.use('/api/instagram', instagramRoutes);
 app.use('/api/fluxos', fluxosRoutes);
+app.use('/api/agendamentos', agendamentosRoutes);
 
 // front-end estático (a pasta public com index.html, css e js)
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const { verificarAutomacoesPorTempo } = require('./utils/automacaoScheduler');
 const { processarFluxos } = require('./utils/fluxoScheduler');
+const { processarAgendamentos } = require('./utils/agendamentoScheduler');
 const UMA_HORA = 60 * 60 * 1000;
+const CINCO_MINUTOS = 5 * 60 * 1000;
 
 async function start() {
   try {
@@ -61,6 +65,8 @@ async function start() {
     setInterval(verificarAutomacoesPorTempo, UMA_HORA);
     setTimeout(processarFluxos, 45 * 1000);
     setInterval(processarFluxos, UMA_HORA);
+    setTimeout(processarAgendamentos, 15 * 1000);
+    setInterval(processarAgendamentos, CINCO_MINUTOS);
   } catch (err) {
     console.error('Falha ao conectar no MongoDB:', err.message);
     process.exit(1);
