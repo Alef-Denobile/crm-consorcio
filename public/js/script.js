@@ -54,6 +54,7 @@ const ICON_COMISSOES = `<svg width="17" height="17" viewBox="0 0 24 24" fill="no
 const ICON_SETTINGS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`;
 const ICON_SPARKLE = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6L12 2Z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14Z"/><path d="M5 14l.8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14Z"/></svg>`;
 const ICON_BELL = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+const ICON_BUSCA = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
 const ICON_CONVERSAS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
 const ICON_DISPAROS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 const ICON_RELATORIOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>`;
@@ -169,6 +170,18 @@ let instagramConfigMsg = null;
 let conversas = [];
 let conversasLoaded = false;
 let notifOpen = false;
+let buscaGlobalAberta = false;
+let buscaGlobalTexto = '';
+let historicoAberto = false;
+let camposPersonalizados = [];
+let camposPersonalizadosCarregados = false;
+let novoCampoNome = '';
+let novoCampoTipo = 'texto';
+let camposPersonalizadosMsg = null;
+let anexosDoCard = [];
+let anexosCarregados = false;
+let anexoEnviando = false;
+let anexoMsg = null;
 let disparoFiltroColuna = '';
 let disparoFiltroTemp = '';
 let disparoSelecionados = new Set();
@@ -509,6 +522,45 @@ async function desconectarInstagram(){
     errorMsg = 'Não foi possível desconectar o Instagram.';
   }
   renderApp();
+}
+
+async function abrirHistoricoCard(){
+  const box = document.getElementById('f-historico');
+  if(!box || !modalForm || modalForm.__isNew) return;
+  box.style.display = 'block';
+  box.innerHTML = '<p class="settings-page-note">Carregando histórico…</p>';
+
+  let mensagens = [];
+  try{
+    const data = await apiRequest('GET', `/whatsapp/conversas/${modalForm.id}`);
+    mensagens = data.mensagens || [];
+  }catch(e){ /* sem WhatsApp conectado ou sem conversa — segue sem elas */ }
+
+  const tarefasDoLead = tasks.filter(t=>t.leadId===modalForm.id);
+
+  const eventos = [];
+  if(modalForm.createdAt){
+    eventos.push({ texto:'Cliente criado', data: modalForm.createdAt, icone:'✦' });
+  }
+  tarefasDoLead.forEach(t=>{
+    eventos.push({ texto:`Tarefa criada: ${t.titulo}${t.concluida?' (concluída)':''}`, data: t.createdAt || t.vencimento, icone:'✓' });
+  });
+  mensagens.forEach(m=>{
+    eventos.push({ texto:`${m.direction==='out'?'Você':'Cliente'}: ${(m.texto||'').slice(0,80)}`, data: m.timestamp, icone:'💬' });
+  });
+  eventos.sort((a,b)=> new Date(b.data) - new Date(a.data));
+
+  box.innerHTML = eventos.length ? `
+    <div class="historico-lista">
+      ${eventos.map(ev=>`
+        <div class="historico-item">
+          <span class="historico-item-icone">${ev.icone}</span>
+          <span class="historico-item-texto">${esc(ev.texto)}</span>
+          <span class="historico-item-data">${formatDateHora(ev.data)}</span>
+        </div>
+      `).join('')}
+    </div>
+  ` : '<p class="settings-page-note">Nenhum evento registrado ainda.</p>';
 }
 
 async function abrirConversaWhatsapp(){
@@ -1022,6 +1074,139 @@ function statusTemplateLabel(status){
   if(status==='REJECTED') return '✕ Rejeitado';
   return status || '—';
 }
+
+/* ---------- Campos personalizados ---------- */
+async function loadCamposPersonalizados(){
+  try{
+    const data = await apiRequest('GET', '/campos-personalizados');
+    camposPersonalizados = data.campos || [];
+  }catch(e){
+    camposPersonalizados = [];
+  }
+  camposPersonalizadosCarregados = true;
+  renderApp();
+}
+async function criarCampoPersonalizado(){
+  const nome = novoCampoNome.trim();
+  if(!nome){
+    camposPersonalizadosMsg = { tipo:'erro', texto:'Digite um nome pro campo.' };
+    renderApp();
+    return;
+  }
+  try{
+    const novo = await apiRequest('POST', '/campos-personalizados', { nome, tipo: novoCampoTipo });
+    camposPersonalizados.push(novo);
+    novoCampoNome = '';
+    camposPersonalizadosMsg = null;
+  }catch(e){
+    camposPersonalizadosMsg = { tipo:'erro', texto: e.message || 'Não foi possível criar o campo.' };
+  }
+  renderApp();
+}
+async function excluirCampoPersonalizado(id){
+  const idx = camposPersonalizados.findIndex(c=>c.id===id);
+  if(idx===-1) return;
+  const [removido] = camposPersonalizados.splice(idx,1);
+  renderApp();
+  try{
+    await apiRequest('DELETE', `/campos-personalizados/${id}`);
+  }catch(e){
+    camposPersonalizados.splice(idx,0,removido);
+    errorMsg = 'Não foi possível excluir o campo.';
+    renderApp();
+  }
+}
+
+/* ---------- Anexos (dentro do card) ---------- */
+function formatarTamanhoArquivo(bytes){
+  if(!bytes) return '0 KB';
+  if(bytes < 1024*1024) return `${Math.round(bytes/1024)} KB`;
+  return `${(bytes/(1024*1024)).toFixed(1)} MB`;
+}
+async function loadAnexosDoCard(cardId){
+  try{
+    const data = await apiRequest('GET', `/cards/${cardId}/anexos`);
+    anexosDoCard = data.anexos || [];
+  }catch(e){
+    anexosDoCard = [];
+  }
+  anexosCarregados = true;
+  const lista = document.getElementById('f-anexos-lista');
+  if(lista){
+    lista.innerHTML = renderAnexosListaHtml();
+    ligarBindingsAnexos();
+  }
+}
+function renderAnexosListaHtml(){
+  const msgHtml = anexoMsg ? `<p class="settings-page-msg ${anexoMsg.tipo}">${esc(anexoMsg.texto)}</p>` : '';
+  if(!anexosDoCard.length) return `${msgHtml}<p class="settings-page-note">Nenhum anexo ainda.</p>`;
+  return `
+    ${msgHtml}
+    <div class="anexos-lista">
+      ${anexosDoCard.map(a=>`
+        <div class="anexo-item">
+          <a href="${a.dadosBase64}" download="${esc(a.nomeArquivo)}" class="anexo-item-nome">📎 ${esc(a.nomeArquivo)}</a>
+          <span class="settings-page-note">${formatarTamanhoArquivo(a.tamanho)}</span>
+          <button type="button" class="icon-btn" data-action="excluir-anexo" data-anexo-id="${a.id}" title="Excluir">${ICON_TRASH}</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+function ligarBindingsAnexos(){
+  document.querySelectorAll('[data-action="excluir-anexo"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const anexoId = btn.dataset.anexoId;
+      btn.disabled = true;
+      try{
+        await apiRequest('DELETE', `/cards/${modalForm.id}/anexos/${anexoId}`);
+        anexosDoCard = anexosDoCard.filter(a=>a.id!==anexoId);
+        const lista = document.getElementById('f-anexos-lista');
+        if(lista){ lista.innerHTML = renderAnexosListaHtml(); ligarBindingsAnexos(); }
+      }catch(e){
+        errorMsg = 'Não foi possível excluir o anexo.';
+        renderApp();
+      }
+    });
+  });
+}
+function lerArquivoComoBase64(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=> resolve(e.target.result);
+    reader.onerror = ()=> reject(new Error('Não foi possível ler o arquivo.'));
+    reader.readAsDataURL(file);
+  });
+}
+async function handleAnexoFileSelected(file){
+  if(!file || !modalForm || modalForm.__isNew) return;
+  const btn = document.getElementById('anexo-upload-btn');
+  const lista = document.getElementById('f-anexos-lista');
+  if(file.size > 3.2 * 1024 * 1024){
+    anexoMsg = { tipo:'erro', texto:'Arquivo muito grande. O limite é de aproximadamente 3 MB.' };
+    if(lista){ lista.innerHTML = renderAnexosListaHtml(); ligarBindingsAnexos(); }
+    return;
+  }
+  anexoEnviando = true;
+  anexoMsg = null;
+  if(btn){ btn.disabled = true; btn.textContent = 'Enviando…'; }
+  if(lista){ lista.innerHTML = renderAnexosListaHtml(); ligarBindingsAnexos(); }
+  try{
+    const dadosBase64 = await lerArquivoComoBase64(file);
+    const novo = await apiRequest('POST', `/cards/${modalForm.id}/anexos`, {
+      nomeArquivo: file.name, tipoMime: file.type, dadosBase64,
+    });
+    anexosDoCard.unshift(novo);
+    anexoMsg = { tipo:'ok', texto:'Anexo enviado.' };
+  }catch(e){
+    anexoMsg = { tipo:'erro', texto: e.message || 'Não foi possível enviar o anexo.' };
+  }
+  anexoEnviando = false;
+  if(btn){ btn.disabled = false; btn.textContent = '+ Adicionar anexo'; }
+  const listaAtualizada = document.getElementById('f-anexos-lista');
+  if(listaAtualizada){ listaAtualizada.innerHTML = renderAnexosListaHtml(); ligarBindingsAnexos(); }
+}
+
 async function loadTemplates(){
   try{
     const data = await apiRequest('GET', '/whatsapp/templates');
@@ -1723,6 +1908,87 @@ async function salvarNome(){
   nomeSalvando = false;
   renderApp();
 }
+/* ---------- busca global (Ctrl+K) ---------- */
+function abrirBuscaGlobal(){
+  buscaGlobalAberta = true;
+  buscaGlobalTexto = '';
+  renderBuscaGlobalModal();
+  setTimeout(()=>{ const el = document.getElementById('busca-global-input'); if(el) el.focus(); }, 0);
+}
+function closeBuscaGlobal(){
+  buscaGlobalAberta = false;
+  document.getElementById('modal-root').innerHTML = '';
+}
+function renderBuscaGlobalModal(){
+  const root = document.getElementById('modal-root');
+  if(!buscaGlobalAberta){ root.innerHTML=''; return; }
+  const termo = buscaGlobalTexto.trim().toLowerCase();
+  let leadsResultado = [];
+  let tarefasResultado = [];
+  if(termo){
+    leadsResultado = board.cards.filter(c=>
+      (c.cliente||'').toLowerCase().includes(termo) || (c.telefone||'').includes(termo)
+    ).slice(0,8);
+    tarefasResultado = tasks.filter(t=> (t.titulo||'').toLowerCase().includes(termo)).slice(0,8);
+  }
+  root.innerHTML = `
+    <div class="overlay" id="busca-global-overlay">
+      <div class="modal modal-lg busca-global-modal">
+        <div class="busca-global-input-row">
+          ${ICON_BUSCA}
+          <input type="text" id="busca-global-input" placeholder="Buscar cliente ou tarefa..." value="${esc(buscaGlobalTexto)}" />
+          <button id="busca-global-close" title="Fechar (Esc)">✕</button>
+        </div>
+        <div class="busca-global-resultados">
+          ${!termo ? `<p class="settings-page-note" style="padding:16px;">Digite pra buscar clientes e tarefas. Atalho: Ctrl+K (ou ⌘K no Mac).</p>` : `
+            ${leadsResultado.length ? `
+              <div class="busca-global-grupo-titulo">Clientes</div>
+              ${leadsResultado.map(c=>`
+                <button type="button" class="busca-global-item" data-action="busca-global-abrir-lead" data-card-id="${c.id}">
+                  <span class="busca-global-item-nome">${esc(c.cliente)||'Sem nome'}</span>
+                  <span class="settings-page-note">${esc(c.telefone||'')}</span>
+                </button>
+              `).join('')}
+            ` : ''}
+            ${tarefasResultado.length ? `
+              <div class="busca-global-grupo-titulo">Tarefas</div>
+              ${tarefasResultado.map(t=>`
+                <button type="button" class="busca-global-item" data-action="busca-global-abrir-tarefa" data-task-id="${t.id}">
+                  <span class="busca-global-item-nome">${esc(t.titulo)}</span>
+                  ${t.vencimento ? `<span class="settings-page-note">${formatDate(t.vencimento)}</span>` : ''}
+                </button>
+              `).join('')}
+            ` : ''}
+            ${!leadsResultado.length && !tarefasResultado.length ? `<p class="settings-page-note" style="padding:16px;">Nada encontrado.</p>` : ''}
+          `}
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('busca-global-close').addEventListener('click', closeBuscaGlobal);
+  document.getElementById('busca-global-overlay').addEventListener('click', (e)=>{ if(e.target.id==='busca-global-overlay') closeBuscaGlobal(); });
+  const inputEl = document.getElementById('busca-global-input');
+  inputEl.addEventListener('input', (e)=>{
+    buscaGlobalTexto = e.target.value;
+    renderBuscaGlobalModal();
+    const novo = document.getElementById('busca-global-input');
+    if(novo){ novo.focus(); novo.setSelectionRange(novo.value.length, novo.value.length); }
+  });
+  inputEl.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeBuscaGlobal(); });
+  document.querySelectorAll('[data-action="busca-global-abrir-lead"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ closeBuscaGlobal(); openEditCard(btn.dataset.cardId); });
+  });
+  document.querySelectorAll('[data-action="busca-global-abrir-tarefa"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ closeBuscaGlobal(); goToPage('tarefas'); });
+  });
+}
+document.addEventListener('keydown', (e)=>{
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='k'){
+    e.preventDefault();
+    if(getToken() && !buscaGlobalAberta) abrirBuscaGlobal();
+  }
+});
+
 function iniciaisDoNome(nome){
   const partes = (nome||'').trim().split(/\s+/).filter(Boolean);
   if(!partes.length) return '?';
@@ -1981,6 +2247,9 @@ function renderApp(){
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
+          </button>
+          <button class="notif-btn" data-action="abrir-busca-global" title="Buscar (Ctrl+K)" style="margin-left:auto;">
+            ${ICON_BUSCA}
           </button>
           <div class="notif-wrap">
             <button class="notif-btn" data-action="toggle-notif" title="Notificações">
@@ -2318,6 +2587,7 @@ function renderCard(card){
               ${card.obs ? `<p>${esc(card.obs)}</p>` : ''}
             </div>
           ` : ''}
+          ${(card.etiquetas||[]).length ? `<div class="etiquetas-pills">${card.etiquetas.map(et=>`<span class="etiqueta-pill">${esc(et)}</span>`).join('')}</div>` : ''}
         </div>
       </div>
     </div>
@@ -2736,6 +3006,34 @@ function renderConfiguracoesPage(){
           ${importResultado ? `<p class="settings-page-msg ok">${importResultado.sucesso} lead(s) importado(s)${importResultado.falha ? `, ${importResultado.falha} falharam` : ''}.</p>` : ''}
           <button class="btn-primary" id="import-btn" ${importando?'disabled':''}>${importando?'Importando…':'Importar'}</button>
         </div>
+
+        <div class="settings-page-section">
+          <h3>Campos personalizados</h3>
+          <p class="settings-page-note">Campos extras que aparecem no modal de cada cliente (ex: CPF, data de nascimento).</p>
+          ${!camposPersonalizadosCarregados ? `<p class="settings-page-note">Carregando…</p>` : (camposPersonalizados.length ? `
+            <div class="campos-lista">
+              ${camposPersonalizados.map(c=>`
+                <div class="campo-item">
+                  <span>${esc(c.nome)} <span class="settings-page-note">(${c.tipo})</span></span>
+                  <button class="icon-btn" data-action="excluir-campo-personalizado" data-campo-id="${c.id}" title="Excluir">${ICON_TRASH}</button>
+                </div>
+              `).join('')}
+            </div>
+          ` : `<p class="dash-empty">Nenhum campo personalizado ainda.</p>`)}
+          <div class="field-row" style="margin-top:12px;">
+            <div class="field"><label>Nome do campo</label><input type="text" id="novo-campo-nome" value="${esc(novoCampoNome)}" placeholder="Ex: CPF" /></div>
+            <div class="field">
+              <label>Tipo</label>
+              <select id="novo-campo-tipo">
+                <option value="texto" ${novoCampoTipo==='texto'?'selected':''}>Texto</option>
+                <option value="numero" ${novoCampoTipo==='numero'?'selected':''}>Número</option>
+                <option value="data" ${novoCampoTipo==='data'?'selected':''}>Data</option>
+              </select>
+            </div>
+          </div>
+          ${camposPersonalizadosMsg ? `<p class="settings-page-msg ${camposPersonalizadosMsg.tipo}">${esc(camposPersonalizadosMsg.texto)}</p>` : ''}
+          <button class="btn-outline" data-action="criar-campo-personalizado">+ Adicionar campo</button>
+        </div>
       </div>
     </section>
 
@@ -2772,6 +3070,8 @@ function bindAppEvents(){
   if(hamburgerBtn) hamburgerBtn.addEventListener('click', ()=>{ sidebarOpen = !sidebarOpen; renderApp(); });
   const closeSidebarEl = app.querySelector('[data-action="close-sidebar"]');
   if(closeSidebarEl) closeSidebarEl.addEventListener('click', ()=>{ sidebarOpen = false; renderApp(); });
+  const buscaGlobalBtn = app.querySelector('[data-action="abrir-busca-global"]');
+  if(buscaGlobalBtn) buscaGlobalBtn.addEventListener('click', abrirBuscaGlobal);
   const notifBtn = app.querySelector('[data-action="toggle-notif"]');
   if(notifBtn) notifBtn.addEventListener('click', (e)=>{ e.stopPropagation(); notifOpen = !notifOpen; renderApp(); });
 
@@ -3039,6 +3339,22 @@ function bindAppEvents(){
   const importBtn = document.getElementById('import-btn');
   if(importBtn) importBtn.addEventListener('click', importarLeadsCsv);
 
+  const novoCampoNomeEl = document.getElementById('novo-campo-nome');
+  if(novoCampoNomeEl) novoCampoNomeEl.addEventListener('input', (e)=> novoCampoNome = e.target.value);
+  const novoCampoTipoEl = document.getElementById('novo-campo-tipo');
+  if(novoCampoTipoEl) novoCampoTipoEl.addEventListener('change', (e)=> novoCampoTipo = e.target.value);
+  const criarCampoBtn = app.querySelector('[data-action="criar-campo-personalizado"]');
+  if(criarCampoBtn) criarCampoBtn.addEventListener('click', criarCampoPersonalizado);
+  app.querySelectorAll('[data-action="excluir-campo-personalizado"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.campoId;
+      showConfirm({
+        message: 'Excluir esse campo personalizado? Ele para de aparecer nos clientes.',
+        onConfirm: ()=>{ excluirCampoPersonalizado(id); closeConfirm(); },
+      });
+    });
+  });
+
   const salvarWaBtn = app.querySelector('[data-action="salvar-whatsapp-config"]');
   if(salvarWaBtn) salvarWaBtn.addEventListener('click', salvarWhatsappConfig);
   const desconectarWaBtn = app.querySelector('[data-action="desconectar-whatsapp"]');
@@ -3294,6 +3610,7 @@ function openNewCard(columnId){
     __isNew: true, id:null, columnId: colId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
     mes: filterMonth || currentMonthKey(),
+    etiquetas: [], camposPersonalizados: {},
   };
   renderModal();
 }
@@ -3302,7 +3619,11 @@ function openEditCard(id){
   if(!card) return;
   modalForm = { ...card, __isNew:false };
   notifOpen = false;
+  anexosCarregados = false;
+  anexosDoCard = [];
+  anexoMsg = null;
   renderModal();
+  loadAnexosDoCard(id);
 }
 function closeModal(){ modalForm = null; document.getElementById('modal-root').innerHTML=''; }
 
@@ -3359,9 +3680,11 @@ function renderModal(){
               </button>
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-mensagem">${ICON_SPARKLE} Sugerir mensagem</button>` : ''}
               ${!f.__isNew && whatsappConnected ? `<button type="button" class="ai-btn" id="f-ver-conversa">${WA_ICON} Ver conversa</button>` : ''}
+              ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ver-historico">🕘 Ver histórico</button>` : ''}
             </div>
             <div class="ai-result" id="f-ai-mensagem-result" style="display:none;"></div>
             <div class="wa-conversa" id="f-wa-conversa" style="display:none;"></div>
+            <div class="wa-conversa" id="f-historico" style="display:none;"></div>
           </div>
           <div class="field">
             <label>Observações (opcional)</label>
@@ -3369,6 +3692,26 @@ function renderModal(){
             ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-tarefa">${ICON_SPARKLE} Sugerir tarefa de acompanhamento</button>` : ''}
             <div class="ai-result" id="f-ai-tarefa-result" style="display:none;"></div>
           </div>
+          <div class="field">
+            <label>Etiquetas (separadas por vírgula)</label>
+            <input type="text" id="f-etiquetas" value="${esc((f.etiquetas||[]).join(', '))}" placeholder="Ex: indicação, urgente" />
+            ${(f.etiquetas||[]).length ? `<div class="etiquetas-pills">${f.etiquetas.map(et=>`<span class="etiqueta-pill">${esc(et)}</span>`).join('')}</div>` : ''}
+          </div>
+          ${camposPersonalizados.map(campo=>`
+            <div class="field">
+              <label>${esc(campo.nome)}</label>
+              <input type="${campo.tipo==='numero'?'number':(campo.tipo==='data'?'date':'text')}" class="f-campo-personalizado" data-campo-id="${campo.id}" value="${esc(((f.camposPersonalizados||{})[campo.id])||'')}" />
+            </div>
+          `).join('')}
+          ${!f.__isNew ? `
+            <div class="field">
+              <label>Anexos</label>
+              <input type="file" id="anexo-input" style="display:none;" accept="image/*,application/pdf" />
+              <button type="button" class="btn-outline" id="anexo-upload-btn" ${anexoEnviando?'disabled':''}>${anexoEnviando?'Enviando…':'+ Adicionar anexo'}</button>
+              <p class="settings-page-note">Imagens ou PDF, até ~3 MB por arquivo.</p>
+              <div id="f-anexos-lista">${!anexosCarregados ? '<p class="settings-page-note">Carregando…</p>' : renderAnexosListaHtml()}</div>
+            </div>
+          ` : ''}
           ${!f.__isNew && f.sugestaoIA && f.sugestaoIA.texto ? `
             <div class="field">
               <div class="ai-result" style="display:block;">
@@ -3408,6 +3751,23 @@ function renderModal(){
   });
   waModalBtn.addEventListener('click', ()=> abrirWhatsapp(modalForm.telefone));
   document.getElementById('f-obs').addEventListener('input', (e)=> modalForm.obs = e.target.value);
+  const etiquetasInput = document.getElementById('f-etiquetas');
+  if(etiquetasInput) etiquetasInput.addEventListener('input', (e)=>{
+    modalForm.etiquetas = e.target.value.split(',').map(s=>s.trim()).filter(Boolean);
+  });
+  document.querySelectorAll('.f-campo-personalizado').forEach(el=>{
+    el.addEventListener('input', (e)=>{
+      if(!modalForm.camposPersonalizados) modalForm.camposPersonalizados = {};
+      modalForm.camposPersonalizados[el.dataset.campoId] = e.target.value;
+    });
+  });
+  const anexoInput = document.getElementById('anexo-input');
+  const anexoUploadBtn = document.getElementById('anexo-upload-btn');
+  if(anexoUploadBtn && anexoInput) anexoUploadBtn.addEventListener('click', ()=> anexoInput.click());
+  if(anexoInput) anexoInput.addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(file) handleAnexoFileSelected(file);
+  });
   const aiMensagemBtn = document.getElementById('f-ai-mensagem');
   if(aiMensagemBtn) aiMensagemBtn.addEventListener('click', sugerirMensagemIA);
   const aiTarefaBtn = document.getElementById('f-ai-tarefa');
@@ -3448,6 +3808,8 @@ function renderModal(){
   });
   const verConversaBtn = document.getElementById('f-ver-conversa');
   if(verConversaBtn) verConversaBtn.addEventListener('click', abrirConversaWhatsapp);
+  const verHistoricoBtn = document.getElementById('f-ver-historico');
+  if(verHistoricoBtn) verHistoricoBtn.addEventListener('click', abrirHistoricoCard);
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
   document.getElementById('f-mes').addEventListener('change', (e)=> modalForm.mes = e.target.value);
 
@@ -4652,6 +5014,7 @@ if(getToken()){
   loadTemplates();
   loadAgendamentos();
   loadMenuTriagem();
+  loadCamposPersonalizados();
   loadConversas();
   loadEquipe();
   loadAutomacoes();

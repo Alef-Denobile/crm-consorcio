@@ -510,3 +510,38 @@ main{ padding:24px; overflow-x:auto; }
 .mt-opcoes-lista{ display:flex; flex-direction:column; gap:10px; margin:12px 0; }
 .mt-opcao-card{ background:var(--col-bg); border:1px solid var(--line); border-radius:10px; padding:12px; }
 .mt-opcao-numero-field{ flex:0 0 70px; }
+
+/* ---------- busca global (Ctrl+K) ---------- */
+.busca-global-modal{ max-width:560px; padding:0; overflow:hidden; }
+.busca-global-input-row{ display:flex; align-items:center; gap:10px; padding:16px; border-bottom:1px solid var(--line); color:var(--ink-soft); }
+.busca-global-input-row input{ flex:1; border:none; outline:none; background:none; font-size:15px; color:var(--ink); font-family:inherit; }
+.busca-global-input-row button{ border:none; background:none; color:var(--ink-soft); cursor:pointer; font-size:14px; }
+.busca-global-resultados{ max-height:400px; overflow-y:auto; padding:8px; }
+.busca-global-grupo-titulo{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); padding:10px 10px 4px; }
+.busca-global-item{ display:flex; align-items:center; justify-content:space-between; width:100%; padding:10px; border-radius:8px; border:none; background:none; text-align:left; cursor:pointer; }
+.busca-global-item:hover{ background:var(--hover-tint); }
+.busca-global-item-nome{ font-size:13px; font-weight:600; color:var(--ink); }
+
+/* ---------- histórico de atividades (card) ---------- */
+.historico-lista{ display:flex; flex-direction:column; gap:2px; max-height:280px; overflow-y:auto; }
+.historico-item{ display:flex; align-items:flex-start; gap:8px; padding:8px 4px; border-bottom:1px solid var(--line); font-size:12px; }
+.historico-item:last-child{ border-bottom:none; }
+.historico-item-icone{ flex-shrink:0; }
+.historico-item-texto{ flex:1; color:var(--ink); }
+.historico-item-data{ flex-shrink:0; color:var(--ink-soft); font-size:11px; white-space:nowrap; }
+
+/* ---------- etiquetas (pílulas) ---------- */
+.etiquetas-pills{ display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+.etiqueta-pill{ font-size:10px; font-weight:600; padding:3px 8px; border-radius:999px; background:var(--hover-tint); color:var(--ink-soft); border:1px solid var(--line); }
+
+/* ---------- campos personalizados (Configurações) ---------- */
+.campos-lista{ display:flex; flex-direction:column; gap:2px; }
+.campo-item{ display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; color:var(--ink); }
+.campo-item:last-child{ border-bottom:none; }
+
+/* ---------- anexos (card) ---------- */
+.anexos-lista{ display:flex; flex-direction:column; gap:2px; margin-top:8px; }
+.anexo-item{ display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--line); font-size:12px; }
+.anexo-item:last-child{ border-bottom:none; }
+.anexo-item-nome{ flex:1; color:var(--accent); text-decoration:none; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.anexo-item-nome:hover{ text-decoration:underline; }

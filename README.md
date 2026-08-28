@@ -288,6 +288,26 @@ entre outros) — se o seu formulário usar nomes de campo muito
 diferentes disso, talvez alguns dados não sejam capturados
 corretamente na primeira tentativa.
 
+## Busca global, histórico, etiquetas, campos e anexos
+
+- **Busca global** — atalho **Ctrl+K** (⌘K no Mac) ou o ícone de lupa
+  no topo da página, abre uma busca rápida por cliente ou tarefa
+- **Histórico de atividades** — botão "🕘 Ver histórico" no modal do
+  cliente, mostra uma linha do tempo com criação do cliente, tarefas
+  e mensagens do WhatsApp, mais recentes primeiro. É calculado na
+  hora a partir do que já existe — não é uma tabela nova no banco
+- **Etiquetas** — campo livre no modal do cliente (separadas por
+  vírgula), aparecem como pílulas no card do Pipeline e no modal
+- **Campos personalizados** — em Configurações → Integrações, crie
+  campos extras (texto, número ou data) que passam a aparecer no
+  modal de todos os clientes. Excluir um campo não apaga os valores
+  já preenchidos nos clientes, só para de mostrar
+- **Anexos** — no modal do cliente, suba arquivos (imagem ou PDF, até
+  ~3 MB cada). Ficam guardados como base64 direto no MongoDB — não
+  precisa de nenhum serviço de armazenamento externo, mas por isso o
+  limite de tamanho é mais apertado que um serviço de arquivos de
+  verdade ofereceria
+
 ## Equipes (Chat Interno e Supervisão)
 
 Diferente de tudo mais no projeto, isso não é uma funcionalidade "por
@@ -406,6 +426,9 @@ melhor o horário escolhido.
 - `PUT  /api/cards/:id` — edita cliente
 - `PUT  /api/cards/:id/move` — move cliente entre colunas (drag and drop)
 - `DELETE /api/cards/:id` — exclui cliente
+- `GET  /api/cards/:id/anexos` — lista os anexos de um cliente
+- `POST /api/cards/:id/anexos` — `{ nomeArquivo, tipoMime, dadosBase64 }` → sobe um anexo (~3 MB no máximo)
+- `DELETE /api/cards/:id/anexos/:anexoId` — remove um anexo
 
 **Tarefas (exigem token, isoladas por usuário):**
 - `GET  /api/tasks` — lista as tarefas
@@ -479,6 +502,11 @@ melhor o horário escolhido.
 - `POST /api/agendamentos` — `{ cardId, texto, agendadoPara }` → agenda uma nova mensagem
 - `POST /api/agendamentos/:id/cancelar` — cancela uma pendente
 - `DELETE /api/agendamentos/:id` — remove da lista (qualquer status)
+
+**Campos personalizados (exigem token):**
+- `GET  /api/campos-personalizados` — lista os campos do usuário
+- `POST /api/campos-personalizados` — `{ nome, tipo }` → cria (`tipo`: texto, numero ou data)
+- `DELETE /api/campos-personalizados/:id` — exclui a definição do campo
 
 **Instagram/Facebook Lead Ads:**
 - `GET  /api/instagram/webhook` — verificação do webhook (chamada pela Meta, não chame direto)
