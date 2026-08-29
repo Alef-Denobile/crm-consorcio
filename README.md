@@ -288,6 +288,34 @@ entre outros) — se o seu formulário usar nomes de campo muito
 diferentes disso, talvez alguns dados não sejam capturados
 corretamente na primeira tentativa.
 
+## Funis, equipe, PWA e guia de uso
+
+- **Duplicar funil** — botão "⧉" nas abas do Pipeline, ao lado de
+  renomear/excluir. Copia a estrutura de colunas (nome, tipo,
+  probabilidade) pra um funil novo — os clientes não são duplicados,
+  só a estrutura
+- **Ranking de desempenho** — em Supervisão, acima da tabela
+  detalhada que já existia: lista os membros da equipe ordenados por
+  valor ganho, com barra comparando cada um contra quem está na
+  frente
+- **Modo arquivado** — no modal do cliente, botão "📦 Arquivar" tira
+  ele de vista do Pipeline e da aba Leads sem excluir nada. Na aba
+  Leads, o botão "📦 Ver arquivados" alterna pra ver só os
+  arquivados (com opção de desarquivar a qualquer momento)
+- **PWA (instalável no celular)** — `manifest.json` + service worker
+  mínimo (`public/sw.js`) + ícones em `public/icons/`. As chamadas de
+  API nunca ficam em cache (sempre buscam dado atual do servidor);
+  só a "casca" do app (html/css/js) é cacheada, pra abrir mais rápido
+  em visitas seguintes. Pra instalar: abra o site no celular e use
+  "Adicionar à tela inicial" (Android) ou "Adicionar à Tela de
+  Início" (iPhone)
+- **Guia rápido de uso** — `docs/guia-rapido-painel-crm.docx`, um
+  documento Word separado do README (que é técnico, pra quem mexe no
+  código) — esse é voltado pra quem vai usar o painel no dia a dia:
+  cadastrar cliente, mover pelo funil, WhatsApp, tarefas, proposta,
+  busca rápida e importar planilha. Bom pra treinar gente nova da
+  equipe
+
 ## Propostas, meta de vendas, PDF, 2FA e auditoria
 
 - **Propostas em PDF** — no modal do cliente, botão "📄 Gerar proposta":
@@ -310,8 +338,6 @@ corretamente na primeira tentativa.
   os últimos 100 eventos de segurança da própria conta (login,
   desconectar todos os dispositivos, cliente excluído, membro
   removido da equipe, 2FA ativado/desativado)
-
-
 
 ## Importar/Exportar (planilha → possíveis leads)
 

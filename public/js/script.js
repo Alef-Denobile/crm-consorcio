@@ -7,6 +7,13 @@
 
 const API_BASE = '/api';
 
+/* ---------- PWA: registra o service worker (instalável no celular) ---------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('/sw.js').catch(()=>{ /* sem problema, o app funciona normal sem isso */ });
+  });
+}
+
 /* ---------- helpers ---------- */
 const fmtBRL = (n) => new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits:2, maximumFractionDigits:2 }).format(n || 0);
 const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
@@ -149,6 +156,7 @@ let openMenuColId = null;
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
+let mostrarArquivados = false;
 let tarefasShowConcluidas = false;
 let calendarConnected = false;
 let calendarSyncing = false;
@@ -350,6 +358,18 @@ async function renomearFunil(id, nome){
   }catch(e){
     f.nome = anterior;
     errorMsg = 'Não foi possível renomear o funil.';
+    renderApp();
+  }
+}
+async function duplicarFunil(id){
+  const original = funis.find(f=>f.id===id);
+  try{
+    const novoFunil = await apiRequest('POST', `/funis/${id}/duplicar`);
+    funis.push(novoFunil);
+    funilAtualId = novoFunil.id;
+    await loadBoard(); // recarrega colunas/cards pra pegar as colunas novas criadas no servidor
+  }catch(e){
+    errorMsg = `Não foi possível duplicar o funil${original?` "${original.nome}"`:''}.`;
     renderApp();
   }
 }
@@ -1737,6 +1757,7 @@ function monthsList(){
 }
 function visibleCards(){
   let cards = filterMonth ? board.cards.filter(c=>c.mes===filterMonth) : board.cards;
+  cards = cards.filter(c=>!c.arquivado);
   if(filtroEsfriando){
     const limite = Date.now() - 7*24*60*60*1000;
     cards = cards.filter(c=>{
@@ -1960,6 +1981,7 @@ function comissoesStats(){
 /* ---------- derivações (Leads) ---------- */
 function filteredLeads(){
   let list = board.cards;
+  list = list.filter(c=> mostrarArquivados ? c.arquivado : !c.arquivado);
   if(leadsStatusFilter) list = list.filter(c=>c.columnId===leadsStatusFilter);
   if(leadsSearch.trim()){
     const q = leadsSearch.trim().toLowerCase();
@@ -2923,6 +2945,7 @@ function renderPipelinePage(){
       }).join('')}
       ${funilAtual ? `
         <button class="icon-btn" data-action="edit-funil-name" data-funil-id="${funilAtual.id}" title="Renomear funil">${ICON_EDIT}</button>
+        <button class="icon-btn" data-action="duplicar-funil" data-funil-id="${funilAtual.id}" title="Duplicar funil (só a estrutura de colunas)">⧉</button>
         ${funis.length > 1 ? `<button class="icon-btn" data-action="delete-funil" data-funil-id="${funilAtual.id}" title="Excluir funil">${ICON_TRASH}</button>` : ''}
       ` : ''}
       <button class="tab-btn" data-action="open-new-funil" title="Criar novo funil">+ Funil</button>
@@ -3103,6 +3126,7 @@ function renderLeadsPage(){
         ${board.columns.map(c=>`<option value="${c.id}" ${leadsStatusFilter===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
       </select>
       <button class="btn-outline" data-action="exportar-leads">Exportar</button>
+      <button class="btn-outline ${mostrarArquivados?'active':''}" data-action="toggle-mostrar-arquivados">${mostrarArquivados?'Voltar aos ativos':'📦 Ver arquivados'}</button>
     </div>
 
     <div class="leads-table-wrap">
@@ -3981,6 +4005,8 @@ function bindAppEvents(){
   if(openNewLeadBtn) openNewLeadBtn.addEventListener('click', ()=> openNewCard());
   const exportarLeadsBtn = app.querySelector('[data-action="exportar-leads"]');
   if(exportarLeadsBtn) exportarLeadsBtn.addEventListener('click', exportarLeads);
+  const toggleArquivadosBtn = app.querySelector('[data-action="toggle-mostrar-arquivados"]');
+  if(toggleArquivadosBtn) toggleArquivadosBtn.addEventListener('click', ()=>{ mostrarArquivados = !mostrarArquivados; renderApp(); });
   const leadsSearchInput = document.getElementById('leads-search-input');
   if(leadsSearchInput) leadsSearchInput.addEventListener('input', (e)=>{
     const cursorPos = e.target.selectionStart;
@@ -4022,6 +4048,8 @@ function bindAppEvents(){
       onConfirm: ()=>{ excluirFunil(id); closeConfirm(); },
     });
   });
+  const duplicarFunilBtn = app.querySelector('[data-action="duplicar-funil"]');
+  if(duplicarFunilBtn) duplicarFunilBtn.addEventListener('click', ()=> duplicarFunil(duplicarFunilBtn.dataset.funilId));
 
   /* -- Pipeline: filtro de data -- */
   const dateMenuBtn = app.querySelector('[data-action="toggle-date-menu"]');
@@ -4171,6 +4199,26 @@ function openNewCard(columnId){
   };
   renderModal();
 }
+async function toggleArquivarCard(){
+  if(!modalForm || modalForm.__isNew) return;
+  const arquivarAgora = !modalForm.arquivado;
+  try{
+    const atualizado = await apiRequest('PUT', `/cards/${modalForm.id}/${arquivarAgora?'arquivar':'desarquivar'}`);
+    const idx = board.cards.findIndex(c=>c.id===modalForm.id);
+    if(idx>-1) board.cards[idx] = atualizado;
+    if(arquivarAgora){
+      closeModal();
+      renderApp();
+    } else {
+      modalForm.arquivado = atualizado.arquivado;
+      renderModal();
+      renderApp();
+    }
+  }catch(e){
+    errorMsg = 'Não foi possível atualizar o arquivamento.';
+    renderApp();
+  }
+}
 function openEditCard(id){
   const card = board.cards.find(c=>c.id===id);
   if(!card) return;
@@ -4239,6 +4287,7 @@ function renderModal(){
               ${!f.__isNew && whatsappConnected ? `<button type="button" class="ai-btn" id="f-ver-conversa">${WA_ICON} Ver conversa</button>` : ''}
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ver-historico">🕘 Ver histórico</button>` : ''}
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-gerar-proposta">📄 Gerar proposta</button>` : ''}
+              ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-toggle-arquivar">${f.arquivado?'📦 Desarquivar':'📦 Arquivar'}</button>` : ''}
             </div>
             <div class="ai-result" id="f-ai-mensagem-result" style="display:none;"></div>
             <div class="wa-conversa" id="f-wa-conversa" style="display:none;"></div>
@@ -4370,6 +4419,8 @@ function renderModal(){
   if(verHistoricoBtn) verHistoricoBtn.addEventListener('click', abrirHistoricoCard);
   const gerarPropostaBtn = document.getElementById('f-gerar-proposta');
   if(gerarPropostaBtn) gerarPropostaBtn.addEventListener('click', abrirPropostaModal);
+  const toggleArquivarBtn = document.getElementById('f-toggle-arquivar');
+  if(toggleArquivarBtn) toggleArquivarBtn.addEventListener('click', toggleArquivarCard);
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
   document.getElementById('f-mes').addEventListener('change', (e)=> modalForm.mes = e.target.value);
 
@@ -4785,6 +4836,23 @@ function renderSupervisaoPage(){
         `).join('')}
       </div>
       <button class="btn-outline" data-action="sair-equipe" style="margin-top:10px;">Sair da equipe</button>
+    </div>
+
+    <div class="settings-page-section" style="margin-bottom:20px;">
+      <h3>Ranking de desempenho (por valor ganho)</h3>
+      ${!supervisaoLoaded ? `<p class="settings-page-note">Carregando…</p>` : (supervisaoMembros.length ? `
+        <div class="stage-list">
+          ${[...supervisaoMembros].sort((a,b)=>b.ganhoValor-a.ganhoValor).map((m,idx)=>{
+            const maxGanho = Math.max(1, ...supervisaoMembros.map(x=>x.ganhoValor));
+            return `
+              <div class="stage-row">
+                <div class="stage-row-top"><span>${idx+1}º — ${esc(m.nome)} ${m.papel==='supervisor'?'⭐':''}</span><span>${fmtBRL(m.ganhoValor)}</span></div>
+                <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${(m.ganhoValor/maxGanho*100)}%"></div></div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : `<p class="dash-empty">Nenhum membro ainda.</p>`)}
     </div>
 
     <div class="settings-page-section">

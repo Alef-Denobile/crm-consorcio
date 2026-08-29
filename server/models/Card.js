@@ -29,6 +29,7 @@ const cardSchema = new mongoose.Schema(
     aguardandoMenuTriagem: { type: Boolean, default: false }, // true logo depois de mandar o menu de triagem, até a pessoa responder
     etiquetas: { type: [String], default: [] },
     camposPersonalizados: { type: mongoose.Schema.Types.Mixed, default: {} }, // { campoId: valor }
+    arquivado: { type: Boolean, default: false },
   },
   {
     timestamps: true,

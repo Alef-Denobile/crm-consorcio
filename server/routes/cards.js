@@ -141,6 +141,38 @@ router.delete('/:id/sugestao-ia', async (req, res) => {
   }
 });
 
+// PUT /api/cards/:id/arquivar -> tira o cliente de vista sem excluir
+router.put('/:id/arquivar', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'ID inválido.' });
+    const card = await Card.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { arquivado: true },
+      { new: true }
+    );
+    if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    res.json(card.toJSON());
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao arquivar cliente.' });
+  }
+});
+
+// PUT /api/cards/:id/desarquivar -> traz o cliente de volta pra vista normal
+router.put('/:id/desarquivar', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'ID inválido.' });
+    const card = await Card.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { arquivado: false },
+      { new: true }
+    );
+    if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    res.json(card.toJSON());
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao desarquivar cliente.' });
+  }
+});
+
 // PUT /api/cards/:id/move -> usado no drag and drop entre colunas
 router.put('/:id/move', async (req, res) => {
   try {

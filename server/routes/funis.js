@@ -79,4 +79,34 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// POST /api/funis/:id/duplicar -> cria um funil novo com a mesma estrutura de colunas
+// (nome, tipo, ordem, probabilidade) do funil de origem — sem duplicar os clientes
+router.post('/:id/duplicar', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'ID inválido.' });
+    const original = await Funil.findOne({ _id: req.params.id, userId: req.userId });
+    if (!original) return res.status(404).json({ error: 'Funil não encontrado.' });
+
+    const total = await Funil.countDocuments({ userId: req.userId });
+    const novoFunil = await Funil.create({ userId: req.userId, nome: `${original.nome} (cópia)`, ordem: total });
+
+    const colunasOriginais = await Column.find({ userId: req.userId, funilId: original._id }).sort({ ordem: 1 });
+    if (colunasOriginais.length) {
+      await Column.insertMany(
+        colunasOriginais.map((c) => ({
+          userId: req.userId,
+          funilId: novoFunil._id,
+          nome: c.nome,
+          tipo: c.tipo,
+          probabilidade: c.probabilidade,
+          ordem: c.ordem,
+        }))
+      );
+    }
+    res.status(201).json(novoFunil.toJSON());
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao duplicar funil.' });
+  }
+});
+
 module.exports = router;
