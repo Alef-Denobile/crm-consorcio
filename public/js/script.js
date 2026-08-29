@@ -2743,16 +2743,17 @@ function renderApp(){
               <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
           </button>
-          <button class="notif-btn" data-action="abrir-busca-global" title="Buscar (Ctrl+K)" style="margin-left:auto;">
-            ${ICON_BUSCA}
-          </button>
-          <div class="notif-wrap">
-            <button class="notif-btn" data-action="toggle-notif" title="Notificações">
-              ${ICON_BELL}
-              ${notificacoes.length ? `<span class="notif-badge">${notificacoes.length > 9 ? '9+' : notificacoes.length}</span>` : ''}
+          <div class="topbar-right">
+            <button class="notif-btn" data-action="abrir-busca-global" title="Buscar (Ctrl+K)">
+              ${ICON_BUSCA}
             </button>
-            ${notifOpen ? `
-              <div class="notif-panel">
+            <div class="notif-wrap">
+              <button class="notif-btn" data-action="toggle-notif" title="Notificações">
+                ${ICON_BELL}
+                ${notificacoes.length ? `<span class="notif-badge">${notificacoes.length > 9 ? '9+' : notificacoes.length}</span>` : ''}
+              </button>
+              ${notifOpen ? `
+                <div class="notif-panel">
                 <div class="notif-panel-title">Notificações</div>
                 ${notificacoes.length ? notificacoes.slice(0,8).map(n=>`
                   <div class="notif-item" ${n.cardId ? `data-action="open-edit-card" data-card-id="${n.cardId}"` : ''}>
@@ -2762,6 +2763,7 @@ function renderApp(){
                 `).join('') : '<p class="settings-page-note" style="padding:12px;">Nenhuma notificação por enquanto.</p>'}
               </div>
             ` : ''}
+          </div>
           </div>
         </div>
         ${errorMsg ? `<div class="error-banner" data-action="dismiss-error" title="Clique para fechar">⚠ ${esc(errorMsg)}</div>` : ''}

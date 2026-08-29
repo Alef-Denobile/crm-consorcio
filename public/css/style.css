@@ -422,7 +422,8 @@ main{ padding:24px; overflow-x:auto; }
 
 /* ---------- barra superior (hambúrguer + sino de notificações) ---------- */
 .main-topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
-.notif-wrap{ position:relative; margin-left:auto; }
+.topbar-right{ display:flex; align-items:center; gap:10px; margin-left:auto; }
+.notif-wrap{ position:relative; }
 .notif-btn{ position:relative; display:flex; align-items:center; justify-content:center; width:40px; height:40px; border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--ink); cursor:pointer; }
 .notif-btn:hover{ background:var(--hover-tint); }
 .notif-badge{ position:absolute; top:-6px; right:-6px; min-width:18px; height:18px; padding:0 4px; border-radius:999px; background:var(--danger); color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
