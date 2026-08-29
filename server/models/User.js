@@ -60,6 +60,8 @@ const userSchema = new mongoose.Schema(
     papelEquipe: { type: String, enum: ['supervisor', 'membro'], default: 'membro' },
     tokenVersion: { type: Number, default: 0 }, // incrementar invalida todos os tokens já emitidos (logout geral)
     avatarUrl: { type: String, default: null }, // imagem pequena em base64 (data URL)
+    twoFactorSecret: { type: String, default: null }, // segredo TOTP — só existe enquanto ativado ou em processo de ativação
+    twoFactorEnabled: { type: Boolean, default: false },
   },
   {
     timestamps: true,
@@ -71,6 +73,7 @@ const userSchema = new mongoose.Schema(
         ret.temSenha = !!ret.senhaHash;
         delete ret.senhaHash; // nunca devolver o hash da senha pro front-end
         delete ret.tokenVersion; // detalhe interno de segurança, não precisa ir pro front-end
+        delete ret.twoFactorSecret; // nunca expor o segredo do 2FA pro front-end
         ret.googleCalendarConnected = !!(ret.googleCalendar && ret.googleCalendar.refreshToken);
         delete ret.googleCalendar; // tokens nunca saem do servidor
         ret.whatsappConnected = !!(ret.whatsappBusiness && ret.whatsappBusiness.accessToken && ret.whatsappBusiness.phoneNumberId);

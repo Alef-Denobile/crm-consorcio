@@ -6,6 +6,7 @@ const Equipe = require('../models/Equipe');
 const ChatMensagem = require('../models/ChatMensagem');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
+const { registrarAuditoria } = require('../utils/auditoria');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de equipe exigem login
@@ -177,6 +178,7 @@ router.delete('/membro/:userId', async (req, res) => {
     alvo.equipeId = null;
     alvo.papelEquipe = 'membro';
     await alvo.save();
+    registrarAuditoria(req.userId, 'membro_removido', `Removeu "${alvo.nome || alvo.email}" da equipe`);
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: 'Erro ao remover o membro.' });

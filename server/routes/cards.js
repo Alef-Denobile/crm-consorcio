@@ -8,6 +8,7 @@ const Task = require('../models/Task');
 const Fluxo = require('../models/Fluxo');
 const FluxoExecucao = require('../models/FluxoExecucao');
 const Anexo = require('../models/Anexo');
+const { registrarAuditoria } = require('../utils/auditoria');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
@@ -175,6 +176,7 @@ router.delete('/:id', async (req, res) => {
     }
     const card = await Card.findOneAndDelete({ _id: req.params.id, userId: req.userId });
     if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
+    registrarAuditoria(req.userId, 'card_excluido', `Cliente "${card.cliente}" excluído`);
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: 'Erro ao excluir cliente.' });

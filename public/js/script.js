@@ -64,6 +64,7 @@ const ICON_SUPERVISAO = `<svg width="17" height="17" viewBox="0 0 24 24" fill="n
 const ICON_AUTOMACOES = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
 const ICON_FLUXOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="12" r="2"/><path d="M5 8v8"/><path d="M7 6h6a4 4 0 0 1 4 4"/><path d="M7 18h6a4 4 0 0 0 4-4"/></svg>`;
 const ICON_AGENDAMENTOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14v3l2 1"/></svg>`;
+const ICON_IMPORT_EXPORT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 17l-4-4 4-4"/><path d="M4 13h11a4 4 0 0 0 4-4V7"/><path d="M16 7l4 4-4 4"/><path d="M20 11H9a4 4 0 0 0-4 4v2"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
@@ -137,6 +138,9 @@ let currentPage = 'dashboard';   // 'dashboard' | 'pipeline' | 'leads' | 'tarefa
 let filterMonth = null;          // null = Geral (página Pipeline)
 let filtroEsfriando = false;
 let dashboardPeriod = 'mes';     // '7dias' | 'mes' | 'trimestre' | 'ano'
+let metaVendasValor = 0;
+let metaVendasCarregada = false;
+let editandoMetaVendas = false;
 let addingCol = false;
 let newColNameVal = '';
 let editingColId = null;
@@ -182,6 +186,27 @@ let anexosDoCard = [];
 let anexosCarregados = false;
 let anexoEnviando = false;
 let anexoMsg = null;
+let possiveisLeads = [];
+let possiveisLeadsCarregados = false;
+let importPlanilhaLinhas = [];
+let importPlanilhaColunas = [];
+let importPlanilhaNomeArquivo = '';
+let importMapNome = '';
+let importMapTelefone = '';
+let importMapServico = '';
+let importandoPlanilha = false;
+let importPlanilhaMsg = null;
+let completarLeadModalForm = null;
+let completarLeadSalvando = false;
+let completarLeadMsg = null;
+let propostaModalForm = null;
+let twoFactorSetup = null; // { segredo, otpauthUri } enquanto configurando
+let twoFactorCodigoInput = '';
+let twoFactorMsg = null;
+let twoFactorSalvando = false;
+let mostrarDesativar2FA = false;
+let auditoriaEventos = [];
+let auditoriaCarregada = false;
 let disparoFiltroColuna = '';
 let disparoFiltroTemp = '';
 let disparoSelecionados = new Set();
@@ -563,6 +588,86 @@ async function abrirHistoricoCard(){
   ` : '<p class="settings-page-note">Nenhum evento registrado ainda.</p>';
 }
 
+/* ---------- proposta em PDF (dentro do card do cliente) ---------- */
+function abrirPropostaModal(){
+  if(!modalForm || modalForm.__isNew) return;
+  const daqui7dias = new Date();
+  daqui7dias.setDate(daqui7dias.getDate()+7);
+  propostaModalForm = {
+    cliente: modalForm.cliente || '',
+    valor: Number(modalForm.valor) || 0,
+    parcelas: 80,
+    validade: daqui7dias.toISOString().slice(0,10),
+  };
+  renderPropostaModal();
+}
+function closePropostaModal(){ propostaModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+function renderPropostaModal(){
+  const root = document.getElementById('modal-root');
+  if(!propostaModalForm){ root.innerHTML=''; return; }
+  const f = propostaModalForm;
+  root.innerHTML = `
+    <div class="overlay" id="proposta-modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Gerar proposta</h3>
+          <button id="proposta-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field"><label>Cliente</label><input type="text" id="proposta-cliente" value="${esc(f.cliente)}" /></div>
+          <div class="field-row">
+            <div class="field"><label>Valor da carta (R$)</label><input type="number" id="proposta-valor" value="${f.valor}" min="0" step="0.01" /></div>
+            <div class="field"><label>Nº de parcelas</label><input type="number" id="proposta-parcelas" value="${f.parcelas}" min="1" /></div>
+          </div>
+          <div class="field"><label>Válida até</label><input type="date" id="proposta-validade" value="${f.validade}" /></div>
+          <p class="settings-page-note">Parcela estimada: ${fmtBRL((f.valor||0)/(f.parcelas||1))}</p>
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="proposta-cancel">Cancelar</button>
+            <button class="btn-save" id="proposta-gerar">Gerar PDF</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('proposta-modal-close').addEventListener('click', closePropostaModal);
+  document.getElementById('proposta-cancel').addEventListener('click', closePropostaModal);
+  document.getElementById('proposta-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='proposta-modal-overlay') closePropostaModal(); });
+  document.getElementById('proposta-cliente').addEventListener('input', (e)=> propostaModalForm.cliente = e.target.value);
+  document.getElementById('proposta-valor').addEventListener('input', (e)=>{ propostaModalForm.valor = parseFloat(e.target.value)||0; renderPropostaModal(); });
+  document.getElementById('proposta-parcelas').addEventListener('input', (e)=>{ propostaModalForm.parcelas = parseInt(e.target.value,10)||1; renderPropostaModal(); });
+  document.getElementById('proposta-validade').addEventListener('input', (e)=> propostaModalForm.validade = e.target.value);
+  document.getElementById('proposta-gerar').addEventListener('click', gerarPropostaPdf);
+}
+function gerarPropostaPdf(){
+  const f = propostaModalForm;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  let y = 25;
+  doc.setFontSize(20);
+  doc.text('Proposta de Carta de Crédito', 14, y); y += 10;
+  doc.setFontSize(11);
+  doc.setTextColor(120);
+  doc.text(`Consultor: ${(currentUser&&currentUser.nome)||''}`, 14, y); y += 14;
+  doc.setTextColor(20);
+
+  doc.setFontSize(12);
+  doc.text(`Cliente: ${f.cliente}`, 14, y); y += 8;
+  doc.text(`Valor da carta: ${fmtBRL(f.valor)}`, 14, y); y += 8;
+  doc.text(`Número de parcelas: ${f.parcelas}`, 14, y); y += 8;
+  doc.text(`Parcela estimada: ${fmtBRL(f.valor/(f.parcelas||1))}`, 14, y); y += 8;
+  doc.text(`Proposta válida até: ${formatDate(f.validade)}`, 14, y); y += 16;
+
+  doc.setFontSize(9);
+  doc.setTextColor(140);
+  doc.text('Valores sujeitos a alteração conforme condições da administradora de consórcio no momento da contratação.', 14, y, { maxWidth: 180 });
+
+  doc.save(`proposta_${(f.cliente||'cliente').replace(/\s+/g,'_')}.pdf`);
+  closePropostaModal();
+}
+
 async function abrirConversaWhatsapp(){
   const box = document.getElementById('f-wa-conversa');
   if(!box || !modalForm || modalForm.__isNew) return;
@@ -792,6 +897,189 @@ async function excluirFluxo(id){
     errorMsg = 'Não foi possível excluir o fluxo.';
     renderApp();
   }
+}
+
+/* ---------- Importar/Exportar (planilha -> possíveis leads) ---------- */
+function handlePlanilhaFileSelected(file){
+  if(!file) return;
+  importPlanilhaMsg = null;
+  importPlanilhaNomeArquivo = file.name;
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const workbook = XLSX.read(e.target.result, { type:'array' });
+      const primeiraAba = workbook.SheetNames[0];
+      const linhas = XLSX.utils.sheet_to_json(workbook.Sheets[primeiraAba], { defval:'' });
+      if(!linhas.length){
+        importPlanilhaMsg = { tipo:'erro', texto:'A planilha parece estar vazia.' };
+        importPlanilhaLinhas = [];
+        importPlanilhaColunas = [];
+        renderApp();
+        return;
+      }
+      importPlanilhaLinhas = linhas;
+      importPlanilhaColunas = Object.keys(linhas[0]);
+      // tenta adivinhar as colunas certas pelo nome, só pra facilitar — usuário confirma/ajusta de qualquer forma
+      const achar = (padroes)=> importPlanilhaColunas.find(c=> padroes.some(p=> c.toLowerCase().includes(p))) || '';
+      importMapNome = achar(['nome']);
+      importMapTelefone = achar(['telefone','celular','fone','whats']);
+      importMapServico = achar(['serviço','servico','produto','interesse','tipo']);
+      importPlanilhaMsg = null;
+    }catch(err){
+      importPlanilhaMsg = { tipo:'erro', texto:'Não foi possível ler esse arquivo. Confira se é um .csv ou .xlsx válido.' };
+      importPlanilhaLinhas = [];
+      importPlanilhaColunas = [];
+    }
+    renderApp();
+  };
+  reader.readAsArrayBuffer(file);
+}
+async function confirmarImportPlanilha(){
+  if(!importMapNome && !importMapTelefone){
+    importPlanilhaMsg = { tipo:'erro', texto:'Escolha ao menos a coluna de nome ou de telefone.' };
+    renderApp();
+    return;
+  }
+  const linhas = importPlanilhaLinhas.map(linha=>({
+    nome: importMapNome ? linha[importMapNome] : '',
+    telefone: importMapTelefone ? linha[importMapTelefone] : '',
+    tipoServico: importMapServico ? linha[importMapServico] : '',
+  }));
+  importandoPlanilha = true;
+  importPlanilhaMsg = null;
+  renderApp();
+  try{
+    const data = await apiRequest('POST', '/possiveis-leads/importar', { linhas, origemArquivo: importPlanilhaNomeArquivo });
+    importPlanilhaMsg = { tipo:'ok', texto:`${data.total} possível lead(s) importado(s).` };
+    importPlanilhaLinhas = [];
+    importPlanilhaColunas = [];
+    importPlanilhaNomeArquivo = '';
+    await loadPossiveisLeads();
+  }catch(e){
+    importPlanilhaMsg = { tipo:'erro', texto: e.message || 'Não foi possível importar a planilha.' };
+  }
+  importandoPlanilha = false;
+  renderApp();
+}
+async function loadPossiveisLeads(){
+  try{
+    const data = await apiRequest('GET', '/possiveis-leads');
+    possiveisLeads = data.leads || [];
+  }catch(e){
+    possiveisLeads = [];
+  }
+  possiveisLeadsCarregados = true;
+  renderApp();
+}
+async function descartarPossivelLead(id){
+  const idx = possiveisLeads.findIndex(l=>l.id===id);
+  if(idx===-1) return;
+  const [removido] = possiveisLeads.splice(idx,1);
+  renderApp();
+  try{
+    await apiRequest('DELETE', `/possiveis-leads/${id}`);
+  }catch(e){
+    possiveisLeads.splice(idx,0,removido);
+    errorMsg = 'Não foi possível descartar.';
+    renderApp();
+  }
+}
+function abrirCompletarLead(id){
+  const lead = possiveisLeads.find(l=>l.id===id);
+  if(!lead) return;
+  completarLeadModalForm = {
+    possivelLeadId: lead.id, nome: lead.nome||'', telefone: lead.telefone||'',
+    tipoServico: lead.tipoServico||'', columnId: ((board.columns.find(c=>c.tipo==='aberto')||board.columns[0]||{}).id)||'',
+    valor: 0, temperatura:'morno',
+  };
+  completarLeadMsg = null;
+  renderCompletarLeadModal();
+}
+function closeCompletarLeadModal(){ completarLeadModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+async function salvarCompletarLead(){
+  const f = completarLeadModalForm;
+  if(!f.nome.trim()){
+    completarLeadMsg = { tipo:'erro', texto:'Informe o nome do cliente.' };
+    renderCompletarLeadModal();
+    return;
+  }
+  if(!f.columnId){
+    completarLeadMsg = { tipo:'erro', texto:'Escolha a coluna de destino.' };
+    renderCompletarLeadModal();
+    return;
+  }
+  completarLeadSalvando = true;
+  completarLeadMsg = null;
+  renderCompletarLeadModal();
+  try{
+    const novoCard = await apiRequest('POST', `/possiveis-leads/${f.possivelLeadId}/promover`, {
+      nome: f.nome, telefone: f.telefone, columnId: f.columnId, valor: f.valor,
+      temperatura: f.temperatura, obs: f.tipoServico ? `Serviço de interesse: ${f.tipoServico}` : '',
+      mes: currentMonthKey(),
+    });
+    board.cards.push(novoCard);
+    possiveisLeads = possiveisLeads.filter(l=>l.id!==f.possivelLeadId);
+    closeCompletarLeadModal();
+    renderApp();
+  }catch(e){
+    completarLeadMsg = { tipo:'erro', texto: e.message || 'Não foi possível adicionar aos Leads.' };
+    completarLeadSalvando = false;
+    renderCompletarLeadModal();
+  }
+}
+function renderCompletarLeadModal(){
+  const root = document.getElementById('modal-root');
+  if(!completarLeadModalForm){ root.innerHTML=''; return; }
+  const f = completarLeadModalForm;
+  root.innerHTML = `
+    <div class="overlay" id="cl-lead-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Completar e adicionar aos Leads</h3>
+          <button id="cl-lead-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field"><label>Nome</label><input type="text" id="cl-lead-nome" value="${esc(f.nome)}" /></div>
+          <div class="field"><label>Telefone</label><input type="text" id="cl-lead-telefone" value="${esc(f.telefone)}" /></div>
+          ${f.tipoServico ? `<p class="settings-page-note">Serviço de interesse (da planilha): <b>${esc(f.tipoServico)}</b></p>` : ''}
+          <div class="field">
+            <label>Coluna de destino</label>
+            <select id="cl-lead-coluna">
+              ${board.columns.map(c=>`<option value="${c.id}" ${f.columnId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Valor (opcional)</label><input type="number" id="cl-lead-valor" value="${f.valor}" min="0" step="0.01" /></div>
+            <div class="field">
+              <label>Temperatura</label>
+              <select id="cl-lead-temp">
+                <option value="frio" ${f.temperatura==='frio'?'selected':''}>Frio</option>
+                <option value="morno" ${f.temperatura==='morno'?'selected':''}>Morno</option>
+                <option value="quente" ${f.temperatura==='quente'?'selected':''}>Quente</option>
+              </select>
+            </div>
+          </div>
+          ${completarLeadMsg ? `<p class="settings-page-msg ${completarLeadMsg.tipo}">${esc(completarLeadMsg.texto)}</p>` : ''}
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="cl-lead-cancel">Cancelar</button>
+            <button class="btn-save" id="cl-lead-salvar" ${completarLeadSalvando?'disabled':''}>${completarLeadSalvando?'Adicionando…':'Adicionar aos Leads'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('cl-lead-close').addEventListener('click', closeCompletarLeadModal);
+  document.getElementById('cl-lead-cancel').addEventListener('click', closeCompletarLeadModal);
+  document.getElementById('cl-lead-overlay').addEventListener('click', (e)=>{ if(e.target.id==='cl-lead-overlay') closeCompletarLeadModal(); });
+  document.getElementById('cl-lead-nome').addEventListener('input', (e)=> completarLeadModalForm.nome = e.target.value);
+  document.getElementById('cl-lead-telefone').addEventListener('input', (e)=> completarLeadModalForm.telefone = e.target.value);
+  document.getElementById('cl-lead-coluna').addEventListener('change', (e)=> completarLeadModalForm.columnId = e.target.value);
+  document.getElementById('cl-lead-valor').addEventListener('input', (e)=> completarLeadModalForm.valor = parseFloat(e.target.value)||0);
+  document.getElementById('cl-lead-temp').addEventListener('change', (e)=> completarLeadModalForm.temperatura = e.target.value);
+  document.getElementById('cl-lead-salvar').addEventListener('click', salvarCompletarLead);
 }
 
 /* ---------- Agendamentos ---------- */
@@ -1357,6 +1645,48 @@ function baixarCsv(cards, nomeArquivo){
 function exportarCsv(){
   baixarCsv(cardsParaRelatorio(), `leads_${currentMonthKey()}.csv`);
 }
+function exportarRelatorioPdf(){
+  const cardsRel = cardsParaRelatorio();
+  const dados = relatoriosDadosMensais(6, cardsRel);
+  const totalGanho = cardsRel.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='ganho' ? s+(Number(c.valor)||0) : s; },0);
+  const totalPerdido = cardsRel.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='perdido' ? s+(Number(c.valor)||0) : s; },0);
+  const porTemp = ['quente','morno','frio'].map(t=>({ temp:t, count: cardsRel.filter(c=>c.temperatura===t).length }));
+  const funilNome = relatorioFunilId ? ((funis.find(f=>f.id===relatorioFunilId)||{}).nome || '') : 'Todos os funis';
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  let y = 20;
+  doc.setFontSize(18);
+  doc.text('Relatório — Painel CRM', 14, y); y += 7;
+  doc.setFontSize(10);
+  doc.setTextColor(120);
+  doc.text(`${funilNome} — gerado em ${new Date().toLocaleDateString('pt-BR')}`, 14, y); y += 12;
+  doc.setTextColor(20);
+
+  doc.setFontSize(13);
+  doc.text('Resumo', 14, y); y += 8;
+  doc.setFontSize(11);
+  doc.text(`Total ganho: ${fmtBRL(totalGanho)}`, 14, y); y += 6;
+  doc.text(`Total perdido: ${fmtBRL(totalPerdido)}`, 14, y); y += 6;
+  doc.text(`Total de leads: ${cardsRel.length}`, 14, y); y += 12;
+
+  doc.setFontSize(13);
+  doc.text('Novos leads por mês', 14, y); y += 8;
+  doc.setFontSize(11);
+  dados.forEach(d=>{
+    doc.text(`${monthLabel(d.key)}: ${d.novos}`, 14, y); y += 6;
+  });
+  y += 6;
+
+  doc.setFontSize(13);
+  doc.text('Leads por qualificação', 14, y); y += 8;
+  doc.setFontSize(11);
+  porTemp.forEach(t=>{
+    doc.text(`${TEMPS[t.temp].label}: ${t.count}`, 14, y); y += 6;
+  });
+
+  doc.save(`relatorio_${currentMonthKey()}.pdf`);
+}
 function exportarLeads(){
   baixarCsv(filteredLeads(), `contatos_${currentMonthKey()}.csv`);
 }
@@ -1476,6 +1806,35 @@ function cardsInPeriod(){
     const d = new Date(c.createdAt);
     return d >= start && d <= end;
   });
+}
+function vendidoNoMesAtual(){
+  const mesAtual = currentMonthKey();
+  return board.cards.reduce((s,c)=>{
+    const col = board.columns.find(k=>k.id===c.columnId);
+    return (col && col.tipo==='ganho' && c.mes===mesAtual) ? s + (Number(c.valor)||0) : s;
+  }, 0);
+}
+async function loadMetaVendas(){
+  try{
+    const data = await apiRequest('GET', `/metas/${currentMonthKey()}`);
+    metaVendasValor = data.valorMeta || 0;
+  }catch(e){
+    metaVendasValor = 0;
+  }
+  metaVendasCarregada = true;
+  renderApp();
+}
+async function salvarMetaVendas(){
+  const input = document.getElementById('meta-vendas-input');
+  const valor = input ? (parseFloat(input.value) || 0) : 0;
+  try{
+    await apiRequest('PUT', `/metas/${currentMonthKey()}`, { valorMeta: valor });
+    metaVendasValor = valor;
+  }catch(e){
+    errorMsg = 'Não foi possível salvar a meta.';
+  }
+  editandoMetaVendas = false;
+  renderApp();
 }
 function dashMetrics(){
   const cards = cardsInPeriod();
@@ -1629,6 +1988,9 @@ function goToPage(page){
     logoutAllMsg = null;
     avatarMsg = null;
     importResultado = null;
+    twoFactorSetup = null; twoFactorMsg = null; mostrarDesativar2FA = false;
+    auditoriaCarregada = false;
+    loadAuditoria();
     refreshCurrentUser();
   }
   if(page === 'chat-interno'){
@@ -1885,6 +2247,116 @@ async function deleteContratoById(id){
     errorMsg = 'Não foi possível excluir o contrato.';
     renderApp();
   }
+}
+
+/* ---------- 2FA (verificação em duas etapas) ---------- */
+function renderSecao2FA(){
+  if(twoFactorSetup){
+    return `
+      <p class="settings-page-note">Escaneie o QR code com seu app autenticador (Google Authenticator, Authy, etc.) e digite o código gerado pra confirmar.</p>
+      <div id="qrcode-2fa" style="margin:12px 0;"></div>
+      <p class="settings-page-note">Ou digite manualmente: <code>${esc(twoFactorSetup.segredo)}</code></p>
+      <div class="field">
+        <label>Código de 6 dígitos</label>
+        <input type="text" id="twofa-confirmar-codigo" maxlength="6" inputmode="numeric" placeholder="000000" />
+      </div>
+      ${twoFactorMsg ? `<p class="settings-page-msg ${twoFactorMsg.tipo}">${esc(twoFactorMsg.texto)}</p>` : ''}
+      <div class="settings-btn-row">
+        <button class="btn-outline" id="twofa-cancelar-setup">Cancelar</button>
+        <button class="btn-primary" id="twofa-confirmar" ${twoFactorSalvando?'disabled':''}>${twoFactorSalvando?'Confirmando…':'Confirmar e ativar'}</button>
+      </div>
+    `;
+  }
+  if(currentUser && currentUser.twoFactorEnabled){
+    return `
+      <p class="settings-page-note">✓ Ativada — um código do seu app autenticador é pedido a cada login.</p>
+      ${!mostrarDesativar2FA ? `
+        <button class="btn-danger" id="twofa-mostrar-desativar">Desativar</button>
+      ` : `
+        <div class="field">
+          <label>Digite o código atual pra confirmar</label>
+          <input type="text" id="twofa-desativar-codigo" maxlength="6" inputmode="numeric" placeholder="000000" />
+        </div>
+        ${twoFactorMsg ? `<p class="settings-page-msg ${twoFactorMsg.tipo}">${esc(twoFactorMsg.texto)}</p>` : ''}
+        <div class="settings-btn-row">
+          <button class="btn-outline" id="twofa-cancelar-desativar">Cancelar</button>
+          <button class="btn-danger" id="twofa-confirmar-desativar" ${twoFactorSalvando?'disabled':''}>${twoFactorSalvando?'Desativando…':'Confirmar desativação'}</button>
+        </div>
+      `}
+    `;
+  }
+  return `
+    <p class="settings-page-note">Desativada — adicione uma camada extra de segurança exigindo um código do celular a cada login.</p>
+    <button class="btn-outline" id="twofa-iniciar">Ativar</button>
+  `;
+}
+function renderizarQrCode2FA(){
+  const el = document.getElementById('qrcode-2fa');
+  if(el && twoFactorSetup && window.QRCode){
+    el.innerHTML = '';
+    new QRCode(el, { text: twoFactorSetup.otpauthUri, width:180, height:180 });
+  }
+}
+async function iniciar2FA(){
+  twoFactorMsg = null;
+  try{
+    const data = await apiRequest('POST', '/auth/2fa/iniciar');
+    twoFactorSetup = { segredo: data.segredo, otpauthUri: data.otpauthUri };
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível iniciar a configuração do 2FA.';
+  }
+  renderApp();
+  renderizarQrCode2FA();
+}
+function cancelarSetup2FA(){
+  twoFactorSetup = null;
+  twoFactorMsg = null;
+  renderApp();
+}
+async function confirmar2FA(){
+  const input = document.getElementById('twofa-confirmar-codigo');
+  const codigo = input ? input.value.trim() : '';
+  twoFactorSalvando = true;
+  twoFactorMsg = null;
+  renderApp();
+  try{
+    await apiRequest('POST', '/auth/2fa/confirmar', { codigo });
+    await refreshCurrentUser();
+    twoFactorSetup = null;
+    twoFactorMsg = null;
+  }catch(e){
+    twoFactorMsg = { tipo:'erro', texto: e.message || 'Código incorreto.' };
+  }
+  twoFactorSalvando = false;
+  renderApp();
+  renderizarQrCode2FA();
+}
+async function desativar2FA(){
+  const input = document.getElementById('twofa-desativar-codigo');
+  const codigo = input ? input.value.trim() : '';
+  twoFactorSalvando = true;
+  twoFactorMsg = null;
+  renderApp();
+  try{
+    await apiRequest('POST', '/auth/2fa/desativar', { codigo });
+    await refreshCurrentUser();
+    mostrarDesativar2FA = false;
+    twoFactorMsg = null;
+  }catch(e){
+    twoFactorMsg = { tipo:'erro', texto: e.message || 'Código incorreto.' };
+  }
+  twoFactorSalvando = false;
+  renderApp();
+}
+async function loadAuditoria(){
+  try{
+    const data = await apiRequest('GET', '/auditoria');
+    auditoriaEventos = data.eventos || [];
+  }catch(e){
+    auditoriaEventos = [];
+  }
+  auditoriaCarregada = true;
+  renderApp();
 }
 
 /* ---------- mutações: senha e importação de leads ---------- */
@@ -2229,6 +2701,7 @@ function renderApp(){
   else if(currentPage === 'automacoes') pageHtml = renderAutomacoesPage();
   else if(currentPage === 'fluxos') pageHtml = renderFluxosPage();
   else if(currentPage === 'agendamentos') pageHtml = renderAgendamentosPage();
+  else if(currentPage === 'import-export') pageHtml = renderImportExportPage();
   else if(currentPage === 'configuracoes') pageHtml = renderConfiguracoesPage();
   else if(currentPage === 'suporte') pageHtml = renderSuportePage();
   else if(currentPage === 'chat-interno') pageHtml = renderChatInternoPage();
@@ -2290,6 +2763,7 @@ function renderSidebar(){
     ['automacoes', 'Automações', ICON_AUTOMACOES],
     ['fluxos', 'Fluxos', ICON_FLUXOS],
     ['agendamentos', 'Agendamentos', ICON_AGENDAMENTOS],
+    ['import-export', 'Importar/Exportar', ICON_IMPORT_EXPORT],
     ['tarefas', 'Tarefas', ICON_TASKS],
     ['chat-interno', 'Chat Interno', ICON_CHAT_INTERNO],
     ['supervisao', 'Supervisão', ICON_SUPERVISAO],
@@ -2356,6 +2830,22 @@ function renderDashboardPage(){
         <div class="metric-value">${m.conversao}%</div>
         <div class="metric-sub">ganhos / fechados</div>
       </div>
+    </div>
+
+    <div class="dash-panel" style="margin-bottom:20px;">
+      <div class="dash-panel-title">
+        Meta de vendas do mês
+        ${!editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : ''}
+      </div>
+      ${!metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
+        <div class="field-row" style="align-items:flex-end;">
+          <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
+          <button class="btn-primary" id="meta-vendas-salvar" style="margin-bottom:14px;">Salvar</button>
+        </div>
+      ` : (metaVendasValor > 0 ? `
+        <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${Math.min(100, (vendidoNoMesAtual()/metaVendasValor*100))}%"></div></div>
+        <p class="settings-page-note">${fmtBRL(vendidoNoMesAtual())} de ${fmtBRL(metaVendasValor)} — ${Math.round(Math.min(999,vendidoNoMesAtual()/metaVendasValor*100))}%</p>
+      ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`))}
     </div>
 
     <div class="dash-grid">
@@ -2856,6 +3346,26 @@ function renderConfiguracoesPage(){
           </div>
           ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
           <button class="btn-primary" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Mudar senha'}</button>
+
+          <div class="settings-sep-line"></div>
+
+          <div class="settings-page-subtitle">Verificação em duas etapas (2FA)</div>
+          ${renderSecao2FA()}
+
+          <div class="settings-sep-line"></div>
+
+          <div class="settings-page-subtitle">Log de auditoria</div>
+          <p class="settings-page-note">Últimos eventos de segurança da sua conta.</p>
+          ${!auditoriaCarregada ? `<p class="settings-page-note">Carregando…</p>` : (auditoriaEventos.length ? `
+            <div class="historico-lista">
+              ${auditoriaEventos.map(e=>`
+                <div class="historico-item">
+                  <span class="historico-item-texto">${esc(e.detalhe || e.acao)}</span>
+                  <span class="historico-item-data">${formatDateHora(e.createdAt)}</span>
+                </div>
+              `).join('')}
+            </div>
+          ` : `<p class="dash-empty">Nenhum evento registrado ainda.</p>`)}
         </div>
       </div>
     </section>
@@ -3113,6 +3623,10 @@ function bindAppEvents(){
   });
   const gerarInsightsBtn = app.querySelector('[data-action="gerar-insights"]');
   if(gerarInsightsBtn) gerarInsightsBtn.addEventListener('click', gerarInsightsIA);
+  const editarMetaBtn = app.querySelector('[data-action="editar-meta-vendas"]');
+  if(editarMetaBtn) editarMetaBtn.addEventListener('click', ()=>{ editandoMetaVendas = true; renderApp(); });
+  const salvarMetaBtn = document.getElementById('meta-vendas-salvar');
+  if(salvarMetaBtn) salvarMetaBtn.addEventListener('click', salvarMetaVendas);
 
   /* -- tarefas (usado no Dashboard e na página Tarefas) -- */
   app.querySelectorAll('[data-action="toggle-task"]').forEach(el=>{
@@ -3223,6 +3737,33 @@ function bindAppEvents(){
     });
   });
 
+  /* -- Importar/Exportar -- */
+  const planilhaInput = document.getElementById('planilha-input');
+  if(planilhaInput) planilhaInput.addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(file) handlePlanilhaFileSelected(file);
+  });
+  const mapNomeEl = document.getElementById('map-nome');
+  if(mapNomeEl) mapNomeEl.addEventListener('change', (e)=> importMapNome = e.target.value);
+  const mapTelefoneEl = document.getElementById('map-telefone');
+  if(mapTelefoneEl) mapTelefoneEl.addEventListener('change', (e)=> importMapTelefone = e.target.value);
+  const mapServicoEl = document.getElementById('map-servico');
+  if(mapServicoEl) mapServicoEl.addEventListener('change', (e)=> importMapServico = e.target.value);
+  const confirmarImportBtn = document.getElementById('confirmar-import-planilha');
+  if(confirmarImportBtn) confirmarImportBtn.addEventListener('click', confirmarImportPlanilha);
+  app.querySelectorAll('[data-action="completar-possivel-lead"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirCompletarLead(btn.dataset.leadId));
+  });
+  app.querySelectorAll('[data-action="descartar-possivel-lead"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.leadId;
+      showConfirm({
+        message: 'Descartar esse possível lead? Ele não vira cliente.',
+        onConfirm: ()=>{ descartarPossivelLead(id); closeConfirm(); },
+      });
+    });
+  });
+
   /* -- Agendamentos -- */
   const openNewAgendamentoBtn = app.querySelector('[data-action="open-new-agendamento"]');
   if(openNewAgendamentoBtn) openNewAgendamentoBtn.addEventListener('click', openNewAgendamento);
@@ -3241,6 +3782,8 @@ function bindAppEvents(){
   if(relatorioFunilSelect) relatorioFunilSelect.addEventListener('change', (e)=>{ relatorioFunilId = e.target.value; renderApp(); });
   const exportarCsvBtn = app.querySelector('[data-action="exportar-csv"]');
   if(exportarCsvBtn) exportarCsvBtn.addEventListener('click', exportarCsv);
+  const exportarPdfBtn = app.querySelector('[data-action="exportar-relatorio-pdf"]');
+  if(exportarPdfBtn) exportarPdfBtn.addEventListener('click', exportarRelatorioPdf);
 
   /* -- Equipe / Chat Interno / Supervisão -- */
   const equipeNomeInput = document.getElementById('equipe-nome-novo');
@@ -3409,6 +3952,20 @@ function bindAppEvents(){
       salvarMenuTriagem();
     }
   });
+
+  const twofaIniciarBtn = document.getElementById('twofa-iniciar');
+  if(twofaIniciarBtn) twofaIniciarBtn.addEventListener('click', iniciar2FA);
+  const twofaCancelarSetupBtn = document.getElementById('twofa-cancelar-setup');
+  if(twofaCancelarSetupBtn) twofaCancelarSetupBtn.addEventListener('click', cancelarSetup2FA);
+  const twofaConfirmarBtn = document.getElementById('twofa-confirmar');
+  if(twofaConfirmarBtn) twofaConfirmarBtn.addEventListener('click', confirmar2FA);
+  const twofaMostrarDesativarBtn = document.getElementById('twofa-mostrar-desativar');
+  if(twofaMostrarDesativarBtn) twofaMostrarDesativarBtn.addEventListener('click', ()=>{ mostrarDesativar2FA = true; renderApp(); });
+  const twofaCancelarDesativarBtn = document.getElementById('twofa-cancelar-desativar');
+  if(twofaCancelarDesativarBtn) twofaCancelarDesativarBtn.addEventListener('click', ()=>{ mostrarDesativar2FA = false; twoFactorMsg = null; renderApp(); });
+  const twofaConfirmarDesativarBtn = document.getElementById('twofa-confirmar-desativar');
+  if(twofaConfirmarDesativarBtn) twofaConfirmarDesativarBtn.addEventListener('click', desativar2FA);
+  if(twoFactorSetup) renderizarQrCode2FA();
 
   const salvarIgBtn = app.querySelector('[data-action="salvar-instagram-config"]');
   if(salvarIgBtn) salvarIgBtn.addEventListener('click', salvarInstagramConfig);
@@ -3681,6 +4238,7 @@ function renderModal(){
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-mensagem">${ICON_SPARKLE} Sugerir mensagem</button>` : ''}
               ${!f.__isNew && whatsappConnected ? `<button type="button" class="ai-btn" id="f-ver-conversa">${WA_ICON} Ver conversa</button>` : ''}
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ver-historico">🕘 Ver histórico</button>` : ''}
+              ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-gerar-proposta">📄 Gerar proposta</button>` : ''}
             </div>
             <div class="ai-result" id="f-ai-mensagem-result" style="display:none;"></div>
             <div class="wa-conversa" id="f-wa-conversa" style="display:none;"></div>
@@ -3810,6 +4368,8 @@ function renderModal(){
   if(verConversaBtn) verConversaBtn.addEventListener('click', abrirConversaWhatsapp);
   const verHistoricoBtn = document.getElementById('f-ver-historico');
   if(verHistoricoBtn) verHistoricoBtn.addEventListener('click', abrirHistoricoCard);
+  const gerarPropostaBtn = document.getElementById('f-gerar-proposta');
+  if(gerarPropostaBtn) gerarPropostaBtn.addEventListener('click', abrirPropostaModal);
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
   document.getElementById('f-mes').addEventListener('change', (e)=> modalForm.mes = e.target.value);
 
@@ -4070,6 +4630,7 @@ function renderRelatoriosPage(){
           ${funis.map(f=>`<option value="${f.id}" ${relatorioFunilId===f.id?'selected':''}>${esc(f.nome)}</option>`).join('')}
         </select>
         <button class="btn-outline" data-action="exportar-csv">Exportar CSV</button>
+        <button class="btn-outline" data-action="exportar-relatorio-pdf">Exportar PDF</button>
       </div>
     </div>
 
@@ -4375,6 +4936,82 @@ function renderAgendamentosPage(){
         </table>
       </div>
     ` : `<div class="tasks-empty">Nenhuma mensagem agendada ainda.</div>`}
+  `;
+}
+
+/* ---------- página: Importar/Exportar ---------- */
+function renderImportExportPage(){
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Importar/Exportar</h1>
+        <p>Importe uma planilha (.csv ou .xlsx) — os dados viram "possíveis leads" até você completar e confirmar cada um.</p>
+      </div>
+    </div>
+
+    <div class="settings-page-section">
+      <h3>1. Importar planilha</h3>
+      <input type="file" id="planilha-input" accept=".csv,.xlsx,.xls" />
+      ${importPlanilhaColunas.length ? `
+        <p class="settings-page-note" style="margin-top:10px;">${importPlanilhaLinhas.length} linha(s) encontrada(s) em "${esc(importPlanilhaNomeArquivo)}". Escolha qual coluna da planilha é qual campo:</p>
+        <div class="field-row">
+          <div class="field">
+            <label>Coluna do nome</label>
+            <select id="map-nome">
+              <option value="">(nenhuma)</option>
+              ${importPlanilhaColunas.map(c=>`<option value="${esc(c)}" ${importMapNome===c?'selected':''}>${esc(c)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Coluna do telefone</label>
+            <select id="map-telefone">
+              <option value="">(nenhuma)</option>
+              ${importPlanilhaColunas.map(c=>`<option value="${esc(c)}" ${importMapTelefone===c?'selected':''}>${esc(c)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Coluna do serviço desejado</label>
+            <select id="map-servico">
+              <option value="">(nenhuma)</option>
+              ${importPlanilhaColunas.map(c=>`<option value="${esc(c)}" ${importMapServico===c?'selected':''}>${esc(c)}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        ${importPlanilhaMsg ? `<p class="settings-page-msg ${importPlanilhaMsg.tipo}">${esc(importPlanilhaMsg.texto)}</p>` : ''}
+        <button class="btn-primary" id="confirmar-import-planilha" ${importandoPlanilha?'disabled':''}>${importandoPlanilha?'Importando…':'Importar planilha'}</button>
+      ` : (importPlanilhaMsg ? `<p class="settings-page-msg ${importPlanilhaMsg.tipo}">${esc(importPlanilhaMsg.texto)}</p>` : '')}
+    </div>
+
+    <div class="settings-page-section">
+      <h3>2. Possíveis leads (${possiveisLeads.length})</h3>
+      <p class="settings-page-note">Complete as informações de cada um pra adicioná-lo de vez aos Leads.</p>
+      ${!possiveisLeadsCarregados ? `<p class="settings-page-note">Carregando…</p>` : (possiveisLeads.length ? `
+        <div class="leads-table-wrap">
+          <table class="leads-table">
+            <thead><tr><th>Nome</th><th>Telefone</th><th>Serviço desejado</th><th>Ações</th></tr></thead>
+            <tbody>
+              ${possiveisLeads.map(l=>`
+                <tr>
+                  <td>${esc(l.nome)||'—'}</td>
+                  <td>${esc(l.telefone)||'—'}</td>
+                  <td>${esc(l.tipoServico)||'—'}</td>
+                  <td>
+                    <button class="btn-outline" data-action="completar-possivel-lead" data-lead-id="${l.id}">Completar</button>
+                    <button class="icon-btn" data-action="descartar-possivel-lead" data-lead-id="${l.id}" title="Descartar">${ICON_TRASH}</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : `<div class="tasks-empty">Nenhum possível lead pendente.</div>`)}
+    </div>
+
+    <div class="settings-page-section">
+      <h3>3. Exportar</h3>
+      <p class="settings-page-note">Baixa todos os clientes já confirmados (que estão na aba Leads) em CSV.</p>
+      <button class="btn-outline" data-action="exportar-leads">Exportar Leads (CSV)</button>
+    </div>
   `;
 }
 
@@ -5015,6 +5652,8 @@ if(getToken()){
   loadAgendamentos();
   loadMenuTriagem();
   loadCamposPersonalizados();
+  loadPossiveisLeads();
+  loadMetaVendas();
   loadConversas();
   loadEquipe();
   loadAutomacoes();

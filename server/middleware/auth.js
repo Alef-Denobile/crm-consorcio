@@ -17,6 +17,10 @@ module.exports = async function auth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.twofa) {
+      // token temporário de 2FA — só serve pra validar o código, nunca pra acessar rotas normais
+      return res.status(401).json({ error: 'Não autenticado.' });
+    }
     const user = await User.findById(payload.sub).select('tokenVersion');
     if (!user) return res.status(401).json({ error: 'Sessão expirada ou inválida.' });
     if ((payload.tv || 0) !== (user.tokenVersion || 0)) {

@@ -288,6 +288,53 @@ entre outros) — se o seu formulário usar nomes de campo muito
 diferentes disso, talvez alguns dados não sejam capturados
 corretamente na primeira tentativa.
 
+## Propostas, meta de vendas, PDF, 2FA e auditoria
+
+- **Propostas em PDF** — no modal do cliente, botão "📄 Gerar proposta":
+  informa valor da carta, número de parcelas e validade, e baixa um
+  PDF pronto (usa a biblioteca **jsPDF**, carregada via CDN)
+- **Meta de vendas** — no Dashboard, defina uma meta de valor pro mês
+  e acompanhe uma barra de progresso comparando com o que já foi
+  vendido (soma dos clientes na(s) coluna(s) "ganho") naquele mês
+- **Exportar relatório em PDF** — botão "Exportar PDF" na página
+  Relatórios, mesma biblioteca jsPDF
+- **Verificação em duas etapas (2FA)** — em Configurações → Login e
+  segurança. Usa o padrão TOTP (compatível com Google Authenticator,
+  Authy, etc.), **implementado do zero usando só o `crypto` nativo do
+  Node** — nenhuma dependência nova no `package.json`. O QR code é
+  desenhado no navegador via a biblioteca `qrcodejs` (CDN). Ao entrar
+  numa conta com 2FA ativo, o login pede o código antes de liberar o
+  token de verdade — o token intermediário dessa etapa dura só 5
+  minutos e nunca dá acesso a nenhuma rota normal da API
+- **Log de auditoria** — na mesma seção de Login e segurança, mostra
+  os últimos 100 eventos de segurança da própria conta (login,
+  desconectar todos os dispositivos, cliente excluído, membro
+  removido da equipe, 2FA ativado/desativado)
+
+
+
+## Importar/Exportar (planilha → possíveis leads)
+
+Página própria na barra lateral, separada do "Importar leads" simples
+que já existia em Configurações (aquele continua existindo, pra quando
+você já sabe exatamente pra qual coluna vai cada linha). Esta é pra
+quando os dados vêm crus e ainda faltam informações:
+
+1. Suba um arquivo **.csv ou .xlsx** — lido no próprio navegador, sem
+   precisar de nenhum programa
+2. O sistema detecta as colunas da planilha e tenta adivinhar quais
+   são nome/telefone/serviço (pelo nome da coluna) — mas você pode
+   trocar qualquer uma antes de confirmar
+3. Depois de importar, cada linha vira um **"possível lead"**, numa
+   lista separada da aba Leads — nada é adicionado ao Pipeline ainda
+4. Clique em "Completar" pra revisar/corrigir nome e telefone, definir
+   valor, temperatura e a coluna de destino — só então ele vira um
+   cliente de verdade na aba Leads. "Descartar" remove um possível
+   lead sem promovê-lo (duplicado, contato errado, etc.)
+
+A leitura da planilha usa a biblioteca SheetJS, carregada via CDN no
+`index.html` — trata .csv e .xlsx da mesma forma no navegador.
+
 ## Busca global, histórico, etiquetas, campos e anexos
 
 - **Busca global** — atalho **Ctrl+K** (⌘K no Mac) ou o ícone de lupa
@@ -507,6 +554,25 @@ melhor o horário escolhido.
 - `GET  /api/campos-personalizados` — lista os campos do usuário
 - `POST /api/campos-personalizados` — `{ nome, tipo }` → cria (`tipo`: texto, numero ou data)
 - `DELETE /api/campos-personalizados/:id` — exclui a definição do campo
+
+**Possíveis leads (exigem token):**
+- `GET  /api/possiveis-leads` — lista os pendentes
+- `POST /api/possiveis-leads/importar` — `{ linhas: [{nome,telefone,tipoServico}], origemArquivo }` → importa em lote (a planilha já foi lida no navegador antes)
+- `POST /api/possiveis-leads/:id/promover` — `{ nome, telefone, columnId, valor, temperatura, obs, mes }` → vira um cliente de verdade
+- `DELETE /api/possiveis-leads/:id` — descarta
+
+**Metas de vendas (exigem token):**
+- `GET  /api/metas/:mes` — meta do mês (formato `YYYY-MM`), 0 se ainda não definida
+- `PUT  /api/metas/:mes` — `{ valorMeta }` → define/atualiza
+
+**Auditoria (exige token):**
+- `GET  /api/auditoria` — últimos 100 eventos de segurança da própria conta
+
+**2FA — dentro de `/api/auth` (as duas primeiras são públicas, o resto exige token):**
+- `POST /api/auth/2fa/validar-login` — `{ tempToken, codigo }` → segunda etapa do login, devolve o token de verdade
+- `POST /api/auth/2fa/iniciar` — gera um novo segredo e devolve o QR code (ainda não ativa)
+- `POST /api/auth/2fa/confirmar` — `{ codigo }` → confirma o primeiro código e ativa de vez
+- `POST /api/auth/2fa/desativar` — `{ codigo }` → exige o código atual pra desligar
 
 **Instagram/Facebook Lead Ads:**
 - `GET  /api/instagram/webhook` — verificação do webhook (chamada pela Meta, não chame direto)

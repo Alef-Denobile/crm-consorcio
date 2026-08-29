@@ -20,6 +20,9 @@ const instagramRoutes = require('./routes/instagram');
 const fluxosRoutes = require('./routes/fluxos');
 const agendamentosRoutes = require('./routes/agendamentos');
 const camposPersonalizadosRoutes = require('./routes/camposPersonalizados');
+const possiveisLeadsRoutes = require('./routes/possiveisLeads');
+const metasRoutes = require('./routes/metas');
+const auditoriaRoutes = require('./routes/auditoria');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,6 +48,9 @@ app.use('/api/instagram', instagramRoutes);
 app.use('/api/fluxos', fluxosRoutes);
 app.use('/api/agendamentos', agendamentosRoutes);
 app.use('/api/campos-personalizados', camposPersonalizadosRoutes);
+app.use('/api/possiveis-leads', possiveisLeadsRoutes);
+app.use('/api/metas', metasRoutes);
+app.use('/api/auditoria', auditoriaRoutes);
 
 // front-end estático (a pasta public com index.html, css e js)
 app.use(express.static(path.join(__dirname, '..', 'public')));
