@@ -3066,6 +3066,30 @@ function renderColumn(col){
   `;
 }
 
+// Deixa o total da coluna (quando o valor é grande demais e fica cortado)
+// arrastável com o mouse, além do toque/trackpad que o overflow-x já dá de graça.
+// mousemove/mouseup ficam registrados uma única vez (fora do render) pra não
+// acumular ouvintes a cada nova renderização — só o mousedown é religado por
+// elemento, já que os elementos em si são recriados a cada render.
+let arrasteHorizontalState = null;
+document.addEventListener('mousemove', (e)=>{
+  if(!arrasteHorizontalState) return;
+  e.preventDefault();
+  arrasteHorizontalState.el.scrollLeft = arrasteHorizontalState.scrollInicial - (e.pageX - arrasteHorizontalState.inicioX);
+});
+document.addEventListener('mouseup', ()=>{
+  if(!arrasteHorizontalState) return;
+  arrasteHorizontalState.el.classList.remove('dragging');
+  arrasteHorizontalState = null;
+});
+function ativarArrasteHorizontal(){
+  document.querySelectorAll('.col-total').forEach(el=>{
+    el.addEventListener('mousedown', (e)=>{
+      arrasteHorizontalState = { el, inicioX: e.pageX, scrollInicial: el.scrollLeft };
+      el.classList.add('dragging');
+    });
+  });
+}
 function renderCard(card){
   const temp = TEMPS[card.temperatura] || TEMPS.frio;
   const showMonth = filterMonth === null && card.mes;
@@ -4052,6 +4076,7 @@ function bindAppEvents(){
   });
   const duplicarFunilBtn = app.querySelector('[data-action="duplicar-funil"]');
   if(duplicarFunilBtn) duplicarFunilBtn.addEventListener('click', ()=> duplicarFunil(duplicarFunilBtn.dataset.funilId));
+  ativarArrasteHorizontal();
 
   /* -- Pipeline: filtro de data -- */
   const dateMenuBtn = app.querySelector('[data-action="toggle-date-menu"]');
