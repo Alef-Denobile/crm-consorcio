@@ -372,9 +372,10 @@ main{ padding:24px; overflow-x:auto; }
 .scope-toggle{ display:flex; gap:8px; margin-top:5px; }
 .scope-btn{ flex:1; display:flex; align-items:center; justify-content:center; padding:10px; min-height:42px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid var(--line); background:var(--col-bg); color:var(--ink-soft); }
 .scope-btn.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+.btn-outline.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
 
 .calc-preview{ background:var(--col-bg); border:1px solid var(--line); border-radius:10px; padding:12px 14px; font-size:13px; line-height:1.7; }
-.calc-preview b{ color:var(--accent); }
+.calc-preview b{ color:var(--ink); }
 .calc-preview-note{ font-size:11px; color:var(--ink-soft); margin:6px 0 0; }
 
 /* ---------- Configurações (página) ---------- */
@@ -399,7 +400,7 @@ main{ padding:24px; overflow-x:auto; }
 
 /* ---------- IA (mensagem sugerida, insights, tarefa sugerida) ---------- */
 .wa-actions-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
-.ai-btn{ display:inline-flex; align-items:center; gap:5px; padding:7px 11px; min-height:32px; border-radius:999px; border:1px solid var(--accent); background:none; color:var(--accent); font-size:11px; font-weight:600; cursor:pointer; margin-top:8px; }
+.ai-btn{ display:inline-flex; align-items:center; gap:5px; padding:7px 11px; min-height:32px; border-radius:999px; border:1px solid var(--ink); background:none; color:var(--ink); font-size:11px; font-weight:600; cursor:pointer; margin-top:8px; }
 .ai-btn:hover{ background:var(--hover-tint); }
 .ai-btn:disabled{ opacity:.6; cursor:default; }
 .ai-result{ margin-top:10px; padding:12px; background:var(--col-bg); border:1px solid var(--line); border-radius:10px; font-size:12px; line-height:1.6; }
@@ -495,7 +496,7 @@ main{ padding:24px; overflow-x:auto; }
 /* ---------- modal: escolher novo cliente vs transferir existente ---------- */
 .add-lead-choice-btn{ display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:100%; padding:14px 16px; margin-bottom:10px; border-radius:10px; border:1px solid var(--line); background:var(--paper); cursor:pointer; text-align:left; }
 .add-lead-choice-btn:last-child{ margin-bottom:0; }
-.add-lead-choice-btn:hover{ border-color:var(--accent); background:var(--hover-tint); }
+.add-lead-choice-btn:hover{ border-color:var(--ink); background:var(--hover-tint); }
 .add-lead-choice-title{ font-size:14px; font-weight:700; color:var(--ink); }
 .add-lead-choice-desc{ font-size:12px; color:var(--ink-soft); }
 
@@ -546,7 +547,7 @@ main{ padding:24px; overflow-x:auto; }
 .anexos-lista{ display:flex; flex-direction:column; gap:2px; margin-top:8px; }
 .anexo-item{ display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--line); font-size:12px; }
 .anexo-item:last-child{ border-bottom:none; }
-.anexo-item-nome{ flex:1; color:var(--accent); text-decoration:none; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.anexo-item-nome{ flex:1; color:var(--ink); text-decoration:none; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .anexo-item-nome:hover{ text-decoration:underline; }
 
 /* ---------- meta de vendas (Dashboard) ---------- */
