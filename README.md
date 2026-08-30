@@ -1,5 +1,14 @@
 # Painel do Consórcio — CRM com MongoDB e login
 
+⚠️ **Cache do navegador:** `style.css`, `script.js` e `login.js` são
+carregados com `?v=AAAAMMDD` no final da URL (ex: `style.css?v=20260830`).
+Isso existe só pra forçar o navegador a buscar a versão nova depois de um
+deploy — sem isso, quem já tinha o site aberto continua vendo o CSS/JS
+antigo em cache, às vezes por dias. **Toda vez que `style.css`, `script.js`
+ou `login.js` for alterado, atualize esse número** (nos três arquivos:
+`index.html` e `login.html`) pra data do dia, senão a mudança não aparece
+pra quem já visitou o site antes.
+
 ## Estrutura
 
 ```

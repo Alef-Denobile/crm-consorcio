@@ -1156,6 +1156,20 @@ async function cancelarAgendamento(id){
     renderApp();
   }
 }
+async function excluirAgendamento(id){
+  const idx = agendamentos.findIndex(a=>a.id===id);
+  if(idx===-1) return;
+  const [removido] = agendamentos.splice(idx,1);
+  renderApp();
+  try{
+    await apiRequest('DELETE', `/agendamentos/${id}`);
+    await loadAgendamentos(); // recarrega pra atualizar a contagem por status também
+  }catch(e){
+    agendamentos.splice(idx,0,removido);
+    errorMsg = 'Não foi possível excluir o agendamento.';
+    renderApp();
+  }
+}
 function renderAgendamentoModal(){
   const root = document.getElementById('modal-root');
   if(!agendamentoModalForm){ root.innerHTML=''; return; }
@@ -3826,6 +3840,15 @@ function bindAppEvents(){
       });
     });
   });
+  app.querySelectorAll('[data-action="excluir-agendamento"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.agendamentoId;
+      showConfirm({
+        message: 'Excluir esse agendamento permanentemente? Não dá pra desfazer.',
+        onConfirm: ()=>{ excluirAgendamento(id); closeConfirm(); },
+      });
+    });
+  });
 
   /* -- Relatórios -- */
   const relatorioFunilSelect = document.getElementById('relatorio-funil-select');
@@ -5024,7 +5047,10 @@ function renderAgendamentosPage(){
                 <td>${esc((a.texto||'').slice(0,60))}${(a.texto||'').length>60?'…':''}</td>
                 <td>${formatDateHora(a.agendadoPara)}</td>
                 <td>${agendamentoStatusLabel(a.status)}${a.status==='falhou' && a.erro ? ` <span class="settings-page-note">(${esc(a.erro)})</span>` : ''}</td>
-                <td>${a.status==='pendente' ? `<button class="icon-btn" data-action="cancelar-agendamento" data-agendamento-id="${a.id}" title="Cancelar">${ICON_TRASH}</button>` : ''}</td>
+                <td>
+                  ${a.status==='pendente' ? `<button class="icon-btn" data-action="cancelar-agendamento" data-agendamento-id="${a.id}" title="Cancelar">✕</button>` : ''}
+                  <button class="icon-btn" data-action="excluir-agendamento" data-agendamento-id="${a.id}" title="Excluir permanentemente">${ICON_TRASH}</button>
+                </td>
               </tr>
             `).join('')}
           </tbody>
