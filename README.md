@@ -128,6 +128,16 @@ cada 7 dias e você precisa clicar em "Conectar" de novo. Pra uso pessoal
 isso costuma ser tranquilo; se incomodar, me avise que vejo com você o
 processo de verificação.
 
+⚠️ **Erro "Acesso bloqueado: a solicitação desse app é inválida":** o
+servidor monta a URL de retorno automaticamente a partir do protocolo da
+requisição (`req.protocol`). Atrás de um proxy (Render e a maioria dos
+serviços de hospedagem funcionam assim), sem `app.set('trust proxy', 1)`
+configurado, o Express enxerga a conexão como HTTP mesmo em produção — a
+URL enviada ao Google fica `http://...` em vez de `https://...`, não bate
+com o que está cadastrado no Google Cloud Console, e o Google bloqueia.
+Isso já está corrigido no `server.js`; só vira problema de novo se algum
+dia migrar pra uma hospedagem com proxy configurado de um jeito diferente.
+
 ## Estrutura de páginas (front-end)
 
 O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo

@@ -25,6 +25,12 @@ const metasRoutes = require('./routes/metas');
 const auditoriaRoutes = require('./routes/auditoria');
 
 const app = express();
+// O Render (e a maioria dos serviços de hospedagem) fica atrás de um proxy: o HTTPS
+// termina ali, e o que chega no nosso Node por dentro é HTTP puro. Sem isso, req.protocol
+// sempre reporta "http", mesmo em produção — o que quebra a URL de retorno do Google Agenda
+// (fica "http://..." em vez de "https://...", e o Google bloqueia por não bater com o
+// cadastrado no Google Cloud Console).
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_consorcio';
 
