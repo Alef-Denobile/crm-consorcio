@@ -9,6 +9,14 @@ ou `login.js` for alterado, atualize esse número** (nos três arquivos:
 `index.html` e `login.html`) pra data do dia, senão a mudança não aparece
 pra quem já visitou o site antes.
 
+⚠️ **Cache de quem instalou como "app" no celular (PWA):** o
+`public/sw.js` usa estratégia *network-first* — toda vez que o celular tem
+internet, ele busca a versão mais nova do servidor primeiro, e só usa o
+que está guardado se estiver offline. Isso significa que **atualizações do
+site aparecem sozinhas** pra quem já instalou o app, sem precisar
+reinstalar — só abrir o app de novo com internet. Não é preciso mexer em
+nada no `sw.js` em atualizações normais do site.
+
 ## Estrutura
 
 ```
