@@ -4841,6 +4841,44 @@ function renderChatInternoPage(){
 }
 
 /* ---------- página: Supervisão ---------- */
+// Supervisor sempre primeiro, os demais em ordem alfabética por nome
+function membrosOrdenados(membros){
+  return [...membros].sort((a,b)=>{
+    if(a.papel==='supervisor' && b.papel!=='supervisor') return -1;
+    if(b.papel==='supervisor' && a.papel!=='supervisor') return 1;
+    return (a.nome||'').localeCompare(b.nome||'', 'pt-BR');
+  });
+}
+// Ranking de vendas: supervisor(es) destacado(s) à parte, fora da disputa por valor
+// (o papel dele é apoiar a equipe, não vender — não é justo rankeá-lo pelo mesmo critério).
+// Os demais membros continuam ordenados por valor ganho entre si.
+function renderRankingSupervisao(membros){
+  const supervisores = membros.filter(m=>m.papel==='supervisor');
+  const resto = membros.filter(m=>m.papel!=='supervisor').sort((a,b)=>b.ganhoValor-a.ganhoValor);
+  const maxGanho = Math.max(1, ...membros.map(x=>x.ganhoValor));
+  let html = '';
+  if(supervisores.length){
+    html += supervisores.map(m=>`
+      <div class="ranking-supervisor-card">
+        <div class="stage-row-top"><span>⭐ ${esc(m.nome)} <span class="settings-page-note">— Supervisor, fora do ranking de vendas</span></span><span>${fmtBRL(m.ganhoValor)}</span></div>
+        <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${(m.ganhoValor/maxGanho*100)}%"></div></div>
+      </div>
+    `).join('');
+  }
+  if(resto.length){
+    html += `
+      <div class="stage-list" style="margin-top:${supervisores.length?'14px':'0'};">
+        ${resto.map((m,idx)=>`
+          <div class="stage-row">
+            <div class="stage-row-top"><span>${idx+1}º — ${esc(m.nome)}</span><span>${fmtBRL(m.ganhoValor)}</span></div>
+            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${(m.ganhoValor/maxGanho*100)}%"></div></div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+  return html || '<p class="dash-empty">Nenhum membro ainda.</p>';
+}
 function renderSupervisaoPage(){
   if(!equipeLoaded){
     return `<div class="page-head"><div><h1>Supervisão</h1><p>Carregando…</p></div></div>`;
@@ -4873,8 +4911,8 @@ function renderSupervisaoPage(){
     <div class="settings-page-section" style="margin-bottom:20px;">
       <h3>Membros</h3>
       <div class="disparo-lista-leads" style="max-height:none;">
-        ${equipe.membros.map(m=>`
-          <div class="disparo-lead-item" style="cursor:default; justify-content:space-between;">
+        ${membrosOrdenados(equipe.membros).map(m=>`
+          <div class="disparo-lead-item ${m.papel==='supervisor'?'membro-supervisor-destaque':''}" style="cursor:default; justify-content:space-between;">
             <span>${esc(m.nome||m.email)} — ${m.papel==='supervisor'?'⭐ Supervisor':'Membro'}${m.souEu?' (você)':''}</span>
             ${!m.souEu ? `
               <div class="settings-btn-row">
@@ -4890,19 +4928,7 @@ function renderSupervisaoPage(){
 
     <div class="settings-page-section" style="margin-bottom:20px;">
       <h3>Ranking de desempenho (por valor ganho)</h3>
-      ${!supervisaoLoaded ? `<p class="settings-page-note">Carregando…</p>` : (supervisaoMembros.length ? `
-        <div class="stage-list">
-          ${[...supervisaoMembros].sort((a,b)=>b.ganhoValor-a.ganhoValor).map((m,idx)=>{
-            const maxGanho = Math.max(1, ...supervisaoMembros.map(x=>x.ganhoValor));
-            return `
-              <div class="stage-row">
-                <div class="stage-row-top"><span>${idx+1}º — ${esc(m.nome)} ${m.papel==='supervisor'?'⭐':''}</span><span>${fmtBRL(m.ganhoValor)}</span></div>
-                <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${(m.ganhoValor/maxGanho*100)}%"></div></div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      ` : `<p class="dash-empty">Nenhum membro ainda.</p>`)}
+      ${!supervisaoLoaded ? `<p class="settings-page-note">Carregando…</p>` : (supervisaoMembros.length ? renderRankingSupervisao(supervisaoMembros) : `<p class="dash-empty">Nenhum membro ainda.</p>`)}
     </div>
 
     <div class="settings-page-section">
@@ -4912,8 +4938,8 @@ function renderSupervisaoPage(){
           <table class="leads-table">
             <thead><tr><th>Nome</th><th>Leads</th><th>Em negociação</th><th>Ganho</th><th>Perdido</th></tr></thead>
             <tbody>
-              ${supervisaoMembros.map(m=>`
-                <tr>
+              ${membrosOrdenados(supervisaoMembros).map(m=>`
+                <tr class="${m.papel==='supervisor'?'membro-supervisor-destaque':''}">
                   <td>${esc(m.nome)} ${m.papel==='supervisor'?'⭐':''}</td>
                   <td>${m.totalLeads}</td>
                   <td>${fmtBRL(m.abertoValor)}</td>

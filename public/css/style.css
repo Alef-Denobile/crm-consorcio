@@ -553,3 +553,10 @@ main{ padding:24px; overflow-x:auto; }
 /* ---------- meta de vendas (Dashboard) ---------- */
 .meta-vendas-track{ height:10px; border-radius:999px; background:var(--hover-tint); overflow:hidden; margin-top:8px; }
 .meta-vendas-fill{ height:100%; background:var(--accent); border-radius:999px; transition:width .3s ease; }
+
+/* ---------- card destacado do supervisor no ranking ---------- */
+.ranking-supervisor-card{ background:var(--gold-soft); border:1px solid var(--gold); border-radius:10px; padding:12px 14px; margin-bottom:6px; }
+.membro-supervisor-destaque{ background:var(--gold-soft); }
+tr.membro-supervisor-destaque td{ border-top:1px solid var(--gold); border-bottom:1px solid var(--gold); }
+tr.membro-supervisor-destaque td:first-child{ border-left:1px solid var(--gold); }
+tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold); }
