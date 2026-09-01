@@ -142,11 +142,7 @@ let loaded = false;
 let tasksLoaded = false;
 let errorMsg = null;
 let currentPage = 'dashboard';   // 'dashboard' | 'pipeline' | 'leads' | 'tarefas'
-<<<<<<< HEAD
 let filterMonth = currentMonthKey();  // começa no mês atual ao entrar no site — null seria "Geral"
-=======
-let filterMonth = null;          // null = Geral (página Pipeline)
->>>>>>> 937005165bf0ceff7065659574ab12571816c10f
 let filtroEsfriando = false;
 let dashboardPeriod = 'mes';     // '7dias' | 'mes' | 'trimestre' | 'ano'
 let metaVendasValor = 0;
@@ -2041,12 +2037,9 @@ function goToPage(page){
     equipeMsg = null;
     if(equipe && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
   }
-<<<<<<< HEAD
   if(page === 'comissoes'){
     loadContratos(); // recarrega sempre, pra pegar comissões que o Pipeline gerou automaticamente
   }
-=======
->>>>>>> 937005165bf0ceff7065659574ab12571816c10f
 }
 async function refreshCurrentUser(){
   try{
@@ -2963,7 +2956,6 @@ function renderPipelinePage(){
         </div>
       </div>
 
-<<<<<<< HEAD
       <div class="funil-tabs">
         ${funis.map(f=>{
           if(editingFunilId===f.id){
@@ -2975,47 +2967,9 @@ function renderPipelinePage(){
           <button class="icon-btn" data-action="edit-funil-name" data-funil-id="${funilAtual.id}" title="Renomear funil">${ICON_EDIT}</button>
           <button class="icon-btn" data-action="duplicar-funil" data-funil-id="${funilAtual.id}" title="Duplicar funil (só a estrutura de colunas)">⧉</button>
           ${funis.length > 1 ? `<button class="icon-btn" data-action="delete-funil" data-funil-id="${funilAtual.id}" title="Excluir funil">${ICON_TRASH}</button>` : ''}
-=======
-    <div class="funil-tabs">
-      ${funis.map(f=>{
-        if(editingFunilId===f.id){
-          return `<input class="funil-name-input" id="funil-rename-${f.id}" value="${esc(editingFunilName)}" />`;
-        }
-        return `<button class="tab-btn ${funilAtualId===f.id?'active':''}" data-action="set-funil" data-funil-id="${f.id}">${esc(f.nome)}</button>`;
-      }).join('')}
-      ${funilAtual ? `
-        <button class="icon-btn" data-action="edit-funil-name" data-funil-id="${funilAtual.id}" title="Renomear funil">${ICON_EDIT}</button>
-        <button class="icon-btn" data-action="duplicar-funil" data-funil-id="${funilAtual.id}" title="Duplicar funil (só a estrutura de colunas)">⧉</button>
-        ${funis.length > 1 ? `<button class="icon-btn" data-action="delete-funil" data-funil-id="${funilAtual.id}" title="Excluir funil">${ICON_TRASH}</button>` : ''}
-      ` : ''}
-      <button class="tab-btn" data-action="open-new-funil" title="Criar novo funil">+ Funil</button>
-    </div>
-
-    <div class="tabs">
-      <button class="tab-btn ${filterMonth===null?'active':''}" data-action="set-month" data-month="">Geral</button>
-      <div class="date-wrap">
-        <button class="tab-btn ${filterMonth?'active':''}" data-action="toggle-date-menu">
-          📅 ${filterMonth ? monthLabel(filterMonth) : 'Escolher data'}
-        </button>
-        ${dateMenuOpen ? `
-          <div class="date-menu">
-            <div class="date-menu-title">Meses com dados</div>
-            ${months.length ? `
-              <div class="date-menu-list">
-                ${months.map(m=>`<button class="date-menu-item ${filterMonth===m?'active':''}" data-action="set-month" data-month="${m}">${monthLabel(m, true)}</button>`).join('')}
-              </div>
-            ` : `<p class="date-menu-empty">Nenhum mês com dados ainda.</p>`}
-            <div class="date-menu-sep"></div>
-            <label class="date-menu-custom-label">
-              Ir para outro mês
-              <input type="month" id="goto-month-input" value="${filterMonth||''}" />
-            </label>
-          </div>
->>>>>>> 937005165bf0ceff7065659574ab12571816c10f
         ` : ''}
         <button class="tab-btn" data-action="open-new-funil" title="Criar novo funil">+ Funil</button>
       </div>
-<<<<<<< HEAD
 
       <div class="tabs">
         <button class="tab-btn ${filterMonth===null?'active':''}" data-action="set-month" data-month="">Geral</button>
@@ -3053,21 +3007,6 @@ function renderPipelinePage(){
             <div class="stat"><span class="lbl">Ticket médio</span><span class="val">${fmtBRL(ticketMedioFunil())}</span></div>
             <div class="stat"><span class="lbl">Valor ponderado</span><span class="val">${fmtBRL(valorPonderadoFunil())}</span></div>
           </div>
-=======
-      <button class="tab-btn ${filtroEsfriando?'active':''}" data-action="toggle-esfriando" title="Leads em aberto sem atividade há mais de 7 dias">🧊 Esfriando</button>
-    </div>
-
-    <div class="stats-wrap">
-      <div class="stats">
-        <div class="stats-label">Resumo · ${filterMonth ? monthLabel(filterMonth, true) : 'Geral (todos os meses)'}</div>
-        <div class="stats-row">
-          <div class="stat"><span class="lbl">Em negociação</span><span class="val">${fmtBRL(sumByTipo('aberto'))}</span><span class="cnt">${countByTipo('aberto')} ${countByTipo('aberto')===1?'cliente':'clientes'}</span></div>
-          <div class="stat"><span class="lbl">Vendido</span><span class="val">${fmtBRL(sumByTipo('ganho'))}</span><span class="cnt">${countByTipo('ganho')} ${countByTipo('ganho')===1?'cliente':'clientes'}</span></div>
-          <div class="stat"><span class="lbl">Perdido</span><span class="val" style="color:rgba(255,255,255,.45)">${fmtBRL(sumByTipo('perdido'))}</span><span class="cnt">${countByTipo('perdido')} ${countByTipo('perdido')===1?'cliente':'clientes'}</span></div>
-          <div class="stat"><span class="lbl">Leads quentes</span><span class="val">${quentesAtivos()}</span></div>
-          <div class="stat"><span class="lbl">Ticket médio</span><span class="val">${fmtBRL(ticketMedioFunil())}</span></div>
-          <div class="stat"><span class="lbl">Valor ponderado</span><span class="val">${fmtBRL(valorPonderadoFunil())}</span></div>
->>>>>>> 937005165bf0ceff7065659574ab12571816c10f
         </div>
       </div>
     </div>
@@ -4312,11 +4251,7 @@ function openNewCard(columnId){
     __isNew: true, id:null, columnId: colId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
     mes: filterMonth || currentMonthKey(),
-<<<<<<< HEAD
     etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
-=======
-    etiquetas: [], camposPersonalizados: {},
->>>>>>> 937005165bf0ceff7065659574ab12571816c10f
   };
   renderModal();
 }

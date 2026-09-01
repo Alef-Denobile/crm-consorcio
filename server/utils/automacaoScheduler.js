@@ -1,10 +1,7 @@
 const Automacao = require('../models/Automacao');
 const Card = require('../models/Card');
 const Task = require('../models/Task');
-<<<<<<< HEAD
 const { gerarComissaoAutomaticaSeGanho } = require('./comissaoAutomatica');
-=======
->>>>>>> 937005165bf0ceff7065659574ab12571816c10f
 
 // Roda periodicamente (chamado de server.js via setInterval). Olha só as
 // automações do tipo "tempo_parado" e, pra cada cliente que já passou do
@@ -43,12 +40,8 @@ async function verificarAutomacoesPorTempo() {
             const destino = auto.acaoParams && auto.acaoParams.colunaDestinoId;
             if (destino && String(destino) !== String(auto.colunaGatilhoId)) {
               // findByIdAndUpdate com columnId já reseta colunaDesde/automacoesDisparadas sozinho
-<<<<<<< HEAD
               const atualizado = await Card.findByIdAndUpdate(card._id, { columnId: destino }, { new: true });
               gerarComissaoAutomaticaSeGanho(auto.userId, atualizado, destino);
-=======
-              await Card.findByIdAndUpdate(card._id, { columnId: destino });
->>>>>>> 937005165bf0ceff7065659574ab12571816c10f
             }
           }
         } catch (e) {

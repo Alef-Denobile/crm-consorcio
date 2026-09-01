@@ -425,7 +425,6 @@ usuário" — é uma camada nova, sem mexer em nenhum dado que já existia:
 - Uma pessoa só pode estar em **uma equipe por vez**. Sair da equipe
   (ou ser removido) não apaga nada do funil dela
 
-<<<<<<< HEAD
 ## Comissão automática ao fechar venda
 
 Quando um cliente entra numa coluna do tipo **"ganho"** (fechado) — seja
@@ -444,8 +443,6 @@ comissão manualmente depois, como sempre.
 comissão já gerada — ela fica registrada normalmente, e só pode ser
 removida manualmente em Comissões.
 
-=======
->>>>>>> 937005165bf0ceff7065659574ab12571816c10f
 ## Recursos de IA
 
 Usam a API da Anthropic (modelo Haiku, rápido e barato — dá pra trocar
