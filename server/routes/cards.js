@@ -9,7 +9,10 @@ const Fluxo = require('../models/Fluxo');
 const FluxoExecucao = require('../models/FluxoExecucao');
 const Anexo = require('../models/Anexo');
 const { registrarAuditoria } = require('../utils/auditoria');
+<<<<<<< HEAD
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
+=======
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
@@ -57,8 +60,12 @@ async function executarAutomacoesDaColuna(userId, colunaId, card) {
         } else if (auto.acaoTipo === 'mover_coluna') {
           const destino = auto.acaoParams && auto.acaoParams.colunaDestinoId;
           if (destino && String(destino) !== String(colunaId)) {
+<<<<<<< HEAD
             const atualizado = await Card.findByIdAndUpdate(card._id, { columnId: destino }, { new: true });
             gerarComissaoAutomaticaSeGanho(userId, atualizado, destino);
+=======
+            await Card.findByIdAndUpdate(card._id, { columnId: destino });
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
           }
         }
       } catch (e) {
@@ -70,7 +77,11 @@ async function executarAutomacoesDaColuna(userId, colunaId, card) {
   }
 }
 
+<<<<<<< HEAD
 const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'etiquetas', 'camposPersonalizados', 'tipoCarta'];
+=======
+const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'etiquetas', 'camposPersonalizados'];
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
 function filtrarCampos(body) {
   const dados = {};
   for (const campo of CAMPOS_PERMITIDOS) {
@@ -97,7 +108,10 @@ router.post('/', async (req, res) => {
     res.status(201).json(card.toJSON());
     executarAutomacoesDaColuna(req.userId, dados.columnId, card);
     iniciarFluxosDaColuna(req.userId, dados.columnId, card);
+<<<<<<< HEAD
     gerarComissaoAutomaticaSeGanho(req.userId, card, dados.columnId);
+=======
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
   } catch (err) {
     res.status(500).json({ error: 'Erro ao criar cliente.' });
   }
@@ -198,7 +212,10 @@ router.put('/:id/move', async (req, res) => {
     res.json(card.toJSON());
     executarAutomacoesDaColuna(req.userId, columnId, card);
     iniciarFluxosDaColuna(req.userId, columnId, card);
+<<<<<<< HEAD
     gerarComissaoAutomaticaSeGanho(req.userId, card, columnId);
+=======
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
   } catch (err) {
     res.status(500).json({ error: 'Erro ao mover cliente.' });
   }

@@ -6,7 +6,10 @@ const Card = require('../models/Card');
 const Column = require('../models/Column');
 const Message = require('../models/Message');
 const { perguntarClaude } = require('../utils/anthropic');
+<<<<<<< HEAD
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
+=======
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
 
 const router = express.Router();
 
@@ -251,7 +254,10 @@ router.post('/webhook', async (req, res) => {
         const opcao = (user.menuTriagem.opcoes || []).find((o) => o.numero === escolha);
         if (opcao) {
           await Card.findByIdAndUpdate(card._id, { columnId: opcao.colunaDestinoId, aguardandoMenuTriagem: false });
+<<<<<<< HEAD
           gerarComissaoAutomaticaSeGanho(user._id, card, opcao.colunaDestinoId);
+=======
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
           if (opcao.respostaConfirmacao) {
             try {
               await enviarMensagemGraph(user, card, opcao.respostaConfirmacao);

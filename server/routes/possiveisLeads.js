@@ -4,7 +4,10 @@ const auth = require('../middleware/auth');
 const PossivelLead = require('../models/PossivelLead');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
+<<<<<<< HEAD
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
+=======
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
 
 const router = express.Router();
 router.use(auth); // todas as rotas de possível lead exigem login
@@ -71,7 +74,10 @@ router.post('/:id/promover', async (req, res) => {
     });
     await PossivelLead.findByIdAndDelete(possivel._id);
     res.status(201).json(card.toJSON());
+<<<<<<< HEAD
     gerarComissaoAutomaticaSeGanho(req.userId, card, columnId);
+=======
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
   } catch (err) {
     res.status(500).json({ error: 'Erro ao promover o lead.' });
   }

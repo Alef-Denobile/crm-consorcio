@@ -118,7 +118,10 @@ main{ padding:24px; overflow-x:auto; }
 .col-menu-btn:hover{ background:var(--hover-tint); }
 .col-meta{ display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
 .badge{ font-size:10px; font-weight:600; padding:4px 9px; border-radius:999px; border:1px solid var(--badge-border); }
+<<<<<<< HEAD
 .badge-neutral{ background:var(--badge-neutral-bg); color:var(--ink-soft); margin-left:6px; }
+=======
+>>>>>>> 937005165bf0ceff7065659574ab12571816c10f
 .col-total{ font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; color:var(--ink-soft); max-width:112px; overflow-x:auto; white-space:nowrap; cursor:grab; scrollbar-width:none; -ms-overflow-style:none; }
 .col-total::-webkit-scrollbar{ display:none; }
 .col-total.dragging{ cursor:grabbing; }
