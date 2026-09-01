@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const contratoSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    cardId: { type: mongoose.Schema.Types.ObjectId, ref: 'Card', default: null }, // preenchido só quando gerado automaticamente pelo Pipeline
+    geradoAutomaticamente: { type: Boolean, default: false },
     desc: { type: String, required: true, trim: true },
     scope: { type: String, enum: ['Pessoal', 'Empresa'], default: 'Pessoal' },
     date: { type: Date, required: true }, // mês da 1ª parcela (dia 1)
@@ -20,6 +22,7 @@ const contratoSchema = new mongoose.Schema(
     toJSON: {
       transform: (_doc, ret) => {
         ret.id = ret._id.toString();
+        ret.cardId = ret.cardId ? ret.cardId.toString() : null;
         delete ret._id;
         delete ret.__v;
       },

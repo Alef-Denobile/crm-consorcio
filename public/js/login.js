@@ -13,6 +13,11 @@ const form = document.getElementById('auth-form');
 const errorBox = document.getElementById('auth-error');
 const submitBtn = document.getElementById('auth-submit');
 const fieldNome = document.getElementById('field-nome');
+const twofaForm = document.getElementById('twofa-form');
+const twofaSubmitBtn = document.getElementById('twofa-submit');
+const authDivider = document.getElementById('auth-divider');
+const googleBtnContainer = document.getElementById('google-btn-container');
+let tempToken2FA = null;
 
 /* se já tem sessão, pula direto pro painel */
 if(localStorage.getItem('token')){
@@ -50,6 +55,17 @@ form.addEventListener('submit', async (e)=>{
     const data = await res.json();
     if(!res.ok){ throw new Error(data.error || 'Não foi possível concluir. Tente novamente.'); }
 
+    if(data.requiresTwoFactor){
+      tempToken2FA = data.tempToken;
+      form.style.display = 'none';
+      authDivider.style.display = 'none';
+      googleBtnContainer.style.display = 'none';
+      twofaForm.style.display = 'block';
+      const codigoInput = document.getElementById('twofa-codigo');
+      codigoInput.focus();
+      return;
+    }
+
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     window.location.href = 'index.html';
@@ -58,6 +74,31 @@ form.addEventListener('submit', async (e)=>{
     errorBox.style.display = 'block';
   }finally{
     submitBtn.disabled = false;
+  }
+});
+
+twofaForm.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  errorBox.style.display = 'none';
+  twofaSubmitBtn.disabled = true;
+  const codigo = document.getElementById('twofa-codigo').value.trim();
+  try{
+    const res = await fetch(API_BASE + '/auth/2fa/validar-login', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ tempToken: tempToken2FA, codigo }),
+    });
+    const data = await res.json();
+    if(!res.ok){ throw new Error(data.error || 'Código incorreto.'); }
+
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    window.location.href = 'index.html';
+  }catch(err){
+    errorBox.textContent = err.message;
+    errorBox.style.display = 'block';
+  }finally{
+    twofaSubmitBtn.disabled = false;
   }
 });
 

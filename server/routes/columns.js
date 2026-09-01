@@ -3,20 +3,28 @@ const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const Column = require('../models/Column');
 const Card = require('../models/Card');
+const Funil = require('../models/Funil');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de coluna exigem login
 
-// POST /api/columns -> cria uma nova coluna para o usuário logado
+// POST /api/columns -> cria uma nova coluna para o usuário logado, dentro de um funil
 router.post('/', async (req, res) => {
   try {
-    const { nome, tipo } = req.body;
+    const { nome, tipo, funilId } = req.body;
     if (!nome || !nome.trim()) {
       return res.status(400).json({ error: 'Nome da coluna é obrigatório.' });
     }
-    const total = await Column.countDocuments({ userId: req.userId });
+    if (!funilId || !mongoose.isValidObjectId(funilId)) {
+      return res.status(400).json({ error: 'Funil inválido.' });
+    }
+    const funil = await Funil.findOne({ _id: funilId, userId: req.userId });
+    if (!funil) return res.status(404).json({ error: 'Funil não encontrado.' });
+
+    const total = await Column.countDocuments({ userId: req.userId, funilId });
     const coluna = await Column.create({
       userId: req.userId,
+      funilId,
       nome: nome.trim(),
       tipo: tipo || 'aberto',
       ordem: total,
@@ -37,6 +45,9 @@ router.put('/:id', async (req, res) => {
     if (typeof req.body.nome === 'string') updates.nome = req.body.nome.trim();
     if (typeof req.body.tipo === 'string') updates.tipo = req.body.tipo;
     if (typeof req.body.ordem === 'number') updates.ordem = req.body.ordem;
+    if (typeof req.body.probabilidade === 'number') {
+      updates.probabilidade = Math.max(0, Math.min(100, req.body.probabilidade));
+    }
 
     const coluna = await Column.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },
