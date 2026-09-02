@@ -3113,9 +3113,14 @@ function ajustarAlturaColunasPipeline(){
   const resumoFixo = document.querySelector('.stats-wrap-fixo');
   if(!resumoFixo) return;
   const alturaResumo = resumoFixo.getBoundingClientRect().height;
+<<<<<<< HEAD
   const margemExtra = 12; // respiro entre o resumo e o topo das colunas + a barra de rolagem horizontal
   document.documentElement.style.setProperty('--altura-coluna-pipeline', `calc(100vh - ${Math.ceil(alturaResumo + margemExtra)}px)`);
   document.documentElement.style.setProperty('--altura-coluna-flutuante-top', `${Math.ceil(alturaResumo)}px`);
+=======
+  const margemExtra = 24; // respiro entre o resumo e o topo das colunas
+  document.documentElement.style.setProperty('--altura-coluna-pipeline', `calc(100vh - ${Math.ceil(alturaResumo + margemExtra)}px)`);
+>>>>>>> b6ceee289e294b55047fac04f5db4ada234e295b
 }
 window.addEventListener('resize', ()=> ajustarAlturaColunasPipeline());
 
