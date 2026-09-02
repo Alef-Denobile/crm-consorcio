@@ -3101,6 +3101,20 @@ document.addEventListener('mouseup', ()=>{
   arrasteHorizontalState.el.classList.remove('dragging');
   arrasteHorizontalState = null;
 });
+// Mede a altura de verdade do bloco fixo do resumo (em vez de chutar um valor em
+// pixels) e usa isso pra calcular exatamente quanto sobra de tela pra coluna — sem
+// esse cálculo, ou a coluna fica curta demais (sobra espaço vazio embaixo) ou alta
+// demais (esconde atrás do resumo ao rolar até o fim da página).
+function ajustarAlturaColunasPipeline(){
+  if(currentPage !== 'pipeline') return;
+  const resumoFixo = document.querySelector('.stats-wrap-fixo');
+  if(!resumoFixo) return;
+  const alturaResumo = resumoFixo.getBoundingClientRect().height;
+  const margemExtra = 24; // respiro entre o resumo e o topo das colunas
+  document.documentElement.style.setProperty('--altura-coluna-pipeline', `calc(100vh - ${Math.ceil(alturaResumo + margemExtra)}px)`);
+}
+window.addEventListener('resize', ()=> ajustarAlturaColunasPipeline());
+
 function ativarArrasteHorizontal(){
   document.querySelectorAll('.col-total').forEach(el=>{
     el.addEventListener('mousedown', (e)=>{
@@ -4106,6 +4120,7 @@ function bindAppEvents(){
   const duplicarFunilBtn = app.querySelector('[data-action="duplicar-funil"]');
   if(duplicarFunilBtn) duplicarFunilBtn.addEventListener('click', ()=> duplicarFunil(duplicarFunilBtn.dataset.funilId));
   ativarArrasteHorizontal();
+  ajustarAlturaColunasPipeline();
 
   /* -- Pipeline: filtro de data -- */
   const dateMenuBtn = app.querySelector('[data-action="toggle-date-menu"]');
