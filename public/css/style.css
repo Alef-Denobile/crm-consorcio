@@ -94,13 +94,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .stats{ background:var(--accent); border-radius:14px; overflow-x:auto; }
 .stats-label{ padding:14px 24px 0; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,.5); }
 .stats-row{ display:flex; }
-.stat{ padding:18px 24px; min-width:170px; display:flex; flex-direction:column; justify-content:center; border-left:1px solid rgba(255,255,255,.14); }
+.stat{ padding:18px 24px; min-width:170px; flex-shrink:0; display:flex; flex-direction:column; justify-content:center; border-left:1px solid rgba(255,255,255,.14); }
 .stat:first-child{ border-left:none; }
 .stat .lbl{ font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:rgba(255,255,255,.55); }
 .stat .val{ font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:600; color:#FFFFFF; margin-top:4px; }
 .stat .cnt{ font-size:12px; color:rgba(255,255,255,.5); margin-top:2px; }
 
 main{ padding:24px; overflow-x:auto; }
+main.pipeline-main{ padding-bottom:4px; }
 .board{ display:flex; gap:16px; align-items:stretch; min-height:60vh; }
 
 .column{ width:292px; flex-shrink:0; background:var(--col-bg); border:1px solid var(--line); border-radius:16px; padding:10px; display:flex; flex-direction:column; max-height:var(--altura-coluna-pipeline, calc(100vh - 170px)); min-height:200px; }
@@ -140,6 +141,11 @@ main{ padding:24px; overflow-x:auto; }
 
 /* alça de arraste — área bem maior e clara pra segurar o card */
 .card-drag-handle{ flex-shrink:0; width:34px; display:flex; align-items:center; justify-content:center; cursor:grab; color:#C2C2C2; background:var(--col-bg); border-right:1px dashed var(--line); touch-action:none; }
+.card-move-wrap{ position:relative; flex-shrink:0; width:26px; display:flex; align-items:center; justify-content:center; background:var(--col-bg); border-right:1px dashed var(--line); }
+.card-move-btn{ width:22px; height:22px; border:none; background:none; color:var(--ink-soft); cursor:pointer; border-radius:6px; font-size:13px; display:flex; align-items:center; justify-content:center; }
+.card-move-btn:hover{ background:var(--hover-tint); color:var(--ink); }
+.card-move-menu{ position:absolute; left:0; right:auto; top:30px; max-height:260px; overflow-y:auto; }
+.card-move-menu .col-menu-item:disabled{ opacity:.5; cursor:default; }
 .card-drag-handle:active{ cursor:grabbing; background:var(--line); }
 .card-drag-handle svg{ pointer-events:none; }
 
@@ -251,6 +257,7 @@ main{ padding:24px; overflow-x:auto; }
 .logout-item:hover{ background:var(--danger-soft); color:var(--danger); }
 
 .main-area{ flex:1; min-width:0; margin-left:232px; padding:28px 32px 48px; }
+.main-area-pipeline{ padding-bottom:0; }
 .page-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:24px; flex-wrap:wrap; }
 .stats-wrap-fixo{ position:sticky; top:0; z-index:8; background:var(--bg); padding-bottom:16px; margin-bottom:8px; border-bottom:1px solid var(--line); }
 .page-head h1{ font-family:'Fraunces',serif; font-size:24px; font-weight:600; margin:0; letter-spacing:-.01em; }

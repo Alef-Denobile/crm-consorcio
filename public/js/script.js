@@ -153,6 +153,7 @@ let newColNameVal = '';
 let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
+let openMoveMenuCardId = null;
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
@@ -2753,7 +2754,7 @@ function renderApp(){
     <div class="app-shell ${sidebarOpen ? 'sidebar-open' : ''}">
       ${renderSidebar()}
       <div class="sidebar-backdrop" data-action="close-sidebar"></div>
-      <div class="main-area">
+      <div class="main-area ${currentPage==='pipeline' ? 'main-area-pipeline' : ''}">
         <div class="main-topbar">
           <button class="hamburger-btn" data-action="toggle-sidebar" title="Menu">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -3011,7 +3012,7 @@ function renderPipelinePage(){
       </div>
     </div>
 
-    <main>
+    <main class="pipeline-main">
       <div class="board">
         ${columnsDoFunil.map(col => renderColumn(col)).join('')}
         <div class="add-col-wrap">
@@ -3110,7 +3111,7 @@ function ajustarAlturaColunasPipeline(){
   const resumoFixo = document.querySelector('.stats-wrap-fixo');
   if(!resumoFixo) return;
   const alturaResumo = resumoFixo.getBoundingClientRect().height;
-  const margemExtra = 24; // respiro entre o resumo e o topo das colunas
+  const margemExtra = 12; // respiro entre o resumo e o topo das colunas + a barra de rolagem horizontal
   document.documentElement.style.setProperty('--altura-coluna-pipeline', `calc(100vh - ${Math.ceil(alturaResumo + margemExtra)}px)`);
 }
 window.addEventListener('resize', ()=> ajustarAlturaColunasPipeline());
@@ -3126,6 +3127,8 @@ function ativarArrasteHorizontal(){
 function renderCard(card){
   const temp = TEMPS[card.temperatura] || TEMPS.frio;
   const showMonth = filterMonth === null && card.mes;
+  const moveMenuOpen = openMoveMenuCardId === card.id;
+  const colunasDoMesmoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
   return `
     <div class="card" draggable="true" data-action="drag-card" data-card-id="${card.id}">
       <div class="card-drag-handle" title="Arraste para mover">
@@ -3134,6 +3137,19 @@ function renderCard(card){
           <circle cx="5" cy="8" r="1.4"/><circle cx="11" cy="8" r="1.4"/>
           <circle cx="5" cy="13" r="1.4"/><circle cx="11" cy="13" r="1.4"/>
         </svg>
+      </div>
+      <div class="card-move-wrap">
+        <button class="card-move-btn" data-action="toggle-move-menu" data-card-id="${card.id}" title="Mover pra outra coluna">⇄</button>
+        ${moveMenuOpen ? `
+          <div class="col-menu card-move-menu">
+            <div class="col-menu-title">Mover para</div>
+            ${colunasDoMesmoFunil.map(c=>`
+              <button class="col-menu-item" data-action="mover-para-coluna" data-card-id="${card.id}" data-col-id="${c.id}" ${c.id===card.columnId?'disabled':''}>
+                ${esc(c.nome)} ${c.id===card.columnId?'✓':''}
+              </button>
+            `).join('')}
+          </div>
+        ` : ''}
       </div>
       <div class="card-main">
         <div class="card-perf"></div>
@@ -4162,6 +4178,21 @@ function bindAppEvents(){
       renderApp();
     });
   });
+  app.querySelectorAll('[data-action="toggle-move-menu"]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      openMoveMenuCardId = (openMoveMenuCardId===btn.dataset.cardId) ? null : btn.dataset.cardId;
+      renderApp();
+    });
+  });
+  app.querySelectorAll('[data-action="mover-para-coluna"]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(btn.disabled) return;
+      openMoveMenuCardId = null;
+      moveCard(btn.dataset.cardId, btn.dataset.colId);
+    });
+  });
   app.querySelectorAll('[data-action="set-col-tipo"]').forEach(btn=>{
     btn.addEventListener('click', ()=> changeTipo(btn.dataset.colId, btn.dataset.tipo));
   });
@@ -4250,6 +4281,9 @@ function bindAppEvents(){
 function closeMenusOnOutsideClick(e){
   if(openMenuColId && !e.target.closest('.col-menu') && !e.target.closest('[data-action="toggle-col-menu"]')){
     openMenuColId = null; renderApp();
+  }
+  if(openMoveMenuCardId && !e.target.closest('.card-move-menu') && !e.target.closest('[data-action="toggle-move-menu"]')){
+    openMoveMenuCardId = null; renderApp();
   }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
