@@ -153,6 +153,7 @@ let newColNameVal = '';
 let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
+let openMoveMenuCardId = null;
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
@@ -2753,7 +2754,7 @@ function renderApp(){
     <div class="app-shell ${sidebarOpen ? 'sidebar-open' : ''}">
       ${renderSidebar()}
       <div class="sidebar-backdrop" data-action="close-sidebar"></div>
-      <div class="main-area">
+      <div class="main-area ${currentPage==='pipeline' ? 'main-area-pipeline' : ''}">
         <div class="main-topbar">
           <button class="hamburger-btn" data-action="toggle-sidebar" title="Menu">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -2948,54 +2949,54 @@ function renderPipelinePage(){
   const funilAtual = funis.find(f=>f.id===funilAtualId);
   const columnsDoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
   return `
-    <div class="pipeline-topo-fixo">
-      <div class="page-head">
-        <div>
-          <h1>Pipeline</h1>
-          <p>Arraste os clientes para mudar de coluna</p>
-        </div>
+    <div class="page-head">
+      <div>
+        <h1>Pipeline</h1>
+        <p>Arraste os clientes para mudar de coluna</p>
       </div>
+    </div>
 
-      <div class="funil-tabs">
-        ${funis.map(f=>{
-          if(editingFunilId===f.id){
-            return `<input class="funil-name-input" id="funil-rename-${f.id}" value="${esc(editingFunilName)}" />`;
-          }
-          return `<button class="tab-btn ${funilAtualId===f.id?'active':''}" data-action="set-funil" data-funil-id="${f.id}">${esc(f.nome)}</button>`;
-        }).join('')}
-        ${funilAtual ? `
-          <button class="icon-btn" data-action="edit-funil-name" data-funil-id="${funilAtual.id}" title="Renomear funil">${ICON_EDIT}</button>
-          <button class="icon-btn" data-action="duplicar-funil" data-funil-id="${funilAtual.id}" title="Duplicar funil (só a estrutura de colunas)">⧉</button>
-          ${funis.length > 1 ? `<button class="icon-btn" data-action="delete-funil" data-funil-id="${funilAtual.id}" title="Excluir funil">${ICON_TRASH}</button>` : ''}
+    <div class="funil-tabs">
+      ${funis.map(f=>{
+        if(editingFunilId===f.id){
+          return `<input class="funil-name-input" id="funil-rename-${f.id}" value="${esc(editingFunilName)}" />`;
+        }
+        return `<button class="tab-btn ${funilAtualId===f.id?'active':''}" data-action="set-funil" data-funil-id="${f.id}">${esc(f.nome)}</button>`;
+      }).join('')}
+      ${funilAtual ? `
+        <button class="icon-btn" data-action="edit-funil-name" data-funil-id="${funilAtual.id}" title="Renomear funil">${ICON_EDIT}</button>
+        <button class="icon-btn" data-action="duplicar-funil" data-funil-id="${funilAtual.id}" title="Duplicar funil (só a estrutura de colunas)">⧉</button>
+        ${funis.length > 1 ? `<button class="icon-btn" data-action="delete-funil" data-funil-id="${funilAtual.id}" title="Excluir funil">${ICON_TRASH}</button>` : ''}
+      ` : ''}
+      <button class="tab-btn" data-action="open-new-funil" title="Criar novo funil">+ Funil</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn ${filterMonth===null?'active':''}" data-action="set-month" data-month="">Geral</button>
+      <div class="date-wrap">
+        <button class="tab-btn ${filterMonth?'active':''}" data-action="toggle-date-menu">
+          📅 ${filterMonth ? monthLabel(filterMonth) : 'Escolher data'}
+        </button>
+        ${dateMenuOpen ? `
+          <div class="date-menu">
+            <div class="date-menu-title">Meses com dados</div>
+            ${months.length ? `
+              <div class="date-menu-list">
+                ${months.map(m=>`<button class="date-menu-item ${filterMonth===m?'active':''}" data-action="set-month" data-month="${m}">${monthLabel(m, true)}</button>`).join('')}
+              </div>
+            ` : `<p class="date-menu-empty">Nenhum mês com dados ainda.</p>`}
+            <div class="date-menu-sep"></div>
+            <label class="date-menu-custom-label">
+              Ir para outro mês
+              <input type="month" id="goto-month-input" value="${filterMonth||''}" />
+            </label>
+          </div>
         ` : ''}
-        <button class="tab-btn" data-action="open-new-funil" title="Criar novo funil">+ Funil</button>
       </div>
+      <button class="tab-btn ${filtroEsfriando?'active':''}" data-action="toggle-esfriando" title="Leads em aberto sem atividade há mais de 7 dias">🧊 Esfriando</button>
+    </div>
 
-      <div class="tabs">
-        <button class="tab-btn ${filterMonth===null?'active':''}" data-action="set-month" data-month="">Geral</button>
-        <div class="date-wrap">
-          <button class="tab-btn ${filterMonth?'active':''}" data-action="toggle-date-menu">
-            📅 ${filterMonth ? monthLabel(filterMonth) : 'Escolher data'}
-          </button>
-          ${dateMenuOpen ? `
-            <div class="date-menu">
-              <div class="date-menu-title">Meses com dados</div>
-              ${months.length ? `
-                <div class="date-menu-list">
-                  ${months.map(m=>`<button class="date-menu-item ${filterMonth===m?'active':''}" data-action="set-month" data-month="${m}">${monthLabel(m, true)}</button>`).join('')}
-                </div>
-              ` : `<p class="date-menu-empty">Nenhum mês com dados ainda.</p>`}
-              <div class="date-menu-sep"></div>
-              <label class="date-menu-custom-label">
-                Ir para outro mês
-                <input type="month" id="goto-month-input" value="${filterMonth||''}" />
-              </label>
-            </div>
-          ` : ''}
-        </div>
-        <button class="tab-btn ${filtroEsfriando?'active':''}" data-action="toggle-esfriando" title="Leads em aberto sem atividade há mais de 7 dias">🧊 Esfriando</button>
-      </div>
-
+    <div class="stats-wrap-fixo">
       <div class="stats-wrap">
         <div class="stats">
           <div class="stats-label">Resumo · ${filterMonth ? monthLabel(filterMonth, true) : 'Geral (todos os meses)'}</div>
@@ -3011,7 +3012,7 @@ function renderPipelinePage(){
       </div>
     </div>
 
-    <main>
+    <main class="pipeline-main">
       <div class="board">
         ${columnsDoFunil.map(col => renderColumn(col)).join('')}
         <div class="add-col-wrap">
@@ -3078,6 +3079,8 @@ function renderColumn(col){
         ` : ''}
       </div>
 
+      <div class="col-nome-flutuante"><span>${esc(col.nome)}</span></div>
+
       <div class="cards">
         ${cards.length===0 ? '<p class="empty-col">Nenhum cliente aqui ainda</p>' : cards.map(card=>renderCard(card)).join('')}
       </div>
@@ -3101,6 +3104,21 @@ document.addEventListener('mouseup', ()=>{
   arrasteHorizontalState.el.classList.remove('dragging');
   arrasteHorizontalState = null;
 });
+// Mede a altura de verdade do bloco fixo do resumo (em vez de chutar um valor em
+// pixels) e usa isso pra calcular exatamente quanto sobra de tela pra coluna — sem
+// esse cálculo, ou a coluna fica curta demais (sobra espaço vazio embaixo) ou alta
+// demais (esconde atrás do resumo ao rolar até o fim da página).
+function ajustarAlturaColunasPipeline(){
+  if(currentPage !== 'pipeline') return;
+  const resumoFixo = document.querySelector('.stats-wrap-fixo');
+  if(!resumoFixo) return;
+  const alturaResumo = resumoFixo.getBoundingClientRect().height;
+  const margemExtra = 12; // respiro entre o resumo e o topo das colunas + a barra de rolagem horizontal
+  document.documentElement.style.setProperty('--altura-coluna-pipeline', `calc(100vh - ${Math.ceil(alturaResumo + margemExtra)}px)`);
+  document.documentElement.style.setProperty('--altura-coluna-flutuante-top', `${Math.ceil(alturaResumo)}px`);
+}
+window.addEventListener('resize', ()=> ajustarAlturaColunasPipeline());
+
 function ativarArrasteHorizontal(){
   document.querySelectorAll('.col-total').forEach(el=>{
     el.addEventListener('mousedown', (e)=>{
@@ -3112,6 +3130,8 @@ function ativarArrasteHorizontal(){
 function renderCard(card){
   const temp = TEMPS[card.temperatura] || TEMPS.frio;
   const showMonth = filterMonth === null && card.mes;
+  const moveMenuOpen = openMoveMenuCardId === card.id;
+  const colunasDoMesmoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
   return `
     <div class="card" draggable="true" data-action="drag-card" data-card-id="${card.id}">
       <div class="card-drag-handle" title="Arraste para mover">
@@ -3120,6 +3140,19 @@ function renderCard(card){
           <circle cx="5" cy="8" r="1.4"/><circle cx="11" cy="8" r="1.4"/>
           <circle cx="5" cy="13" r="1.4"/><circle cx="11" cy="13" r="1.4"/>
         </svg>
+      </div>
+      <div class="card-move-wrap">
+        <button class="card-move-btn" data-action="toggle-move-menu" data-card-id="${card.id}" title="Mover pra outra coluna">⇄</button>
+        ${moveMenuOpen ? `
+          <div class="col-menu card-move-menu">
+            <div class="col-menu-title">Mover para</div>
+            ${colunasDoMesmoFunil.map(c=>`
+              <button class="col-menu-item" data-action="mover-para-coluna" data-card-id="${card.id}" data-col-id="${c.id}" ${c.id===card.columnId?'disabled':''}>
+                ${esc(c.nome)} ${c.id===card.columnId?'✓':''}
+              </button>
+            `).join('')}
+          </div>
+        ` : ''}
       </div>
       <div class="card-main">
         <div class="card-perf"></div>
@@ -4106,6 +4139,7 @@ function bindAppEvents(){
   const duplicarFunilBtn = app.querySelector('[data-action="duplicar-funil"]');
   if(duplicarFunilBtn) duplicarFunilBtn.addEventListener('click', ()=> duplicarFunil(duplicarFunilBtn.dataset.funilId));
   ativarArrasteHorizontal();
+  ajustarAlturaColunasPipeline();
 
   /* -- Pipeline: filtro de data -- */
   const dateMenuBtn = app.querySelector('[data-action="toggle-date-menu"]');
@@ -4145,6 +4179,21 @@ function bindAppEvents(){
       e.stopPropagation();
       openMenuColId = (openMenuColId===btn.dataset.colId) ? null : btn.dataset.colId;
       renderApp();
+    });
+  });
+  app.querySelectorAll('[data-action="toggle-move-menu"]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      openMoveMenuCardId = (openMoveMenuCardId===btn.dataset.cardId) ? null : btn.dataset.cardId;
+      renderApp();
+    });
+  });
+  app.querySelectorAll('[data-action="mover-para-coluna"]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(btn.disabled) return;
+      openMoveMenuCardId = null;
+      moveCard(btn.dataset.cardId, btn.dataset.colId);
     });
   });
   app.querySelectorAll('[data-action="set-col-tipo"]').forEach(btn=>{
@@ -4235,6 +4284,9 @@ function bindAppEvents(){
 function closeMenusOnOutsideClick(e){
   if(openMenuColId && !e.target.closest('.col-menu') && !e.target.closest('[data-action="toggle-col-menu"]')){
     openMenuColId = null; renderApp();
+  }
+  if(openMoveMenuCardId && !e.target.closest('.card-move-menu') && !e.target.closest('[data-action="toggle-move-menu"]')){
+    openMoveMenuCardId = null; renderApp();
   }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
