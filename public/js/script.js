@@ -3001,12 +3001,12 @@ function renderPipelinePage(){
         <div class="stats">
           <div class="stats-label">Resumo · ${filterMonth ? monthLabel(filterMonth, true) : 'Geral (todos os meses)'}</div>
           <div class="stats-row">
-            <div class="stat"><span class="lbl">Em negociação</span><span class="val">${fmtBRL(sumByTipo('aberto'))}</span><span class="cnt">${countByTipo('aberto')} ${countByTipo('aberto')===1?'cliente':'clientes'}</span></div>
-            <div class="stat"><span class="lbl">Vendido</span><span class="val">${fmtBRL(sumByTipo('ganho'))}</span><span class="cnt">${countByTipo('ganho')} ${countByTipo('ganho')===1?'cliente':'clientes'}</span></div>
-            <div class="stat"><span class="lbl">Perdido</span><span class="val" style="color:rgba(255,255,255,.45)">${fmtBRL(sumByTipo('perdido'))}</span><span class="cnt">${countByTipo('perdido')} ${countByTipo('perdido')===1?'cliente':'clientes'}</span></div>
-            <div class="stat"><span class="lbl">Leads quentes</span><span class="val">${quentesAtivos()}</span></div>
-            <div class="stat"><span class="lbl">Ticket médio</span><span class="val">${fmtBRL(ticketMedioFunil())}</span></div>
-            <div class="stat"><span class="lbl">Valor ponderado</span><span class="val">${fmtBRL(valorPonderadoFunil())}</span></div>
+            ${renderStatItem('aberto', 'Em negociação', fmtBRL(sumByTipo('aberto')), `${countByTipo('aberto')} ${countByTipo('aberto')===1?'cliente':'clientes'}`)}
+            ${renderStatItem('ganho', 'Vendido', fmtBRL(sumByTipo('ganho')), `${countByTipo('ganho')} ${countByTipo('ganho')===1?'cliente':'clientes'}`)}
+            ${renderStatItem('perdido', 'Perdido', fmtBRL(sumByTipo('perdido')), `${countByTipo('perdido')} ${countByTipo('perdido')===1?'cliente':'clientes'}`, 'rgba(255,255,255,.45)')}
+            ${renderStatItem('quentes', 'Leads quentes', quentesAtivos())}
+            ${renderStatItem('ticket', 'Ticket médio', fmtBRL(ticketMedioFunil()))}
+            ${renderStatItem('ponderado', 'Valor ponderado', fmtBRL(valorPonderadoFunil()))}
           </div>
         </div>
       </div>
@@ -3106,6 +3106,52 @@ document.addEventListener('mouseup', ()=>{
 // pixels) e usa isso pra calcular exatamente quanto sobra de tela pra coluna — sem
 // esse cálculo, ou a coluna fica curta demais (sobra espaço vazio embaixo) ou alta
 // demais (esconde atrás do resumo ao rolar até o fim da página).
+/* ---------- resumo do Pipeline: largura de cada número, redimensionável ---------- */
+const STAT_LARGURA_PADRAO = 220;
+const STAT_LARGURA_MIN = 130;
+function getLargurasStats(){
+  let salvo = {};
+  try{ salvo = JSON.parse(localStorage.getItem('statsLargura') || '{}'); }catch(e){ salvo = {}; }
+  return salvo;
+}
+let statsLargura = getLargurasStats();
+function renderStatItem(chave, label, valor, contagem, corValor){
+  const largura = statsLargura[chave] || STAT_LARGURA_PADRAO;
+  return `
+    <div class="stat" data-stat-key="${chave}" style="width:${largura}px;">
+      <span class="lbl">${esc(label)}</span>
+      <span class="val" ${corValor ? `style="color:${corValor}"` : ''}>${valor}</span>
+      ${contagem ? `<span class="cnt">${esc(contagem)}</span>` : ''}
+      <div class="stat-resize-handle" data-stat-key="${chave}" title="Arraste para redimensionar"></div>
+    </div>
+  `;
+}
+let resizeStatState = null;
+document.addEventListener('mousemove', (e)=>{
+  if(!resizeStatState) return;
+  e.preventDefault();
+  const delta = e.pageX - resizeStatState.startX;
+  const novaLargura = Math.max(STAT_LARGURA_MIN, Math.round(resizeStatState.startWidth + delta));
+  statsLargura[resizeStatState.key] = novaLargura;
+  const statEl = document.querySelector(`.stat[data-stat-key="${resizeStatState.key}"]`);
+  if(statEl) statEl.style.width = novaLargura + 'px';
+});
+document.addEventListener('mouseup', ()=>{
+  if(!resizeStatState) return;
+  resizeStatState = null;
+  localStorage.setItem('statsLargura', JSON.stringify(statsLargura));
+});
+function ativarRedimensionarStats(){
+  document.querySelectorAll('.stat-resize-handle').forEach(handle=>{
+    handle.addEventListener('mousedown', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      const statEl = handle.closest('.stat');
+      resizeStatState = { key: handle.dataset.statKey, startX: e.pageX, startWidth: statEl.getBoundingClientRect().width };
+    });
+  });
+}
+
 function ajustarAlturaColunasPipeline(){
   if(currentPage !== 'pipeline') return;
   const resumoFixo = document.querySelector('.stats-wrap-fixo');
@@ -4137,6 +4183,7 @@ function bindAppEvents(){
   if(duplicarFunilBtn) duplicarFunilBtn.addEventListener('click', ()=> duplicarFunil(duplicarFunilBtn.dataset.funilId));
   ativarArrasteHorizontal();
   ajustarAlturaColunasPipeline();
+  ativarRedimensionarStats();
 
   /* -- Pipeline: filtro de data -- */
   const dateMenuBtn = app.querySelector('[data-action="toggle-date-menu"]');
