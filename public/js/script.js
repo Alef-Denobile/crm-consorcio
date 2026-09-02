@@ -2948,58 +2948,54 @@ function renderPipelinePage(){
   const funilAtual = funis.find(f=>f.id===funilAtualId);
   const columnsDoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
   return `
-    <div class="pipeline-topo-fixo">
-      <div class="page-head">
-        <div>
-          <h1>Pipeline</h1>
-          <p>Arraste os clientes para mudar de coluna</p>
-        </div>
+    <div class="page-head">
+      <div>
+        <h1>Pipeline</h1>
+        <p>Arraste os clientes para mudar de coluna</p>
       </div>
+    </div>
 
-      <div class="funil-tabs">
-        ${funis.map(f=>{
-          if(editingFunilId===f.id){
-            return `<input class="funil-name-input" id="funil-rename-${f.id}" value="${esc(editingFunilName)}" />`;
-          }
-          return `<button class="tab-btn ${funilAtualId===f.id?'active':''}" data-action="set-funil" data-funil-id="${f.id}">${esc(f.nome)}</button>`;
-        }).join('')}
-        ${funilAtual ? `
-          <button class="icon-btn" data-action="edit-funil-name" data-funil-id="${funilAtual.id}" title="Renomear funil">${ICON_EDIT}</button>
-          <button class="icon-btn" data-action="duplicar-funil" data-funil-id="${funilAtual.id}" title="Duplicar funil (só a estrutura de colunas)">⧉</button>
-          ${funis.length > 1 ? `<button class="icon-btn" data-action="delete-funil" data-funil-id="${funilAtual.id}" title="Excluir funil">${ICON_TRASH}</button>` : ''}
+    <div class="funil-tabs">
+      ${funis.map(f=>{
+        if(editingFunilId===f.id){
+          return `<input class="funil-name-input" id="funil-rename-${f.id}" value="${esc(editingFunilName)}" />`;
+        }
+        return `<button class="tab-btn ${funilAtualId===f.id?'active':''}" data-action="set-funil" data-funil-id="${f.id}">${esc(f.nome)}</button>`;
+      }).join('')}
+      ${funilAtual ? `
+        <button class="icon-btn" data-action="edit-funil-name" data-funil-id="${funilAtual.id}" title="Renomear funil">${ICON_EDIT}</button>
+        <button class="icon-btn" data-action="duplicar-funil" data-funil-id="${funilAtual.id}" title="Duplicar funil (só a estrutura de colunas)">⧉</button>
+        ${funis.length > 1 ? `<button class="icon-btn" data-action="delete-funil" data-funil-id="${funilAtual.id}" title="Excluir funil">${ICON_TRASH}</button>` : ''}
+      ` : ''}
+      <button class="tab-btn" data-action="open-new-funil" title="Criar novo funil">+ Funil</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn ${filterMonth===null?'active':''}" data-action="set-month" data-month="">Geral</button>
+      <div class="date-wrap">
+        <button class="tab-btn ${filterMonth?'active':''}" data-action="toggle-date-menu">
+          📅 ${filterMonth ? monthLabel(filterMonth) : 'Escolher data'}
+        </button>
+        ${dateMenuOpen ? `
+          <div class="date-menu">
+            <div class="date-menu-title">Meses com dados</div>
+            ${months.length ? `
+              <div class="date-menu-list">
+                ${months.map(m=>`<button class="date-menu-item ${filterMonth===m?'active':''}" data-action="set-month" data-month="${m}">${monthLabel(m, true)}</button>`).join('')}
+              </div>
+            ` : `<p class="date-menu-empty">Nenhum mês com dados ainda.</p>`}
+            <div class="date-menu-sep"></div>
+            <label class="date-menu-custom-label">
+              Ir para outro mês
+              <input type="month" id="goto-month-input" value="${filterMonth||''}" />
+            </label>
+          </div>
         ` : ''}
-        <button class="tab-btn" data-action="open-new-funil" title="Criar novo funil">+ Funil</button>
       </div>
+      <button class="tab-btn ${filtroEsfriando?'active':''}" data-action="toggle-esfriando" title="Leads em aberto sem atividade há mais de 7 dias">🧊 Esfriando</button>
+    </div>
 
-<<<<<<< HEAD
     <div class="stats-wrap-fixo">
-=======
-      <div class="tabs">
-        <button class="tab-btn ${filterMonth===null?'active':''}" data-action="set-month" data-month="">Geral</button>
-        <div class="date-wrap">
-          <button class="tab-btn ${filterMonth?'active':''}" data-action="toggle-date-menu">
-            📅 ${filterMonth ? monthLabel(filterMonth) : 'Escolher data'}
-          </button>
-          ${dateMenuOpen ? `
-            <div class="date-menu">
-              <div class="date-menu-title">Meses com dados</div>
-              ${months.length ? `
-                <div class="date-menu-list">
-                  ${months.map(m=>`<button class="date-menu-item ${filterMonth===m?'active':''}" data-action="set-month" data-month="${m}">${monthLabel(m, true)}</button>`).join('')}
-                </div>
-              ` : `<p class="date-menu-empty">Nenhum mês com dados ainda.</p>`}
-              <div class="date-menu-sep"></div>
-              <label class="date-menu-custom-label">
-                Ir para outro mês
-                <input type="month" id="goto-month-input" value="${filterMonth||''}" />
-              </label>
-            </div>
-          ` : ''}
-        </div>
-        <button class="tab-btn ${filtroEsfriando?'active':''}" data-action="toggle-esfriando" title="Leads em aberto sem atividade há mais de 7 dias">🧊 Esfriando</button>
-      </div>
-
->>>>>>> 90b029d75cf9e58fb508a0948536a177146b9c62
       <div class="stats-wrap">
         <div class="stats">
           <div class="stats-label">Resumo · ${filterMonth ? monthLabel(filterMonth, true) : 'Geral (todos os meses)'}</div>
