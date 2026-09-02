@@ -106,7 +106,6 @@ main.pipeline-main{ padding-bottom:4px; }
 
 .column{ width:292px; flex-shrink:0; background:var(--col-bg); border:1px solid var(--line); border-radius:16px; padding:10px; display:flex; flex-direction:column; max-height:var(--altura-coluna-pipeline, calc(100vh - 170px)); min-height:200px; }
 .col-head{ padding:6px 6px 14px; position:relative; flex-shrink:0; }
-.col-nome-flutuante{ position:sticky; top:var(--altura-coluna-flutuante-top, 132px); z-index:2; margin:0 -10px; padding:6px 16px 22px; font-family:'Fraunces',serif; font-weight:600; font-size:13px; color:var(--ink); background:linear-gradient(to bottom, var(--col-bg) 55%, transparent 100%); pointer-events:none; }
 .col-head-top{ display:flex; align-items:center; gap:6px; }
 .grip{ color:#BEBEBE; flex-shrink:0; font-size:14px; cursor:grab; padding:4px; margin:-4px; border-radius:6px; touch-action:none; }
 .grip:hover{ background:var(--hover-tint); color:var(--ink-soft); }
