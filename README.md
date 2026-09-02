@@ -425,6 +425,24 @@ usuário" — é uma camada nova, sem mexer em nenhum dado que já existia:
 - Uma pessoa só pode estar em **uma equipe por vez**. Sair da equipe
   (ou ser removido) não apaga nada do funil dela
 
+## Comissão automática ao fechar venda
+
+Quando um cliente entra numa coluna do tipo **"ganho"** (fechado) — seja
+arrastando no Pipeline, criando direto nela, transferindo, copiando, ou
+promovendo de um possível lead — o sistema cria a comissão dele
+automaticamente na aba **Comissões**, usando o valor da carta cadastrado no
+cliente. Some ao "Ganho" gerado, aparece com a marcação **"⚡ Gerada pelo
+Pipeline"** pra diferenciar de uma comissão criada manualmente.
+
+Só gera **uma vez por cliente** — mover o mesmo cliente entre colunas
+"ganho" diferentes, ou editá-lo depois, não duplica. Se o cliente não tiver
+valor cadastrado (R$ 0), nada é gerado automaticamente; dá pra criar a
+comissão manualmente depois, como sempre.
+
+⚠️ Mover o cliente de volta pra fora da coluna "ganho" **não** apaga a
+comissão já gerada — ela fica registrada normalmente, e só pode ser
+removida manualmente em Comissões.
+
 ## Recursos de IA
 
 Usam a API da Anthropic (modelo Haiku, rápido e barato — dá pra trocar

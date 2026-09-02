@@ -6,6 +6,7 @@ const Card = require('../models/Card');
 const Column = require('../models/Column');
 const Message = require('../models/Message');
 const { perguntarClaude } = require('../utils/anthropic');
+const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
 
 const router = express.Router();
 
@@ -250,6 +251,7 @@ router.post('/webhook', async (req, res) => {
         const opcao = (user.menuTriagem.opcoes || []).find((o) => o.numero === escolha);
         if (opcao) {
           await Card.findByIdAndUpdate(card._id, { columnId: opcao.colunaDestinoId, aguardandoMenuTriagem: false });
+          gerarComissaoAutomaticaSeGanho(user._id, card, opcao.colunaDestinoId);
           if (opcao.respostaConfirmacao) {
             try {
               await enviarMensagemGraph(user, card, opcao.respostaConfirmacao);

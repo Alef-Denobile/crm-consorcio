@@ -9,6 +9,7 @@ const Fluxo = require('../models/Fluxo');
 const FluxoExecucao = require('../models/FluxoExecucao');
 const Anexo = require('../models/Anexo');
 const { registrarAuditoria } = require('../utils/auditoria');
+const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
@@ -56,7 +57,8 @@ async function executarAutomacoesDaColuna(userId, colunaId, card) {
         } else if (auto.acaoTipo === 'mover_coluna') {
           const destino = auto.acaoParams && auto.acaoParams.colunaDestinoId;
           if (destino && String(destino) !== String(colunaId)) {
-            await Card.findByIdAndUpdate(card._id, { columnId: destino });
+            const atualizado = await Card.findByIdAndUpdate(card._id, { columnId: destino }, { new: true });
+            gerarComissaoAutomaticaSeGanho(userId, atualizado, destino);
           }
         }
       } catch (e) {
@@ -68,7 +70,7 @@ async function executarAutomacoesDaColuna(userId, colunaId, card) {
   }
 }
 
-const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'etiquetas', 'camposPersonalizados'];
+const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'etiquetas', 'camposPersonalizados', 'tipoCarta'];
 function filtrarCampos(body) {
   const dados = {};
   for (const campo of CAMPOS_PERMITIDOS) {
@@ -95,6 +97,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(card.toJSON());
     executarAutomacoesDaColuna(req.userId, dados.columnId, card);
     iniciarFluxosDaColuna(req.userId, dados.columnId, card);
+    gerarComissaoAutomaticaSeGanho(req.userId, card, dados.columnId);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao criar cliente.' });
   }
@@ -195,6 +198,7 @@ router.put('/:id/move', async (req, res) => {
     res.json(card.toJSON());
     executarAutomacoesDaColuna(req.userId, columnId, card);
     iniciarFluxosDaColuna(req.userId, columnId, card);
+    gerarComissaoAutomaticaSeGanho(req.userId, card, columnId);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao mover cliente.' });
   }

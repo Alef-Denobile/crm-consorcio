@@ -4,6 +4,7 @@ const Card = require('../models/Card');
 const Task = require('../models/Task');
 const Message = require('../models/Message');
 const User = require('../models/User');
+const { gerarComissaoAutomaticaSeGanho } = require('./comissaoAutomatica');
 
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
 
@@ -68,7 +69,10 @@ async function processarFluxos() {
           });
         } else if (etapa.tipo === 'mover_coluna') {
           const destino = etapa.params && etapa.params.colunaDestinoId;
-          if (destino) await Card.findByIdAndUpdate(card._id, { columnId: destino });
+          if (destino) {
+            const atualizado = await Card.findByIdAndUpdate(card._id, { columnId: destino }, { new: true });
+            gerarComissaoAutomaticaSeGanho(exec.userId, atualizado, destino);
+          }
         } else if (etapa.tipo === 'mensagem') {
           const texto = (etapa.params && etapa.params.texto) || '';
           if (texto && card.telefoneNormalizado) {

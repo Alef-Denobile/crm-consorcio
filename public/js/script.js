@@ -142,7 +142,7 @@ let loaded = false;
 let tasksLoaded = false;
 let errorMsg = null;
 let currentPage = 'dashboard';   // 'dashboard' | 'pipeline' | 'leads' | 'tarefas'
-let filterMonth = null;          // null = Geral (página Pipeline)
+let filterMonth = currentMonthKey();  // começa no mês atual ao entrar no site — null seria "Geral"
 let filtroEsfriando = false;
 let dashboardPeriod = 'mes';     // '7dias' | 'mes' | 'trimestre' | 'ano'
 let metaVendasValor = 0;
@@ -2037,6 +2037,9 @@ function goToPage(page){
     equipeMsg = null;
     if(equipe && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
   }
+  if(page === 'comissoes'){
+    loadContratos(); // recarrega sempre, pra pegar comissões que o Pipeline gerou automaticamente
+  }
 }
 async function refreshCurrentUser(){
   try{
@@ -2992,16 +2995,18 @@ function renderPipelinePage(){
       <button class="tab-btn ${filtroEsfriando?'active':''}" data-action="toggle-esfriando" title="Leads em aberto sem atividade há mais de 7 dias">🧊 Esfriando</button>
     </div>
 
-    <div class="stats-wrap">
-      <div class="stats">
-        <div class="stats-label">Resumo · ${filterMonth ? monthLabel(filterMonth, true) : 'Geral (todos os meses)'}</div>
-        <div class="stats-row">
-          <div class="stat"><span class="lbl">Em negociação</span><span class="val">${fmtBRL(sumByTipo('aberto'))}</span><span class="cnt">${countByTipo('aberto')} ${countByTipo('aberto')===1?'cliente':'clientes'}</span></div>
-          <div class="stat"><span class="lbl">Vendido</span><span class="val">${fmtBRL(sumByTipo('ganho'))}</span><span class="cnt">${countByTipo('ganho')} ${countByTipo('ganho')===1?'cliente':'clientes'}</span></div>
-          <div class="stat"><span class="lbl">Perdido</span><span class="val" style="color:rgba(255,255,255,.45)">${fmtBRL(sumByTipo('perdido'))}</span><span class="cnt">${countByTipo('perdido')} ${countByTipo('perdido')===1?'cliente':'clientes'}</span></div>
-          <div class="stat"><span class="lbl">Leads quentes</span><span class="val">${quentesAtivos()}</span></div>
-          <div class="stat"><span class="lbl">Ticket médio</span><span class="val">${fmtBRL(ticketMedioFunil())}</span></div>
-          <div class="stat"><span class="lbl">Valor ponderado</span><span class="val">${fmtBRL(valorPonderadoFunil())}</span></div>
+    <div class="stats-wrap-fixo">
+      <div class="stats-wrap">
+        <div class="stats">
+          <div class="stats-label">Resumo · ${filterMonth ? monthLabel(filterMonth, true) : 'Geral (todos os meses)'}</div>
+          <div class="stats-row">
+            <div class="stat"><span class="lbl">Em negociação</span><span class="val">${fmtBRL(sumByTipo('aberto'))}</span><span class="cnt">${countByTipo('aberto')} ${countByTipo('aberto')===1?'cliente':'clientes'}</span></div>
+            <div class="stat"><span class="lbl">Vendido</span><span class="val">${fmtBRL(sumByTipo('ganho'))}</span><span class="cnt">${countByTipo('ganho')} ${countByTipo('ganho')===1?'cliente':'clientes'}</span></div>
+            <div class="stat"><span class="lbl">Perdido</span><span class="val" style="color:rgba(255,255,255,.45)">${fmtBRL(sumByTipo('perdido'))}</span><span class="cnt">${countByTipo('perdido')} ${countByTipo('perdido')===1?'cliente':'clientes'}</span></div>
+            <div class="stat"><span class="lbl">Leads quentes</span><span class="val">${quentesAtivos()}</span></div>
+            <div class="stat"><span class="lbl">Ticket médio</span><span class="val">${fmtBRL(ticketMedioFunil())}</span></div>
+            <div class="stat"><span class="lbl">Valor ponderado</span><span class="val">${fmtBRL(valorPonderadoFunil())}</span></div>
+          </div>
         </div>
       </div>
     </div>
@@ -3322,6 +3327,7 @@ function renderContratoCard(c){
           <p class="contrato-card-note">
             <span class="badge" style="color:${escopo.color};background:${escopo.bg}">${escopo.label}</span>
             <span>· ${c.parcelas}x parcelas · Carta de crédito: ${fmtBRL(c.creditoValor)}</span>
+            ${c.geradoAutomaticamente ? `<span class="badge badge-neutral" title="Criada automaticamente quando o cliente entrou numa coluna de fechamento no Pipeline">⚡ Gerada pelo Pipeline</span>` : ''}
           </p>
         </div>
         <div class="contrato-card-actions">
@@ -4245,7 +4251,7 @@ function openNewCard(columnId){
     __isNew: true, id:null, columnId: colId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
     mes: filterMonth || currentMonthKey(),
-    etiquetas: [], camposPersonalizados: {},
+    etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
   };
   renderModal();
 }
@@ -4313,6 +4319,14 @@ function renderModal(){
                 ${board.columns.map(c=>`<option value="${c.id}" ${c.id===f.columnId?'selected':''}>${esc(c.nome)}</option>`).join('')}
               </select>
             </div>
+          </div>
+          <div class="field">
+            <label>Tipo de carta de crédito</label>
+            <select id="f-tipo-carta">
+              <option value="imovel" ${(f.tipoCarta||'imovel')==='imovel'?'selected':''}>Imóvel</option>
+              <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
+              <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
+            </select>
           </div>
           <div class="field">
             <label>Mês de referência</label>
@@ -4472,6 +4486,8 @@ function renderModal(){
   const toggleArquivarBtn = document.getElementById('f-toggle-arquivar');
   if(toggleArquivarBtn) toggleArquivarBtn.addEventListener('click', toggleArquivarCard);
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
+  const tipoCartaEl = document.getElementById('f-tipo-carta');
+  if(tipoCartaEl) tipoCartaEl.addEventListener('change', (e)=> modalForm.tipoCarta = e.target.value);
   document.getElementById('f-mes').addEventListener('change', (e)=> modalForm.mes = e.target.value);
 
   const valorInput = document.getElementById('f-valor');
