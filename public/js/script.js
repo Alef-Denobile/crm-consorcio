@@ -3079,6 +3079,8 @@ function renderColumn(col){
         ` : ''}
       </div>
 
+      <div class="col-nome-flutuante"><span>${esc(col.nome)}</span></div>
+
       <div class="cards">
         ${cards.length===0 ? '<p class="empty-col">Nenhum cliente aqui ainda</p>' : cards.map(card=>renderCard(card)).join('')}
       </div>
@@ -3113,6 +3115,7 @@ function ajustarAlturaColunasPipeline(){
   const alturaResumo = resumoFixo.getBoundingClientRect().height;
   const margemExtra = 12; // respiro entre o resumo e o topo das colunas + a barra de rolagem horizontal
   document.documentElement.style.setProperty('--altura-coluna-pipeline', `calc(100vh - ${Math.ceil(alturaResumo + margemExtra)}px)`);
+  document.documentElement.style.setProperty('--altura-coluna-flutuante-top', `${Math.ceil(alturaResumo)}px`);
 }
 window.addEventListener('resize', ()=> ajustarAlturaColunasPipeline());
 
