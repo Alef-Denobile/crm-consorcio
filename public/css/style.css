@@ -611,3 +611,6 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
   .agenda-cell-itens{ display:none; } /* em tela pequena, só o número — os itens aparecem no modal do dia */
   .agenda-grid-header{ font-size:9px; }
 }
+
+.auditoria-toggle-seta{ transition:transform .15s; color:var(--ink-soft); }
+.auditoria-toggle-seta.aberta{ transform:rotate(180deg); }

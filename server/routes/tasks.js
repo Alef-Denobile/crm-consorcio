@@ -213,7 +213,8 @@ router.post('/sync-calendar', async (req, res) => {
 
     res.json({ criadas, atualizadas });
   } catch (err) {
-    res.status(500).json({ error: 'Erro ao sincronizar com o Google Agenda.' });
+    console.error('Erro ao sincronizar com o Google Agenda:', err);
+    res.status(500).json({ error: err.message || 'Erro ao sincronizar com o Google Agenda.' });
   }
 });
 

@@ -222,6 +222,7 @@ let twoFactorSalvando = false;
 let mostrarDesativar2FA = false;
 let auditoriaEventos = [];
 let auditoriaCarregada = false;
+let auditoriaExpandida = false;
 let disparoFiltroColuna = '';
 let disparoFiltroTemp = '';
 let disparoSelecionados = new Set();
@@ -274,6 +275,7 @@ let contratoModalForm = null;
 let nomeNovoVal = '';
 let nomeMsg = null;
 let nomeSalvando = false;
+let modalAlterarNomeAberto = false;
 let logoutAllMsg = null;
 let logoutAllEnviando = false;
 let avatarSalvando = false;
@@ -282,6 +284,7 @@ let senhaAtualVal = '';
 let senhaNovaVal = '';
 let senhaMsg = null; // { tipo:'ok'|'erro', texto }
 let senhaSalvando = false;
+let modalAlterarSenhaAberto = false;
 let importColumnId = null;
 let importResultado = null; // { sucesso, falha }
 let importando = false;
@@ -1802,7 +1805,7 @@ async function syncCalendarNow(){
     await apiRequest('POST', '/tasks/sync-calendar');
     await loadTasks();
   }catch(e){
-    errorMsg = 'Não foi possível sincronizar com a Google Agenda agora.';
+    errorMsg = e.message || 'Não foi possível sincronizar com a Google Agenda agora.';
   }
   calendarSyncing = false;
   renderApp();
@@ -2465,11 +2468,13 @@ async function salvarNome(){
   if(!nome){
     nomeMsg = { tipo:'erro', texto:'Digite um nome.' };
     renderApp();
+    if(modalAlterarNomeAberto) renderAlterarNomeModal();
     return;
   }
   nomeSalvando = true;
   nomeMsg = null;
   renderApp();
+  if(modalAlterarNomeAberto) renderAlterarNomeModal();
   try{
     await apiRequest('PUT', '/auth/nome', { nome });
     nomeMsg = { tipo:'ok', texto:'Nome atualizado.' };
@@ -2479,6 +2484,7 @@ async function salvarNome(){
   }
   nomeSalvando = false;
   renderApp();
+  if(modalAlterarNomeAberto) renderAlterarNomeModal();
 }
 /* ---------- busca global (Ctrl+K) ---------- */
 function abrirBuscaGlobal(){
@@ -2637,11 +2643,13 @@ async function salvarSenha(){
   if(!senhaNovaVal || senhaNovaVal.length < 6){
     senhaMsg = { tipo:'erro', texto:'A nova senha precisa ter ao menos 6 caracteres.' };
     renderApp();
+    if(modalAlterarSenhaAberto) renderAlterarSenhaModal();
     return;
   }
   senhaSalvando = true;
   senhaMsg = null;
   renderApp();
+  if(modalAlterarSenhaAberto) renderAlterarSenhaModal();
   try{
     await apiRequest('PUT', '/auth/password', { senhaAtual: senhaAtualVal, senhaNova: senhaNovaVal });
     senhaMsg = { tipo:'ok', texto:'Senha salva com sucesso.' };
@@ -2652,6 +2660,7 @@ async function salvarSenha(){
   }
   senhaSalvando = false;
   renderApp();
+  if(modalAlterarSenhaAberto) renderAlterarSenhaModal();
 }
 
 // Parser simples de CSV: "Nome,Telefone,Valor", uma linha por lead.
@@ -3739,28 +3748,17 @@ function renderConfiguracoesPage(){
 
         <div class="settings-page-section">
           <h3>Login e segurança</h3>
-          <div class="field">
-            <label>Nome</label>
-            <input type="text" id="s-nome" value="${esc(nomeNovoVal)}" placeholder="Seu nome" />
+          <div class="settings-page-row">
+            <span>Nome</span>
+            <button class="btn-outline" data-action="abrir-alterar-nome">Alterar nome</button>
           </div>
-          ${nomeMsg ? `<p class="settings-page-msg ${nomeMsg.tipo}">${esc(nomeMsg.texto)}</p>` : ''}
-          <button class="btn-outline" id="s-nome-salvar" ${nomeSalvando?'disabled':''}>${nomeSalvando?'Salvando…':'Mudar nome'}</button>
 
           <div class="settings-sep-line"></div>
 
-          ${currentUser && !currentUser.temSenha ? `
-            <p class="settings-page-note">Esta conta ainda não tem senha (entra só com o Google). Você pode definir uma agora, se quiser.</p>
-          ` : ''}
-          <div class="field">
-            <label>Senha atual</label>
-            <input type="password" id="s-senha-atual" placeholder="Deixe em branco se ainda não tem senha" />
+          <div class="settings-page-row">
+            <span>Senha</span>
+            <button class="btn-outline" data-action="abrir-alterar-senha">Mudar senha</button>
           </div>
-          <div class="field">
-            <label>Nova senha</label>
-            <input type="password" id="s-senha-nova" placeholder="Mínimo 6 caracteres" />
-          </div>
-          ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
-          <button class="btn-primary" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Mudar senha'}</button>
 
           <div class="settings-sep-line"></div>
 
@@ -3769,18 +3767,23 @@ function renderConfiguracoesPage(){
 
           <div class="settings-sep-line"></div>
 
-          <div class="settings-page-subtitle">Log de auditoria</div>
-          <p class="settings-page-note">Últimos eventos de segurança da sua conta.</p>
-          ${!auditoriaCarregada ? `<p class="settings-page-note">Carregando…</p>` : (auditoriaEventos.length ? `
-            <div class="historico-lista">
-              ${auditoriaEventos.map(e=>`
-                <div class="historico-item">
-                  <span class="historico-item-texto">${esc(e.detalhe || e.acao)}</span>
-                  <span class="historico-item-data">${formatDateHora(e.createdAt)}</span>
-                </div>
-              `).join('')}
-            </div>
-          ` : `<p class="dash-empty">Nenhum evento registrado ainda.</p>`)}
+          <button class="settings-page-row auditoria-toggle" data-action="toggle-auditoria" style="width:100%; border:none; border-bottom:1px solid var(--line); background:none; cursor:pointer; font-family:inherit;">
+            <span class="settings-page-subtitle" style="margin:0;">Log de auditoria</span>
+            <span class="auditoria-toggle-seta ${auditoriaExpandida?'aberta':''}">▾</span>
+          </button>
+          ${auditoriaExpandida ? `
+            <p class="settings-page-note">Últimos eventos de segurança da sua conta.</p>
+            ${!auditoriaCarregada ? `<p class="settings-page-note">Carregando…</p>` : (auditoriaEventos.length ? `
+              <div class="historico-lista">
+                ${auditoriaEventos.map(e=>`
+                  <div class="historico-item">
+                    <span class="historico-item-texto">${esc(e.detalhe || e.acao)}</span>
+                    <span class="historico-item-data">${formatDateHora(e.createdAt)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : `<p class="dash-empty">Nenhum evento registrado ainda.</p>`)}
+          ` : ''}
         </div>
       </div>
     </section>
@@ -4290,10 +4293,6 @@ function bindAppEvents(){
       if(alvo) alvo.scrollIntoView({ behavior:'smooth', block:'start' });
     });
   });
-  const nomeNovoInput = document.getElementById('s-nome');
-  if(nomeNovoInput) nomeNovoInput.addEventListener('input', (e)=> nomeNovoVal = e.target.value);
-  const nomeSalvarBtn = document.getElementById('s-nome-salvar');
-  if(nomeSalvarBtn) nomeSalvarBtn.addEventListener('click', salvarNome);
   const avatarInput = document.getElementById('avatar-input');
   const avatarUploadBtn = document.getElementById('avatar-upload-btn');
   if(avatarUploadBtn && avatarInput) avatarUploadBtn.addEventListener('click', ()=> avatarInput.click());
@@ -4310,13 +4309,12 @@ function bindAppEvents(){
       onConfirm: ()=>{ desconectarTodosDispositivos(); closeConfirm(); },
     });
   });
-  const senhaAtualInput = document.getElementById('s-senha-atual');
-  if(senhaAtualInput) senhaAtualInput.addEventListener('input', (e)=> senhaAtualVal = e.target.value);
-  const senhaNovaInput = document.getElementById('s-senha-nova');
-  if(senhaNovaInput) senhaNovaInput.addEventListener('input', (e)=> senhaNovaVal = e.target.value);
-  const senhaSalvarBtn = document.getElementById('s-senha-salvar');
-  if(senhaSalvarBtn) senhaSalvarBtn.addEventListener('click', salvarSenha);
-
+  const abrirNomeBtn = app.querySelector('[data-action="abrir-alterar-nome"]');
+  if(abrirNomeBtn) abrirNomeBtn.addEventListener('click', abrirAlterarNomeModal);
+  const abrirSenhaBtn = app.querySelector('[data-action="abrir-alterar-senha"]');
+  if(abrirSenhaBtn) abrirSenhaBtn.addEventListener('click', abrirAlterarSenhaModal);
+  const toggleAuditoriaBtn = app.querySelector('[data-action="toggle-auditoria"]');
+  if(toggleAuditoriaBtn) toggleAuditoriaBtn.addEventListener('click', ()=>{ auditoriaExpandida = !auditoriaExpandida; renderApp(); });
   const importColunaSelect = document.getElementById('import-coluna');
   if(importColunaSelect) importColunaSelect.addEventListener('change', (e)=> importColumnId = e.target.value);
   const importBtn = document.getElementById('import-btn');
@@ -4912,6 +4910,105 @@ function openEditTask(id){
   renderTaskModal();
 }
 function closeTaskModal(){ taskModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+
+function abrirAlterarNomeModal(){
+  nomeNovoVal = (currentUser && currentUser.nome) || '';
+  nomeMsg = null;
+  modalAlterarNomeAberto = true;
+  renderAlterarNomeModal();
+}
+function closeAlterarNomeModal(){
+  modalAlterarNomeAberto = false;
+  const root = document.getElementById('modal-root');
+  if(root) root.innerHTML = '';
+}
+function renderAlterarNomeModal(){
+  const root = document.getElementById('modal-root');
+  if(!modalAlterarNomeAberto){ root.innerHTML=''; return; }
+  root.innerHTML = `
+    <div class="overlay" id="alterar-nome-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Alterar nome</h3>
+          <button id="alterar-nome-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Nome</label>
+            <input type="text" id="s-nome" value="${esc(nomeNovoVal)}" placeholder="Seu nome" />
+          </div>
+          ${nomeMsg ? `<p class="settings-page-msg ${nomeMsg.tipo}">${esc(nomeMsg.texto)}</p>` : ''}
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="alterar-nome-cancelar">Cancelar</button>
+            <button class="btn-save" id="s-nome-salvar" ${nomeSalvando?'disabled':''}>${nomeSalvando?'Salvando…':'Salvar'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('alterar-nome-close').addEventListener('click', closeAlterarNomeModal);
+  document.getElementById('alterar-nome-cancelar').addEventListener('click', closeAlterarNomeModal);
+  document.getElementById('alterar-nome-overlay').addEventListener('click', (e)=>{ if(e.target.id==='alterar-nome-overlay') closeAlterarNomeModal(); });
+  document.getElementById('s-nome').addEventListener('input', (e)=> nomeNovoVal = e.target.value);
+  document.getElementById('s-nome-salvar').addEventListener('click', salvarNome);
+}
+
+function abrirAlterarSenhaModal(){
+  senhaAtualVal = '';
+  senhaNovaVal = '';
+  senhaMsg = null;
+  modalAlterarSenhaAberto = true;
+  renderAlterarSenhaModal();
+}
+function closeAlterarSenhaModal(){
+  modalAlterarSenhaAberto = false;
+  const root = document.getElementById('modal-root');
+  if(root) root.innerHTML = '';
+}
+function renderAlterarSenhaModal(){
+  const root = document.getElementById('modal-root');
+  if(!modalAlterarSenhaAberto){ root.innerHTML=''; return; }
+  root.innerHTML = `
+    <div class="overlay" id="alterar-senha-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Mudar senha</h3>
+          <button id="alterar-senha-close">✕</button>
+        </div>
+        <div class="modal-body">
+          ${currentUser && !currentUser.temSenha ? `
+            <p class="settings-page-note">Esta conta ainda não tem senha (entra só com o Google). Você pode definir uma agora, se quiser.</p>
+          ` : ''}
+          <div class="field">
+            <label>Senha atual</label>
+            <input type="password" id="s-senha-atual" value="${esc(senhaAtualVal)}" placeholder="Deixe em branco se ainda não tem senha" />
+          </div>
+          <div class="field">
+            <label>Nova senha</label>
+            <input type="password" id="s-senha-nova" value="${esc(senhaNovaVal)}" placeholder="Mínimo 6 caracteres" />
+          </div>
+          ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="alterar-senha-cancelar">Cancelar</button>
+            <button class="btn-save" id="s-senha-salvar" ${senhaSalvando?'disabled':''}>${senhaSalvando?'Salvando…':'Salvar'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('alterar-senha-close').addEventListener('click', closeAlterarSenhaModal);
+  document.getElementById('alterar-senha-cancelar').addEventListener('click', closeAlterarSenhaModal);
+  document.getElementById('alterar-senha-overlay').addEventListener('click', (e)=>{ if(e.target.id==='alterar-senha-overlay') closeAlterarSenhaModal(); });
+  document.getElementById('s-senha-atual').addEventListener('input', (e)=> senhaAtualVal = e.target.value);
+  document.getElementById('s-senha-nova').addEventListener('input', (e)=> senhaNovaVal = e.target.value);
+  document.getElementById('s-senha-salvar').addEventListener('click', salvarSenha);
+}
 
 function renderTaskModal(){
   const root = document.getElementById('modal-root');
