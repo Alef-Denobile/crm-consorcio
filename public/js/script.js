@@ -252,10 +252,16 @@ let equipeLoaded = false;
 let equipeNomeNovo = '';
 let equipeCodigoEntrar = '';
 let equipeMsg = null;
+let equipeSubTab = 'chat';
 let chatMensagens = [];
 let chatLoaded = false;
 let chatTexto = '';
 let chatEnviando = false;
+let dmDestinatarioId = null;
+let dmMensagens = [];
+let dmLoaded = false;
+let dmTexto = '';
+let dmEnviando = false;
 let supervisaoMembros = [];
 let supervisaoLoaded = false;
 let automacoes = [];
@@ -829,9 +835,9 @@ async function loadEquipe(){
   }
   equipeLoaded = true;
   renderApp();
-  if(equipe){
-    if(currentPage === 'chat-interno' && !chatLoaded) loadChat();
-    if(currentPage === 'supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
+  if(equipe && currentPage === 'equipe'){
+    if(equipeSubTab==='chat' && !chatLoaded) loadChat();
+    if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
   }
 }
 async function loadChat(){
@@ -1354,6 +1360,36 @@ async function enviarMensagemChat(){
     errorMsg = e.message || 'Não foi possível enviar a mensagem.';
   }
   chatEnviando = false;
+  renderApp();
+}
+async function abrirConversaIndividual(userId){
+  dmDestinatarioId = userId;
+  dmLoaded = false;
+  dmMensagens = [];
+  renderApp();
+  try{
+    const data = await apiRequest('GET', `/equipe/chat/${userId}`);
+    dmMensagens = data.mensagens || [];
+  }catch(e){
+    dmMensagens = [];
+    errorMsg = e.message || 'Não foi possível carregar a conversa.';
+  }
+  dmLoaded = true;
+  renderApp();
+}
+async function enviarMensagemIndividual(){
+  if(!dmTexto.trim() || !dmDestinatarioId) return;
+  dmEnviando = true;
+  renderApp();
+  try{
+    await apiRequest('POST', `/equipe/chat/${dmDestinatarioId}`, { texto: dmTexto });
+    dmTexto = '';
+    const data = await apiRequest('GET', `/equipe/chat/${dmDestinatarioId}`);
+    dmMensagens = data.mensagens || [];
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível enviar a mensagem.';
+  }
+  dmEnviando = false;
   renderApp();
 }
 
@@ -2087,13 +2123,12 @@ function goToPage(page){
     loadAuditoria();
     refreshCurrentUser();
   }
-  if(page === 'chat-interno'){
+  if(page === 'equipe'){
     equipeMsg = null;
-    if(equipe && !chatLoaded) loadChat();
-  }
-  if(page === 'supervisao'){
-    equipeMsg = null;
-    if(equipe && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
+    if(equipe){
+      if(equipeSubTab==='chat' && !chatLoaded) loadChat();
+      if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
+    }
   }
   if(page === 'comissoes'){
     loadContratos(); // recarrega sempre, pra pegar comissões que o Pipeline gerou automaticamente
@@ -2813,8 +2848,7 @@ function renderApp(){
   else if(currentPage === 'import-export') pageHtml = renderImportExportPage();
   else if(currentPage === 'configuracoes') pageHtml = renderConfiguracoesPage();
   else if(currentPage === 'suporte') pageHtml = renderSuportePage();
-  else if(currentPage === 'chat-interno') pageHtml = renderChatInternoPage();
-  else if(currentPage === 'supervisao') pageHtml = renderSupervisaoPage();
+  else if(currentPage === 'equipe') pageHtml = renderEquipePage();
   else if(currentPage === 'tarefas') pageHtml = renderTarefasPage();
 
   const notificacoes = computarNotificacoes();
@@ -2872,10 +2906,9 @@ const NAV_PADRAO = [
   ['disparos', 'Disparos', ICON_DISPAROS],
   ['automacoes', 'Automações', ICON_AUTOMACOES],
   ['fluxos', 'Fluxos', ICON_FLUXOS],
-  ['agendamentos', 'Agendamentos', ICON_AGENDAMENTOS],
+  ['agendamentos', 'Agendar Mensagem', ICON_AGENDAMENTOS],
   ['import-export', 'Importar/Exportar', ICON_IMPORT_EXPORT],
-  ['chat-interno', 'Chat Interno', ICON_CHAT_INTERNO],
-  ['supervisao', 'Supervisão', ICON_SUPERVISAO],
+  ['equipe', 'Equipe', ICON_CHAT_INTERNO],
   ['tarefas', 'Agenda/Tarefas', ICON_TASKS],
 ];
 function getOrdemNavSalva(){
@@ -4267,6 +4300,29 @@ function bindAppEvents(){
   const chatMsgsEl = document.getElementById('chat-interno-mensagens');
   if(chatMsgsEl) chatMsgsEl.scrollTop = chatMsgsEl.scrollHeight;
 
+  app.querySelectorAll('[data-action="set-equipe-subtab"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      equipeSubTab = btn.dataset.subtab;
+      if(equipeSubTab==='chat' && !chatLoaded) loadChat();
+      if(equipeSubTab==='supervisao' && equipe && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
+      renderApp();
+    });
+  });
+  app.querySelectorAll('[data-action="abrir-conversa-individual"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirConversaIndividual(btn.dataset.userId));
+  });
+  const fecharDmBtn = app.querySelector('[data-action="fechar-conversa-individual"]');
+  if(fecharDmBtn) fecharDmBtn.addEventListener('click', ()=>{ dmDestinatarioId = null; renderApp(); });
+  const chatIndividualInput = document.getElementById('chat-individual-input');
+  if(chatIndividualInput){
+    chatIndividualInput.addEventListener('input', (e)=> dmTexto = e.target.value);
+    chatIndividualInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') enviarMensagemIndividual(); });
+  }
+  const enviarDmBtn = app.querySelector('[data-action="enviar-chat-individual"]');
+  if(enviarDmBtn) enviarDmBtn.addEventListener('click', enviarMensagemIndividual);
+  const dmMsgsEl = document.getElementById('chat-individual-mensagens');
+  if(dmMsgsEl) dmMsgsEl.scrollTop = dmMsgsEl.scrollHeight;
+
   /* -- Comissões -- */
   app.querySelectorAll('[data-action="comissoes-mes"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ comissoesMonth = addMonthsKey(comissoesMonth, parseInt(btn.dataset.delta,10)); renderApp(); });
@@ -5301,20 +5357,8 @@ function renderEquipeSetup(tituloPagina, subtitulo){
 }
 
 /* ---------- página: Chat Interno ---------- */
-function renderChatInternoPage(){
-  if(!equipeLoaded){
-    return `<div class="page-head"><div><h1>Chat Interno</h1><p>Carregando…</p></div></div>`;
-  }
-  if(!equipe){
-    return renderEquipeSetup('Chat Interno', 'Você ainda não faz parte de uma equipe');
-  }
+function renderChatInternoConteudo(){
   return `
-    <div class="page-head">
-      <div>
-        <h1>Chat Interno</h1>
-        <p>${esc(equipe.nome)} · ${equipe.membros.length} membro${equipe.membros.length===1?'':'s'}</p>
-      </div>
-    </div>
     <div class="chat-interno-wrap">
       <div class="chat-interno-membros">
         <div class="settings-page-subtitle">Membros</div>
@@ -5339,6 +5383,68 @@ function renderChatInternoPage(){
         `}
       </div>
     </div>
+  `;
+}
+function renderConversaIndividualConteudo(){
+  if(!dmDestinatarioId){
+    const outros = equipe.membros.filter(m=>!m.souEu);
+    return `
+      <div class="settings-page-section">
+        <h3>Escolha um colega</h3>
+        ${outros.length ? outros.map(m=>`
+          <button class="disparo-lead-item" style="width:100%; text-align:left; cursor:pointer;" data-action="abrir-conversa-individual" data-user-id="${m.id}">
+            ${esc(m.nome||m.email)} ${m.papel==='supervisor'?'⭐':''}
+          </button>
+        `).join('') : '<p class="dash-empty">Não tem mais ninguém na equipe ainda.</p>'}
+      </div>
+    `;
+  }
+  const outro = equipe.membros.find(m=>m.id===dmDestinatarioId);
+  return `
+    <div class="chat-interno-wrap">
+      <div class="chat-interno-main" style="flex:1;">
+        <button class="btn-outline" data-action="fechar-conversa-individual" style="margin-bottom:12px;">← Voltar pros colegas</button>
+        <div class="settings-page-subtitle">Conversa com ${esc(outro ? (outro.nome||outro.email) : '')}</div>
+        ${!dmLoaded ? `<p class="settings-page-note">Carregando conversa…</p>` : `
+          <div class="chat-interno-mensagens" id="chat-individual-mensagens">
+            ${dmMensagens.length ? dmMensagens.map(m=>`
+              <div class="wa-msg ${m.remetenteId===(currentUser&&currentUser.id)?'wa-msg-out':'wa-msg-in'}">
+                <p><b>${m.remetenteId===(currentUser&&currentUser.id)?'Você':esc(m.remetenteNome)}:</b> ${esc(m.texto)}</p>
+                <span>${formatDateHora(m.timestamp)}</span>
+              </div>
+            `).join('') : '<p class="settings-page-note">Nenhuma mensagem ainda.</p>'}
+          </div>
+          <div class="wa-conversa-input-row">
+            <input type="text" id="chat-individual-input" placeholder="Escreva uma mensagem..." value="${esc(dmTexto)}" />
+            <button class="btn-primary" data-action="enviar-chat-individual" ${dmEnviando?'disabled':''}>Enviar</button>
+          </div>
+        `}
+      </div>
+    </div>
+  `;
+}
+function renderEquipePage(){
+  if(!equipeLoaded){
+    return `<div class="page-head"><div><h1>Equipe</h1><p>Carregando…</p></div></div>`;
+  }
+  if(!equipe){
+    return renderEquipeSetup('Equipe', 'Você ainda não faz parte de uma equipe');
+  }
+  const abas = [['chat','Chat da equipe'],['individual','Conversa individual']];
+  if(equipe.souSupervisor) abas.push(['supervisao','Supervisão']);
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Equipe</h1>
+        <p>${esc(equipe.nome)} · ${equipe.membros.length} membro${equipe.membros.length===1?'':'s'}</p>
+      </div>
+    </div>
+    <div class="funil-tabs" style="margin-bottom:20px;">
+      ${abas.map(([key,label])=>`<button class="tab-btn ${equipeSubTab===key?'active':''}" data-action="set-equipe-subtab" data-subtab="${key}">${label}</button>`).join('')}
+    </div>
+    ${equipeSubTab==='chat' ? renderChatInternoConteudo() : ''}
+    ${equipeSubTab==='individual' ? renderConversaIndividualConteudo() : ''}
+    ${equipeSubTab==='supervisao' && equipe.souSupervisor ? renderSupervisaoConteudo() : ''}
   `;
 }
 
@@ -5381,28 +5487,8 @@ function renderRankingSupervisao(membros){
   }
   return html || '<p class="dash-empty">Nenhum membro ainda.</p>';
 }
-function renderSupervisaoPage(){
-  if(!equipeLoaded){
-    return `<div class="page-head"><div><h1>Supervisão</h1><p>Carregando…</p></div></div>`;
-  }
-  if(!equipe){
-    return renderEquipeSetup('Supervisão', 'Você ainda não faz parte de uma equipe');
-  }
-  if(!equipe.souSupervisor){
-    return `
-      <div class="page-head"><div><h1>Supervisão</h1><p>${esc(equipe.nome)}</p></div></div>
-      <div class="tasks-empty">Só supervisores da equipe podem ver essa página. Se precisar de acesso, fale com quem administra a equipe "${esc(equipe.nome)}".</div>
-      <button class="btn-outline" data-action="sair-equipe" style="margin-top:14px;">Sair da equipe</button>
-    `;
-  }
+function renderSupervisaoConteudo(){
   return `
-    <div class="page-head">
-      <div>
-        <h1>Supervisão</h1>
-        <p>${esc(equipe.nome)}</p>
-      </div>
-    </div>
-
     <div class="settings-page-section" style="margin-bottom:20px;">
       <h3>Convidar pessoas</h3>
       <p class="settings-page-note">Compartilhe esse código — quem entrar com ele vira membro da equipe, mantendo o funil próprio dele:</p>
@@ -5548,12 +5634,12 @@ function renderFluxosPage(){
 /* ---------- página: Agendamentos ---------- */
 function renderAgendamentosPage(){
   if(!agendamentosLoaded){
-    return `<div class="page-head"><div><h1>Agendamentos</h1><p>Carregando…</p></div></div>`;
+    return `<div class="page-head"><div><h1>Agendar Mensagem</h1><p>Carregando…</p></div></div>`;
   }
   return `
     <div class="page-head">
       <div>
-        <h1>Agendamentos</h1>
+        <h1>Agendar Mensagem</h1>
         <p>Tudo que está programado pra enviar, o que já saiu, e o que foi cancelado ou falhou</p>
       </div>
       <button class="btn-primary" data-action="open-new-agendamento">+ Nova mensagem</button>

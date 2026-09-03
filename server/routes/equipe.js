@@ -191,14 +191,14 @@ router.get('/chat', async (req, res) => {
     const user = await User.findById(req.userId);
     if (!user.equipeId) return res.status(400).json({ error: 'Você não faz parte de nenhuma equipe.' });
 
-    const mensagens = await ChatMensagem.find({ equipeId: user.equipeId }).sort({ timestamp: 1 }).limit(200);
+    const mensagens = await ChatMensagem.find({ equipeId: user.equipeId, destinatarioId: null }).sort({ timestamp: 1 }).limit(200);
     res.json({ mensagens: mensagens.map((m) => m.toJSON()) });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar o chat.' });
   }
 });
 
-// POST /api/equipe/chat -> envia uma mensagem no chat interno
+// POST /api/equipe/chat -> envia uma mensagem no chat interno (da equipe toda)
 router.post('/chat', async (req, res) => {
   try {
     const user = await User.findById(req.userId);
@@ -211,6 +211,53 @@ router.post('/chat', async (req, res) => {
       equipeId: user.equipeId,
       remetenteId: req.userId,
       remetenteNome: user.nome || user.email,
+      texto: texto.trim(),
+    });
+    res.status(201).json(msg.toJSON());
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao enviar a mensagem.' });
+  }
+});
+
+// GET /api/equipe/chat/:userId -> histórico da conversa privada com um colega específico
+router.get('/chat/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user.equipeId) return res.status(400).json({ error: 'Você não faz parte de nenhuma equipe.' });
+    const outroId = req.params.userId;
+    const outro = await User.findOne({ _id: outroId, equipeId: user.equipeId });
+    if (!outro) return res.status(404).json({ error: 'Esse colega não faz parte da sua equipe.' });
+
+    const mensagens = await ChatMensagem.find({
+      equipeId: user.equipeId,
+      $or: [
+        { remetenteId: req.userId, destinatarioId: outroId },
+        { remetenteId: outroId, destinatarioId: req.userId },
+      ],
+    }).sort({ timestamp: 1 }).limit(200);
+    res.json({ mensagens: mensagens.map((m) => m.toJSON()) });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao carregar a conversa.' });
+  }
+});
+
+// POST /api/equipe/chat/:userId -> envia uma mensagem privada pra um colega específico
+router.post('/chat/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user.equipeId) return res.status(400).json({ error: 'Você não faz parte de nenhuma equipe.' });
+    const outroId = req.params.userId;
+    const outro = await User.findOne({ _id: outroId, equipeId: user.equipeId });
+    if (!outro) return res.status(404).json({ error: 'Esse colega não faz parte da sua equipe.' });
+
+    const { texto } = req.body;
+    if (!texto || !texto.trim()) return res.status(400).json({ error: 'Mensagem vazia.' });
+
+    const msg = await ChatMensagem.create({
+      equipeId: user.equipeId,
+      remetenteId: req.userId,
+      remetenteNome: user.nome || user.email,
+      destinatarioId: outroId,
       texto: texto.trim(),
     });
     res.status(201).json(msg.toJSON());
