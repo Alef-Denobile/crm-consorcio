@@ -611,11 +611,13 @@ router.post('/disparo', auth, async (req, res) => {
 
     let sucesso = 0;
     let falha = 0;
+    const detalhesFalha = [];
     for (const cardId of cardIds) {
       try {
         const card = await Card.findOne({ _id: cardId, userId: req.userId });
         if (!card || !card.telefoneNormalizado) {
           falha++;
+          detalhesFalha.push({ cliente: card ? card.cliente : cardId, erro: 'Cliente sem telefone cadastrado.' });
           continue;
         }
         const data = usarTemplate
@@ -633,9 +635,11 @@ router.post('/disparo', auth, async (req, res) => {
         sucesso++;
       } catch (e) {
         falha++;
+        const card = await Card.findOne({ _id: cardId, userId: req.userId }).select('cliente');
+        detalhesFalha.push({ cliente: card ? card.cliente : cardId, erro: e.message || 'Erro desconhecido.' });
       }
     }
-    res.json({ sucesso, falha });
+    res.json({ sucesso, falha, detalhesFalha });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Erro ao disparar mensagens.' });
   }

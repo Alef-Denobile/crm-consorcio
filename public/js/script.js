@@ -74,6 +74,7 @@ const ICON_AGENDAMENTOS = `<svg width="17" height="17" viewBox="0 0 24 24" fill=
 const ICON_IMPORT_EXPORT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 17l-4-4 4-4"/><path d="M4 13h11a4 4 0 0 0 4-4V7"/><path d="M16 7l4 4-4 4"/><path d="M20 11H9a4 4 0 0 0-4 4v2"/></svg>`;
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
+const ICON_REORDER = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
 const ICON_CHECK = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
 const ICON_USERS = ICON_LEADS;
@@ -159,6 +160,11 @@ let leadsSearch = '';
 let leadsStatusFilter = '';
 let mostrarArquivados = false;
 let tarefasShowConcluidas = false;
+let agendaMesAtual = currentMonthKey();
+let agendaLoaded = false;
+let agendaTarefas = [];
+let agendaEventosGoogle = [];
+let agendaDiaSelecionado = null;
 let calendarConnected = false;
 let calendarSyncing = false;
 let calendarSyncedOnce = false;
@@ -295,7 +301,20 @@ async function apiRequest(method, path, body){
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(API_BASE + path, opts);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(()=> controller.abort(), 25000); // 25s — evita a tela travar pra sempre esperando o servidor
+  opts.signal = controller.signal;
+  let res;
+  try{
+    res = await fetch(API_BASE + path, opts);
+  }catch(e){
+    if(e.name === 'AbortError'){
+      throw new Error('O servidor demorou demais pra responder. Tente de novo em alguns segundos.');
+    }
+    throw new Error('Não foi possível conectar ao servidor. Confira sua internet e tente de novo.');
+  }finally{
+    clearTimeout(timeoutId);
+  }
   if(res.status === 401){
     logout();
     throw new Error('Sessão expirada.');
@@ -406,6 +425,32 @@ async function loadTasks(){
   }
   tasksLoaded = true;
   renderApp();
+}
+async function loadAgendaMes(mesKey){
+  agendaLoaded = false;
+  renderApp();
+  try{
+    const data = await apiRequest('GET', `/calendar/agenda-mes?mes=${mesKey}`);
+    agendaTarefas = data.tarefas || [];
+    agendaEventosGoogle = data.eventosGoogle || [];
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível carregar a agenda.';
+    agendaTarefas = [];
+    agendaEventosGoogle = [];
+  }
+  agendaLoaded = true;
+  renderApp();
+}
+function mudarMesAgenda(delta){
+  const [ano, mes] = agendaMesAtual.split('-').map(Number);
+  const d = new Date(ano, mes - 1 + delta, 1);
+  agendaMesAtual = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  loadAgendaMes(agendaMesAtual);
+}
+function itensDoDiaAgenda(diaISO){
+  const tarefasDoDia = agendaTarefas.filter(t=> t.vencimento && t.vencimento.slice(0,10)===diaISO);
+  const eventosDoDia = agendaEventosGoogle.filter(e=> e.inicio && e.inicio.slice(0,10)===diaISO);
+  return { tarefasDoDia, eventosDoDia };
 }
 async function loadContratos(){
   try{
@@ -752,6 +797,12 @@ function formatDateHora(iso){
   const d = new Date(iso);
   if(isNaN(d.getTime())) return '';
   return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+function formatHora(iso){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' });
 }
 
 async function loadConversas(){
@@ -2015,9 +2066,12 @@ function goToPage(page){
   editingColId = null;
   sidebarOpen = false;
   renderApp();
-  if(page === 'tarefas' && calendarConnected && !calendarSyncedOnce){
-    calendarSyncedOnce = true;
-    syncCalendarNow();
+  if(page === 'tarefas'){
+    if(!agendaLoaded) loadAgendaMes(agendaMesAtual);
+    if(calendarConnected && !calendarSyncedOnce){
+      calendarSyncedOnce = true;
+      syncCalendarNow();
+    }
   }
   if(page === 'configuracoes'){
     senhaMsg = null; senhaAtualVal = ''; senhaNovaVal = '';
@@ -2219,6 +2273,7 @@ async function saveTaskFromModal(){
       if(idx>-1) tasks[idx] = atualizada;
     }
     closeTaskModal();
+    if(currentPage==='tarefas') loadAgendaMes(agendaMesAtual);
   }catch(e){
     errorMsg = 'Não foi possível salvar a tarefa.';
   }
@@ -2232,6 +2287,7 @@ async function deleteTaskById(id){
   renderApp();
   try{
     await apiRequest('DELETE', `/tasks/${id}`);
+    if(currentPage==='tarefas') loadAgendaMes(agendaMesAtual);
   }catch(e){
     tasks.splice(idx,0,removida);
     errorMsg = 'Não foi possível excluir a tarefa.';
@@ -2241,15 +2297,19 @@ async function deleteTaskById(id){
 
 async function toggleTaskConcluida(id){
   const task = tasks.find(t=>t.id===id);
-  if(!task) return;
-  task.concluida = !task.concluida; // otimista
+  const taskAgenda = agendaTarefas.find(t=>t.id===id);
+  if(!task && !taskAgenda) return;
+  if(task) task.concluida = !task.concluida; // otimista
+  if(taskAgenda) taskAgenda.concluida = task ? task.concluida : !taskAgenda.concluida;
   renderApp();
   try{
     const atualizada = await apiRequest('PUT', `/tasks/${id}/toggle`);
     const idx = tasks.findIndex(t=>t.id===id);
     if(idx>-1) tasks[idx] = atualizada;
+    if(taskAgenda) taskAgenda.concluida = atualizada.concluida;
   }catch(e){
-    task.concluida = !task.concluida;
+    if(task) task.concluida = !task.concluida;
+    if(taskAgenda) taskAgenda.concluida = !taskAgenda.concluida;
     errorMsg = 'Não foi possível atualizar a tarefa.';
     renderApp();
   }
@@ -2793,23 +2853,120 @@ function renderApp(){
   bindAppEvents();
 }
 
+const NAV_PADRAO = [
+  ['dashboard', 'Dashboard', ICON_DASHBOARD],
+  ['pipeline', 'Pipeline', ICON_PIPELINE],
+  ['leads', 'Leads', ICON_LEADS],
+  ['conversas', 'Conversas', ICON_CONVERSAS],
+  ['comissoes', 'Comissões', ICON_COMISSOES],
+  ['relatorios', 'Relatórios', ICON_RELATORIOS],
+  ['disparos', 'Disparos', ICON_DISPAROS],
+  ['automacoes', 'Automações', ICON_AUTOMACOES],
+  ['fluxos', 'Fluxos', ICON_FLUXOS],
+  ['agendamentos', 'Agendamentos', ICON_AGENDAMENTOS],
+  ['import-export', 'Importar/Exportar', ICON_IMPORT_EXPORT],
+  ['chat-interno', 'Chat Interno', ICON_CHAT_INTERNO],
+  ['supervisao', 'Supervisão', ICON_SUPERVISAO],
+  ['tarefas', 'Agenda/Tarefas', ICON_TASKS],
+];
+function getOrdemNavSalva(){
+  try{ return JSON.parse(localStorage.getItem('navOrdem') || 'null'); }catch(e){ return null; }
+}
+// Devolve o NAV na ordem escolhida pelo usuário — se ele nunca reordenou, ou se um
+// item novo foi adicionado depois (ex: uma página nova), cai no padrão / vai pro fim.
+function getNavOrdenado(){
+  const ordemSalva = getOrdemNavSalva();
+  if(!ordemSalva || !ordemSalva.length) return NAV_PADRAO;
+  const porChave = Object.fromEntries(NAV_PADRAO.map(item=>[item[0], item]));
+  const resultado = ordemSalva.map(chave=>porChave[chave]).filter(Boolean);
+  NAV_PADRAO.forEach(item=>{ if(!ordemSalva.includes(item[0])) resultado.push(item); });
+  return resultado;
+}
+let reordenarNavAberto = false;
+let reordenarNavOrdemTemp = null;
+
+function abrirReordenarNav(){
+  reordenarNavOrdemTemp = getNavOrdenado().map(item=>item[0]);
+  reordenarNavAberto = true;
+  renderReordenarNavModal();
+}
+function closeReordenarNavModal(){
+  reordenarNavAberto = false;
+  reordenarNavOrdemTemp = null;
+  const root = document.getElementById('modal-root');
+  if(root) root.innerHTML = '';
+}
+function moverItemNavOrdem(chave, direcao){
+  const idx = reordenarNavOrdemTemp.indexOf(chave);
+  const novoIdx = idx + direcao;
+  if(idx===-1 || novoIdx < 0 || novoIdx >= reordenarNavOrdemTemp.length) return;
+  [reordenarNavOrdemTemp[idx], reordenarNavOrdemTemp[novoIdx]] = [reordenarNavOrdemTemp[novoIdx], reordenarNavOrdemTemp[idx]];
+  renderReordenarNavModal();
+}
+function salvarOrdemNav(){
+  localStorage.setItem('navOrdem', JSON.stringify(reordenarNavOrdemTemp));
+  closeReordenarNavModal();
+  renderApp();
+}
+function restaurarOrdemNavPadrao(){
+  localStorage.removeItem('navOrdem');
+  closeReordenarNavModal();
+  renderApp();
+}
+function renderReordenarNavModal(){
+  const root = document.getElementById('modal-root');
+  if(!reordenarNavAberto){ root.innerHTML=''; return; }
+  const porChave = Object.fromEntries(NAV_PADRAO.map(item=>[item[0], item]));
+  root.innerHTML = `
+    <div class="overlay" id="reordenar-nav-overlay">
+      <div class="modal reordenar-nav-modal">
+        <div class="modal-head">
+          <h3>Reordenar abas</h3>
+          <button id="reordenar-nav-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-page-note" style="margin-bottom:12px;">Use as setinhas pra mudar a ordem que as abas aparecem no menu.</p>
+          <div class="reordenar-nav-lista">
+            ${reordenarNavOrdemTemp.map((chave, idx)=>{
+              const item = porChave[chave];
+              if(!item) return '';
+              const [key, label, icon] = item;
+              return `
+                <div class="reordenar-nav-item">
+                  ${icon}
+                  <span>${esc(label)}</span>
+                  <div class="reordenar-nav-setas">
+                    <button class="icon-btn" data-mover="${key}" data-dir="-1" ${idx===0?'disabled':''} title="Mover pra cima">↑</button>
+                    <button class="icon-btn" data-mover="${key}" data-dir="1" ${idx===reordenarNavOrdemTemp.length-1?'disabled':''} title="Mover pra baixo">↓</button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="delete-link" id="reordenar-nav-restaurar">Restaurar padrão</button>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="reordenar-nav-cancelar">Cancelar</button>
+            <button class="btn-save" id="reordenar-nav-salvar">Salvar ordem</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('reordenar-nav-close').addEventListener('click', closeReordenarNavModal);
+  document.getElementById('reordenar-nav-cancelar').addEventListener('click', closeReordenarNavModal);
+  document.getElementById('reordenar-nav-overlay').addEventListener('click', (e)=>{ if(e.target.id==='reordenar-nav-overlay') closeReordenarNavModal(); });
+  document.getElementById('reordenar-nav-salvar').addEventListener('click', salvarOrdemNav);
+  document.getElementById('reordenar-nav-restaurar').addEventListener('click', restaurarOrdemNavPadrao);
+  root.querySelectorAll('[data-mover]').forEach(btn=>{
+    btn.addEventListener('click', ()=> moverItemNavOrdem(btn.dataset.mover, parseInt(btn.dataset.dir,10)));
+  });
+}
+
 function renderSidebar(){
-  const NAV = [
-    ['dashboard', 'Dashboard', ICON_DASHBOARD],
-    ['pipeline', 'Pipeline', ICON_PIPELINE],
-    ['leads', 'Leads', ICON_LEADS],
-    ['conversas', 'Conversas', ICON_CONVERSAS],
-    ['comissoes', 'Comissões', ICON_COMISSOES],
-    ['relatorios', 'Relatórios', ICON_RELATORIOS],
-    ['disparos', 'Disparos', ICON_DISPAROS],
-    ['automacoes', 'Automações', ICON_AUTOMACOES],
-    ['fluxos', 'Fluxos', ICON_FLUXOS],
-    ['agendamentos', 'Agendamentos', ICON_AGENDAMENTOS],
-    ['import-export', 'Importar/Exportar', ICON_IMPORT_EXPORT],
-    ['tarefas', 'Tarefas', ICON_TASKS],
-    ['chat-interno', 'Chat Interno', ICON_CHAT_INTERNO],
-    ['supervisao', 'Supervisão', ICON_SUPERVISAO],
-  ];
+  const NAV = getNavOrdenado();
   return `
     <aside class="sidebar">
       <div class="sidebar-brand">
@@ -2820,6 +2977,7 @@ function renderSidebar(){
         ${NAV.map(([key,label,icon])=>`
           <button class="nav-item ${currentPage===key?'active':''}" data-action="nav" data-page="${key}">${icon}<span>${label}</span></button>
         `).join('')}
+        <button class="nav-item nav-reordenar-btn" data-action="abrir-reordenar-nav" title="Mudar a ordem das abas">${ICON_REORDER}<span>Reordenar abas</span></button>
       </nav>
       <div class="sidebar-footer">
         <button class="nav-item ${currentPage==='suporte'?'active':''}" data-action="nav" data-page="suporte">${ICON_SUPORTE}<span>Suporte</span></button>
@@ -3298,22 +3456,109 @@ function renderLeadsPage(){
 }
 
 /* ---------- página: Tarefas ---------- */
-function renderTarefasPage(){
-  if(!tasksLoaded){
-    return `<div class="page-head"><div><h1>Tarefas</h1><p>Carregando…</p></div></div>`;
-  }
-  const list = tasks
-    .filter(t=> tarefasShowConcluidas ? true : !t.concluida)
-    .sort((a,b)=>{
-      if(a.concluida !== b.concluida) return a.concluida ? 1 : -1;
-      return new Date(a.vencimento||'2999-01-01') - new Date(b.vencimento||'2999-01-01');
+function closeAgendaDiaModal(){
+  agendaDiaSelecionado = null;
+  const root = document.getElementById('modal-root');
+  if(root) root.innerHTML = '';
+}
+function renderAgendaDiaModal(){
+  const root = document.getElementById('modal-root');
+  if(!agendaDiaSelecionado){ root.innerHTML=''; return; }
+  const diaISO = agendaDiaSelecionado;
+  const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  const dataObj = new Date(diaISO + 'T00:00:00');
+  const dataLabel = dataObj.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' });
+
+  root.innerHTML = `
+    <div class="overlay" id="agenda-dia-overlay">
+      <div class="modal agenda-dia-modal">
+        <div class="modal-head">
+          <h3 style="text-transform:capitalize;">${esc(dataLabel)}</h3>
+          <button id="agenda-dia-close">✕</button>
+        </div>
+        <div class="modal-body">
+          ${(!tarefasDoDia.length && !eventosDoDia.length) ? `<p class="dash-empty">Nada marcado pra esse dia ainda.</p>` : ''}
+          ${eventosDoDia.length ? `
+            <div class="settings-page-subtitle">Google Agenda</div>
+            ${eventosDoDia.map(e=>`
+              <div class="agenda-dia-item">
+                <span class="agenda-item-dot agenda-item-evento"></span>
+                <div>
+                  <div class="agenda-dia-item-titulo">${esc(e.titulo)}</div>
+                  ${!e.diaInteiro && e.inicio ? `<div class="agenda-dia-item-hora">${formatHora(e.inicio)}</div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          ` : ''}
+          ${tarefasDoDia.length ? `
+            <div class="settings-page-subtitle" style="margin-top:${eventosDoDia.length?'16px':'0'};">Tarefas</div>
+            ${tarefasDoDia.map(t=>{
+              const p = PRIORIDADES[t.prioridade] || PRIORIDADES.media;
+              return `
+                <div class="agenda-dia-item">
+                  <span class="check-circle ${t.concluida?'checked':''}" data-task-toggle="${t.id}">${t.concluida?ICON_CHECK:''}</span>
+                  <div style="flex:1;">
+                    <div class="agenda-dia-item-titulo ${t.concluida?'concluida':''}">${esc(t.titulo)}</div>
+                    ${t.clienteNome ? `<div class="agenda-dia-item-hora">👤 ${esc(t.clienteNome)}</div>` : ''}
+                  </div>
+                  <span class="badge" style="color:${p.color};background:${p.bg}">${p.label}</span>
+                  <button class="icon-btn" data-task-edit="${t.id}" title="Editar">${ICON_EDIT}</button>
+                </div>
+              `;
+            }).join('')}
+          ` : ''}
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-save" id="agenda-dia-nova-tarefa">+ Nova tarefa nesse dia</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('agenda-dia-close').addEventListener('click', closeAgendaDiaModal);
+  document.getElementById('agenda-dia-overlay').addEventListener('click', (e)=>{ if(e.target.id==='agenda-dia-overlay') closeAgendaDiaModal(); });
+  document.getElementById('agenda-dia-nova-tarefa').addEventListener('click', ()=>{
+    closeAgendaDiaModal();
+    openNewTask(diaISO);
+  });
+  root.querySelectorAll('[data-task-toggle]').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      await toggleTaskConcluida(el.dataset.taskToggle);
+      renderAgendaDiaModal();
     });
-  const pendentes = tasks.filter(t=>!t.concluida).length;
+  });
+  root.querySelectorAll('[data-task-edit]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      closeAgendaDiaModal();
+      openEditTask(el.dataset.taskEdit);
+    });
+  });
+}
+
+function renderTarefasPage(){
+  if(!agendaLoaded){
+    return `<div class="page-head"><div><h1>Agenda/Tarefas</h1><p>Carregando…</p></div></div>`;
+  }
+  const [ano, mesNum] = agendaMesAtual.split('-').map(Number);
+  const primeiroDia = new Date(ano, mesNum-1, 1);
+  const diasNoMes = new Date(ano, mesNum, 0).getDate();
+  const offsetInicio = primeiroDia.getDay(); // 0 = domingo
+  const hojeISO = new Date().toISOString().slice(0,10);
+  const semData = agendaTarefas.filter(t=>!t.vencimento);
+
+  let celulas = [];
+  for(let i=0;i<offsetInicio;i++) celulas.push(null);
+  for(let d=1; d<=diasNoMes; d++) celulas.push(d);
+  while(celulas.length % 7 !== 0) celulas.push(null);
+
   return `
     <div class="page-head">
       <div>
-        <h1>Tarefas</h1>
-        <p>${pendentes} pendente${pendentes===1?'':'s'}</p>
+        <h1>Agenda/Tarefas</h1>
+        <p>Tarefas do CRM e compromissos do Google Agenda, num só lugar</p>
       </div>
       <div class="page-head-actions">
         ${calendarConnected ? `<button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'📅 Sincronizar Agenda'}</button>` : ''}
@@ -3321,39 +3566,45 @@ function renderTarefasPage(){
       </div>
     </div>
 
-    <label class="tasks-toolbar">
-      <span class="check-circle ${tarefasShowConcluidas?'checked':''}" data-action="toggle-show-concluidas">${tarefasShowConcluidas?ICON_CHECK:''}</span>
-      Mostrar concluídas
-    </label>
+    <div class="month-step-nav" style="margin-bottom:16px;">
+      <button class="icon-btn" data-action="agenda-mes" data-delta="-1" title="Mês anterior">‹</button>
+      <span>${monthLabel(agendaMesAtual, true)}</span>
+      <button class="icon-btn" data-action="agenda-mes" data-delta="1" title="Próximo mês">›</button>
+      <button class="btn-outline" data-action="agenda-hoje" style="margin-left:10px;">Hoje</button>
+    </div>
 
-    ${list.length ? `
-      <div class="tasks-list">
-        ${list.map(t=>{
-          const p = PRIORIDADES[t.prioridade] || PRIORIDADES.media;
-          const lead = t.leadId ? board.cards.find(c=>c.id===t.leadId) : null;
-          return `
-            <div class="task-row ${t.concluida?'done':''}">
-              <span class="check-circle ${t.concluida?'checked':''}" data-action="toggle-task" data-task-id="${t.id}">${t.concluida?ICON_CHECK:''}</span>
-              <div class="task-row-body">
-                <div class="task-row-top">
-                  <span class="task-row-title">${esc(t.titulo)}</span>
-                  <span class="badge" style="color:${p.color};background:${p.bg}">${p.label}</span>
-                </div>
-                <div class="task-row-meta">
-                  ${t.vencimento ? `<span>📅 ${formatDate(t.vencimento)}</span>` : ''}
-                  ${lead ? `<span>👤 ${esc(lead.cliente)}</span>` : ''}
-                </div>
-                ${t.descricao ? `<div class="task-row-desc">${esc(t.descricao)}</div>` : ''}
-              </div>
-              <div class="task-row-actions">
-                <button class="icon-btn" data-action="open-edit-task" data-task-id="${t.id}" title="Editar">${ICON_EDIT}</button>
-                <button class="icon-btn" data-action="delete-task" data-task-id="${t.id}" title="Excluir">${ICON_TRASH}</button>
-              </div>
-            </div>
-          `;
-        }).join('')}
+    ${semData.length ? `
+      <div class="agenda-sem-data">
+        <span class="agenda-sem-data-label">Sem data:</span>
+        ${semData.map(t=>`<button class="etiqueta-pill" data-action="open-edit-task" data-task-id="${t.id}">${esc(t.titulo)}</button>`).join('')}
       </div>
-    ` : `<div class="tasks-empty">Nenhuma tarefa por aqui.</div>`}
+    ` : ''}
+
+    <div class="agenda-grid">
+      ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="agenda-grid-header">${d}</div>`).join('')}
+      ${celulas.map(dia=>{
+        if(dia===null) return `<div class="agenda-cell agenda-cell-vazia"></div>`;
+        const diaISO = `${ano}-${String(mesNum).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
+        const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+        const totalItens = tarefasDoDia.length + eventosDoDia.length;
+        const itensPreview = [
+          ...eventosDoDia.map(e=>({tipo:'evento', texto: e.diaInteiro ? e.titulo : `${e.titulo}${e.inicio ? ' - '+formatHora(e.inicio) : ''}`})),
+          ...tarefasDoDia.map(t=>({tipo:'tarefa', texto: t.titulo, concluida: t.concluida})),
+        ].slice(0,3);
+        const isHoje = diaISO === hojeISO;
+        return `
+          <div class="agenda-cell ${isHoje?'agenda-cell-hoje':''} ${totalItens?'tem-itens':''}" data-action="abrir-dia-agenda" data-dia="${diaISO}">
+            <span class="agenda-cell-numero">${dia}</span>
+            ${totalItens ? `
+              <div class="agenda-cell-itens">
+                ${itensPreview.map(it=>`<div class="agenda-item-mini agenda-item-${it.tipo} ${it.concluida?'concluida':''}">${esc(it.texto)}</div>`).join('')}
+                ${totalItens > 3 ? `<div class="agenda-item-mais">+${totalItens-3} mais</div>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>
   `;
 }
 
@@ -3755,6 +4006,9 @@ function bindAppEvents(){
   const logoutBtn = app.querySelector('[data-action="logout"]');
   if(logoutBtn) logoutBtn.addEventListener('click', logout);
 
+  const reordenarNavBtn = app.querySelector('[data-action="abrir-reordenar-nav"]');
+  if(reordenarNavBtn) reordenarNavBtn.addEventListener('click', abrirReordenarNav);
+
   app.querySelectorAll('[data-action="nav"]').forEach(btn=>{
     btn.addEventListener('click', ()=> goToPage(btn.dataset.page));
   });
@@ -3797,7 +4051,7 @@ function bindAppEvents(){
     el.addEventListener('click', ()=> toggleTaskConcluida(el.dataset.taskId));
   });
   const openNewTaskBtn = app.querySelector('[data-action="open-new-task"]');
-  if(openNewTaskBtn) openNewTaskBtn.addEventListener('click', openNewTask);
+  if(openNewTaskBtn) openNewTaskBtn.addEventListener('click', ()=> openNewTask());
   app.querySelectorAll('[data-action="open-edit-task"]').forEach(btn=>{
     btn.addEventListener('click', ()=> openEditTask(btn.dataset.taskId));
   });
@@ -3812,6 +4066,19 @@ function bindAppEvents(){
   });
   const toggleConcluidasEl = app.querySelector('[data-action="toggle-show-concluidas"]');
   if(toggleConcluidasEl) toggleConcluidasEl.addEventListener('click', ()=>{ tarefasShowConcluidas = !tarefasShowConcluidas; renderApp(); });
+
+  /* -- Agenda (calendário) -- */
+  app.querySelectorAll('[data-action="agenda-mes"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> mudarMesAgenda(parseInt(btn.dataset.delta,10)));
+  });
+  const agendaHojeBtn = app.querySelector('[data-action="agenda-hoje"]');
+  if(agendaHojeBtn) agendaHojeBtn.addEventListener('click', ()=>{
+    agendaMesAtual = currentMonthKey();
+    loadAgendaMes(agendaMesAtual);
+  });
+  app.querySelectorAll('[data-action="abrir-dia-agenda"]').forEach(cel=>{
+    cel.addEventListener('click', ()=>{ agendaDiaSelecionado = cel.dataset.dia; renderAgendaDiaModal(); });
+  });
 
   /* -- Disparos -- */
   const disparoColunaSelect = document.getElementById('disparo-coluna');
@@ -4441,6 +4708,7 @@ function renderModal(){
               <option value="imovel" ${(f.tipoCarta||'imovel')==='imovel'?'selected':''}>Imóvel</option>
               <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
               <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
+              <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
             </select>
           </div>
           <div class="field">
@@ -4633,8 +4901,8 @@ function renderModal(){
 }
 
 /* ---------- modal da tarefa ---------- */
-function openNewTask(){
-  taskModalForm = { __isNew:true, id:null, titulo:'', vencimento:'', prioridade:'media', leadId:'', descricao:'' };
+function openNewTask(dataPreenchida){
+  taskModalForm = { __isNew:true, id:null, titulo:'', vencimento: dataPreenchida||'', prioridade:'media', leadId:'', descricao:'' };
   renderTaskModal();
 }
 function openEditTask(id){
@@ -4830,6 +5098,12 @@ function renderDisparosPage(){
         `}
         <p class="settings-page-note">⚠️ Texto livre só chega pra quem te escreveu nas últimas 24h — regra da própria Meta. Modelo de mensagem funciona pra qualquer lead, inclusive frio, mas precisa estar aprovado no Meta Business Manager antes.</p>
         ${disparoResultado ? `<p class="settings-page-msg ${disparoResultado.falha ? 'erro' : 'ok'}">${disparoResultado.sucesso} enviada(s)${disparoResultado.falha ? `, ${disparoResultado.falha} falharam` : ''}.</p>` : ''}
+        ${disparoResultado && disparoResultado.detalhesFalha && disparoResultado.detalhesFalha.length ? `
+          <div class="settings-page-section" style="margin-top:0;">
+            <div class="settings-page-subtitle">Detalhes das falhas</div>
+            ${disparoResultado.detalhesFalha.map(d=>`<p class="settings-page-note">• ${esc(d.cliente||'')}: ${esc(d.erro||'')}</p>`).join('')}
+          </div>
+        ` : ''}
         <button class="btn-primary" data-action="enviar-disparo" ${disparoEnviando?'disabled':''}>${disparoEnviando ? 'Enviando…' : `Enviar para ${disparoSelecionados.size} lead(s)`}</button>
       </div>
     `}

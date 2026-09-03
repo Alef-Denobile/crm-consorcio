@@ -2,7 +2,8 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
-const { CLIENT_ID, CLIENT_SECRET } = require('../utils/calendarSync');
+const { CLIENT_ID, CLIENT_SECRET, listarEventosPrimario } = require('../utils/calendarSync');
+const Task = require('../models/Task');
 
 const router = express.Router();
 const JWT_SECRET = auth.JWT_SECRET;
@@ -90,6 +91,48 @@ router.post('/disconnect', auth, async (req, res) => {
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: 'Erro ao desconectar do Google Agenda.' });
+  }
+});
+
+// GET /api/calendar/agenda-mes?mes=YYYY-MM -> tarefas do CRM + eventos do Google
+// Agenda (calendário principal do usuário) misturados, pra montar a visão de calendário
+router.get('/agenda-mes', auth, async (req, res) => {
+  try {
+    const mes = req.query.mes; // "YYYY-MM"
+    if (!mes || !/^\d{4}-\d{2}$/.test(mes)) return res.status(400).json({ error: 'Informe o mês no formato YYYY-MM.' });
+    const [ano, mesNum] = mes.split('-').map(Number);
+    const inicioMes = new Date(ano, mesNum - 1, 1);
+    const fimMes = new Date(ano, mesNum, 0, 23, 59, 59);
+
+    const tarefas = await Task.find({
+      userId: req.userId,
+      vencimento: { $gte: inicioMes, $lte: fimMes },
+    }).select('titulo vencimento prioridade concluida leadId').populate('leadId', 'cliente');
+
+    let eventosGoogle = [];
+    const user = await User.findById(req.userId);
+    if (user && user.googleCalendar && user.googleCalendar.refreshToken) {
+      try {
+        eventosGoogle = await listarEventosPrimario(user, inicioMes, fimMes);
+      } catch (e) {
+        console.error('Erro ao buscar eventos do Google Agenda:', e.message);
+      }
+    }
+
+    res.json({
+      tarefas: tarefas.map((t) => ({
+        id: t._id.toString(),
+        titulo: t.titulo,
+        vencimento: t.vencimento,
+        prioridade: t.prioridade,
+        concluida: t.concluida,
+        leadId: t.leadId ? t.leadId._id.toString() : null,
+        clienteNome: t.leadId ? t.leadId.cliente : null,
+      })),
+      eventosGoogle,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao carregar a agenda do mês.' });
   }
 });
 

@@ -83,10 +83,34 @@ async function getOrCreateCalendarId(user) {
   return calendarId;
 }
 
+// Lista os eventos do calendário PRINCIPAL do usuário (o de verdade, onde ele já
+// cria reuniões direto no Google Agenda) — diferente do nosso calendário próprio,
+// que só guarda as tarefas sincronizadas. Usado pra montar a visão de Agenda.
+async function listarEventosPrimario(user, timeMin, timeMax) {
+  const params = new URLSearchParams({
+    timeMin: new Date(timeMin).toISOString(),
+    timeMax: new Date(timeMax).toISOString(),
+    singleEvents: 'true',
+    orderBy: 'startTime',
+    maxResults: '250',
+  });
+  const data = await chamarCalendarApi(user, `/calendars/primary/events?${params.toString()}`);
+  if (!data || !data.items) return [];
+  return data.items
+    .filter((ev) => ev.status !== 'cancelled')
+    .map((ev) => ({
+      id: ev.id,
+      titulo: ev.summary || '(sem título)',
+      inicio: (ev.start && (ev.start.dateTime || ev.start.date)) || null,
+      diaInteiro: !!(ev.start && ev.start.date && !ev.start.dateTime),
+    }));
+}
+
 module.exports = {
   chamarCalendarApi,
   getOrCreateCalendarId,
   getValidAccessToken,
+  listarEventosPrimario,
   NOME_CALENDARIO,
   CLIENT_ID,
   CLIENT_SECRET,

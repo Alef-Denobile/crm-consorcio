@@ -17,7 +17,7 @@ const cardSchema = new mongoose.Schema(
     telefone: { type: String, default: '' },
     telefoneNormalizado: { type: String, default: null, index: true }, // só dígitos, com DDI — usado pra casar mensagens do WhatsApp
     obs: { type: String, default: '' },
-    tipoCarta: { type: String, enum: ['imovel', 'veiculo', 'investimento'], default: 'imovel' },
+    tipoCarta: { type: String, enum: ['imovel', 'veiculo', 'investimento', 'servicos'], default: 'imovel' },
     mes: { type: String, default: '' }, // formato "YYYY-MM"
     colunaDesde: { type: Date, default: Date.now }, // quando entrou na coluna atual — usado pelas automações por tempo
     automacoesDisparadas: { type: [mongoose.Schema.Types.ObjectId], default: [] }, // evita repetir a mesma automação por tempo no mesmo card
