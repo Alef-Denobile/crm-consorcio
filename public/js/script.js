@@ -3107,6 +3107,7 @@ document.addEventListener('mouseup', ()=>{
 // esse cálculo, ou a coluna fica curta demais (sobra espaço vazio embaixo) ou alta
 // demais (esconde atrás do resumo ao rolar até o fim da página).
 /* ---------- resumo do Pipeline: largura de cada número, redimensionável ---------- */
+const STAT_KEYS = ['aberto','ganho','perdido','quentes','ticket','ponderado'];
 const STAT_LARGURA_PADRAO = 220;
 const STAT_LARGURA_MIN = 130;
 function getLargurasStats(){
@@ -3115,6 +3116,23 @@ function getLargurasStats(){
   return salvo;
 }
 let statsLargura = getLargurasStats();
+// Só ajusta quem NUNCA foi redimensionado manualmente pelo usuário — distribui o
+// espaço da caixa azul igualmente entre eles, sem nunca deixar menor que o padrão
+// (pra nenhum número começar cortado) nem deixar espaço vazio sobrando.
+function ajustarLargurasStatsPadrao(){
+  if(currentPage !== 'pipeline') return;
+  const statsEl = document.querySelector('.stats');
+  if(!statsEl) return;
+  const chavesNaoCustomizadas = STAT_KEYS.filter(k => statsLargura[k] === undefined);
+  if(!chavesNaoCustomizadas.length) return; // tudo já foi ajustado manualmente, respeita a escolha do usuário
+  const larguraTotalCustomizada = STAT_KEYS.reduce((s,k)=> s + (statsLargura[k] || 0), 0);
+  const larguraDisponivel = statsEl.getBoundingClientRect().width - larguraTotalCustomizada;
+  const larguraIdeal = Math.max(STAT_LARGURA_PADRAO, Math.floor(larguraDisponivel / chavesNaoCustomizadas.length));
+  chavesNaoCustomizadas.forEach(chave=>{
+    const statEl = document.querySelector(`.stat[data-stat-key="${chave}"]`);
+    if(statEl) statEl.style.width = larguraIdeal + 'px';
+  });
+}
 function renderStatItem(chave, label, valor, contagem, corValor){
   const largura = statsLargura[chave] || STAT_LARGURA_PADRAO;
   return `
@@ -3160,7 +3178,7 @@ function ajustarAlturaColunasPipeline(){
   const margemExtra = 12; // respiro entre o resumo e o topo das colunas + a barra de rolagem horizontal
   document.documentElement.style.setProperty('--altura-coluna-pipeline', `calc(100vh - ${Math.ceil(alturaResumo + margemExtra)}px)`);
 }
-window.addEventListener('resize', ()=> ajustarAlturaColunasPipeline());
+window.addEventListener('resize', ()=>{ ajustarAlturaColunasPipeline(); ajustarLargurasStatsPadrao(); });
 
 function ativarArrasteHorizontal(){
   document.querySelectorAll('.col-total').forEach(el=>{
@@ -4184,6 +4202,7 @@ function bindAppEvents(){
   ativarArrasteHorizontal();
   ajustarAlturaColunasPipeline();
   ativarRedimensionarStats();
+  ajustarLargurasStatsPadrao();
 
   /* -- Pipeline: filtro de data -- */
   const dateMenuBtn = app.querySelector('[data-action="toggle-date-menu"]');
