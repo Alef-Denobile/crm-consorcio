@@ -10,6 +10,7 @@ const FluxoExecucao = require('../models/FluxoExecucao');
 const Anexo = require('../models/Anexo');
 const { registrarAuditoria } = require('../utils/auditoria');
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
+const { executarAcaoDeAutomacao } = require('../utils/executarAutomacao');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
@@ -42,25 +43,7 @@ async function executarAutomacoesDaColuna(userId, colunaId, card) {
     });
     for (const auto of automacoes) {
       try {
-        if (auto.acaoTipo === 'criar_tarefa') {
-          const dias = (auto.acaoParams && auto.acaoParams.diasParaVencimento) || 3;
-          const venc = new Date();
-          venc.setDate(venc.getDate() + Number(dias));
-          await Task.create({
-            userId,
-            titulo: (auto.acaoParams && auto.acaoParams.titulo) || 'Follow-up automático',
-            vencimento: venc,
-            prioridade: 'media',
-            leadId: card._id,
-            descricao: `Criada automaticamente pela automação "${auto.nome}".`,
-          });
-        } else if (auto.acaoTipo === 'mover_coluna') {
-          const destino = auto.acaoParams && auto.acaoParams.colunaDestinoId;
-          if (destino && String(destino) !== String(colunaId)) {
-            const atualizado = await Card.findByIdAndUpdate(card._id, { columnId: destino }, { new: true });
-            gerarComissaoAutomaticaSeGanho(userId, atualizado, destino);
-          }
-        }
+        await executarAcaoDeAutomacao(userId, auto, card);
       } catch (e) {
         console.error('Erro ao executar automação:', e.message);
       }

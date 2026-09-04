@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const Automacao = require('../models/Automacao');
 const Column = require('../models/Column');
+const Card = require('../models/Card');
+const { executarAcaoDeAutomacao } = require('../utils/executarAutomacao');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de automação exigem login
@@ -96,6 +98,26 @@ router.delete('/:id', async (req, res) => {
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: 'Erro ao excluir automação.' });
+  }
+});
+
+// POST /api/automacoes/:id/executar-manual -> aplica a ação da automação num card
+// específico agora mesmo, sem esperar o gatilho normal (usado no atalho da tela de Conversas)
+router.post('/:id/executar-manual', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'ID inválido.' });
+    const automacao = await Automacao.findOne({ _id: req.params.id, userId: req.userId });
+    if (!automacao) return res.status(404).json({ error: 'Automação não encontrada.' });
+
+    const { cardId } = req.body;
+    if (!cardId || !mongoose.isValidObjectId(cardId)) return res.status(400).json({ error: 'Cliente inválido.' });
+    const card = await Card.findOne({ _id: cardId, userId: req.userId });
+    if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+    await executarAcaoDeAutomacao(req.userId, automacao, card);
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao executar a automação.' });
   }
 });
 

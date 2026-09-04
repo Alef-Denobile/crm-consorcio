@@ -188,6 +188,13 @@ let instagramSalvando = false;
 let instagramConfigMsg = null;
 let conversas = [];
 let conversasLoaded = false;
+let conversaSelecionadaCardId = null;
+let conversaMensagens = [];
+let conversaMensagensLoaded = false;
+let conversaTexto = '';
+let conversaEnviando = false;
+let conversaBusca = '';
+let conversaPollingTimer = null;
 let notifOpen = false;
 let buscaGlobalAberta = false;
 let buscaGlobalTexto = '';
@@ -824,6 +831,73 @@ async function loadConversas(){
     conversas = [];
   }
   conversasLoaded = true;
+  renderApp();
+}
+async function selecionarConversa(cardId){
+  if(conversaSelecionadaCardId === cardId) return;
+  conversaSelecionadaCardId = cardId;
+  conversaMensagensLoaded = false;
+  conversaMensagens = [];
+  renderApp();
+  await carregarMensagensConversa(cardId, true);
+  iniciarPollingConversa();
+}
+async function carregarMensagensConversa(cardId, primeiraVez){
+  try{
+    const data = await apiRequest('GET', `/whatsapp/conversas/${cardId}`);
+    if(conversaSelecionadaCardId === cardId) conversaMensagens = data.mensagens || [];
+  }catch(e){
+    if(primeiraVez) conversaMensagens = [];
+  }
+  conversaMensagensLoaded = true;
+  renderApp();
+}
+function iniciarPollingConversa(){
+  pararPollingConversa();
+  conversaPollingTimer = setInterval(()=>{
+    if(conversaSelecionadaCardId && currentPage==='conversas') carregarMensagensConversa(conversaSelecionadaCardId, false);
+  }, 6000);
+}
+function pararPollingConversa(){
+  if(conversaPollingTimer){ clearInterval(conversaPollingTimer); conversaPollingTimer = null; }
+}
+async function enviarMensagemConversa(){
+  if(!conversaTexto.trim() || !conversaSelecionadaCardId) return;
+  conversaEnviando = true;
+  renderApp();
+  try{
+    await apiRequest('POST', '/whatsapp/enviar', { cardId: conversaSelecionadaCardId, texto: conversaTexto });
+    conversaTexto = '';
+    await carregarMensagensConversa(conversaSelecionadaCardId, false);
+    loadConversas(); // atualiza a prévia na lista da esquerda, sem travar a tela esperando
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível enviar a mensagem.';
+  }
+  conversaEnviando = false;
+  renderApp();
+}
+async function salvarCampoClienteConversa(campo, valor){
+  const card = board.cards.find(c=>c.id===conversaSelecionadaCardId);
+  if(!card) return;
+  const anterior = card[campo];
+  card[campo] = valor; // otimista
+  try{
+    await apiRequest('PUT', `/cards/${conversaSelecionadaCardId}`, { [campo]: valor });
+    if(campo==='cliente' || campo==='telefone') loadConversas(); // atualiza nome/telefone na lista da esquerda também
+  }catch(e){
+    card[campo] = anterior;
+    errorMsg = 'Não foi possível salvar a alteração.';
+    renderApp();
+  }
+}
+async function executarAutomacaoManual(automacaoId){
+  if(!conversaSelecionadaCardId) return;
+  try{
+    await apiRequest('POST', `/automacoes/${automacaoId}/executar-manual`, { cardId: conversaSelecionadaCardId });
+    await loadTasks();
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível executar a automação.';
+  }
   renderApp();
 }
 
@@ -2128,6 +2202,7 @@ function filteredLeads(){
 /* ---------- navegação entre páginas ---------- */
 function goToPage(page){
   if(currentPage === page) return;
+  if(currentPage === 'conversas') pararPollingConversa();
   currentPage = page;
   dateMenuOpen = false;
   openMenuColId = null;
@@ -4099,6 +4174,53 @@ function bindAppEvents(){
   });
   const verificarAtualizacaoBtn = app.querySelector('[data-action="verificar-atualizacao"]');
   if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
+
+  /* -- Conversas (3 colunas) -- */
+  const conversasBuscaInput = document.getElementById('conversas-busca-input');
+  if(conversasBuscaInput) conversasBuscaInput.addEventListener('input', (e)=>{ conversaBusca = e.target.value; renderApp(); });
+  app.querySelectorAll('[data-action="selecionar-conversa"]').forEach(el=>{
+    el.addEventListener('click', ()=> selecionarConversa(el.dataset.cardId));
+  });
+  const conversasNovaMsgInput = document.getElementById('conversas-nova-msg');
+  if(conversasNovaMsgInput){
+    conversasNovaMsgInput.addEventListener('input', (e)=> conversaTexto = e.target.value);
+    conversasNovaMsgInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') enviarMensagemConversa(); });
+  }
+  const conversasEnviarBtn = document.getElementById('conversas-enviar-btn');
+  if(conversasEnviarBtn) conversasEnviarBtn.addEventListener('click', enviarMensagemConversa);
+  const conversasChatLista = document.getElementById('conversas-chat-lista');
+  if(conversasChatLista) conversasChatLista.scrollTop = conversasChatLista.scrollHeight;
+
+  const cvDetNome = document.getElementById('cv-det-nome');
+  if(cvDetNome) cvDetNome.addEventListener('blur', (e)=> salvarCampoClienteConversa('cliente', e.target.value));
+  const cvDetTelefone = document.getElementById('cv-det-telefone');
+  if(cvDetTelefone) cvDetTelefone.addEventListener('blur', (e)=> salvarCampoClienteConversa('telefone', e.target.value));
+  const cvDetValor = document.getElementById('cv-det-valor');
+  if(cvDetValor){
+    cvDetValor.addEventListener('input', (e)=>{
+      const { texto } = maskInteiro(e.target.value);
+      e.target.value = texto;
+    });
+    cvDetValor.addEventListener('blur', (e)=>{
+      const { numero } = maskInteiro(e.target.value);
+      salvarCampoClienteConversa('valor', numero);
+    });
+  }
+  const cvDetTemp = document.getElementById('cv-det-temp');
+  if(cvDetTemp) cvDetTemp.addEventListener('change', (e)=> salvarCampoClienteConversa('temperatura', e.target.value));
+
+  app.querySelectorAll('[data-action="executar-automacao-manual"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> executarAutomacaoManual(btn.dataset.automacaoId));
+  });
+  app.querySelectorAll('[data-action="editar-automacao-conversa"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> openEditAutomacao(btn.dataset.automacaoId));
+  });
+  const novaAutomacaoConversaBtn = app.querySelector('[data-action="open-new-automacao-conversa"]');
+  if(novaAutomacaoConversaBtn) novaAutomacaoConversaBtn.addEventListener('click', ()=>{
+    const card = board.cards.find(c=>c.id===conversaSelecionadaCardId);
+    openNewAutomacao(card ? card.columnId : null);
+  });
+
   app.querySelectorAll('[data-action="set-accent"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       setAccentColor(btn.dataset.color);
@@ -4201,7 +4323,7 @@ function bindAppEvents(){
 
   /* -- Automações -- */
   const openNewAutomacaoBtn = app.querySelector('[data-action="open-new-automacao"]');
-  if(openNewAutomacaoBtn) openNewAutomacaoBtn.addEventListener('click', openNewAutomacao);
+  if(openNewAutomacaoBtn) openNewAutomacaoBtn.addEventListener('click', ()=> openNewAutomacao());
   app.querySelectorAll('[data-action="open-edit-automacao"]').forEach(btn=>{
     btn.addEventListener('click', ()=> openEditAutomacao(btn.dataset.automacaoId));
   });
@@ -5189,6 +5311,17 @@ function renderConversasPage(){
   if(!conversasLoaded){
     return `<div class="page-head"><div><h1>Conversas</h1><p>Carregando…</p></div></div>`;
   }
+  if(!whatsappConnected){
+    return `
+      <div class="page-head"><div><h1>Conversas</h1><p>Nenhuma conversa ainda</p></div></div>
+      <div class="tasks-empty">Conecte o WhatsApp Business em Configurações → Integrações para ver as conversas aqui.</div>
+    `;
+  }
+  const busca = conversaBusca.trim().toLowerCase();
+  const listaFiltrada = busca ? conversas.filter(cv=> (cv.card.cliente||'').toLowerCase().includes(busca) || (cv.card.telefone||'').includes(busca)) : conversas;
+  const card = conversaSelecionadaCardId ? board.cards.find(c=>c.id===conversaSelecionadaCardId) : null;
+  const automacoesRelevantes = card ? automacoes.filter(a=>a.colunaGatilhoId===card.columnId && a.ativa!==false) : [];
+
   return `
     <div class="page-head">
       <div>
@@ -5196,21 +5329,90 @@ function renderConversasPage(){
         <p>${conversas.length} conversa${conversas.length===1?'':'s'} no WhatsApp</p>
       </div>
     </div>
-    ${!whatsappConnected ? `<div class="tasks-empty">Conecte o WhatsApp Business em Configurações → Integrações para ver as conversas aqui.</div>` : (
-      conversas.length ? `
-        <div class="conversas-list">
-          ${conversas.map(cv=>`
-            <div class="conversa-item" data-action="open-edit-card" data-card-id="${cv.card.id}">
+    <div class="conversas-3col">
+      <div class="conversas-col-lista">
+        <input type="text" class="conversas-busca" id="conversas-busca-input" placeholder="Buscar por nome ou telefone…" value="${esc(conversaBusca)}" />
+        <div class="conversas-lista-scroll">
+          ${listaFiltrada.length ? listaFiltrada.map(cv=>`
+            <div class="conversa-item ${conversaSelecionadaCardId===cv.card.id?'conversa-item-ativa':''}" data-action="selecionar-conversa" data-card-id="${cv.card.id}">
               <div class="conversa-item-main">
                 <span class="conversa-item-nome">${esc(cv.card.cliente) || 'Sem nome'}</span>
-                <span class="conversa-item-preview">${cv.direcaoUltima==='out' ? 'Você: ' : ''}${esc((cv.ultimaMensagem||'').slice(0,90))}</span>
+                <span class="conversa-item-preview">${cv.direcaoUltima==='out' ? 'Você: ' : ''}${esc((cv.ultimaMensagem||'').slice(0,60))}</span>
               </div>
               <span class="conversa-item-hora">${formatDateHora(cv.ultimaMensagemEm)}</span>
             </div>
-          `).join('')}
+          `).join('') : `<p class="dash-empty" style="padding:16px;">Nenhuma conversa encontrada.</p>`}
         </div>
-      ` : `<div class="tasks-empty">Nenhuma conversa ainda.</div>`
-    )}
+      </div>
+
+      <div class="conversas-col-chat">
+        ${!card ? `
+          <div class="conversas-vazio">Escolha uma conversa à esquerda pra começar.</div>
+        ` : `
+          <div class="conversas-chat-head">
+            <span class="conversa-item-nome">${esc(card.cliente)||'Sem nome'}</span>
+            <span class="settings-page-note">${esc(card.telefone||'')}</span>
+          </div>
+          ${!conversaMensagensLoaded ? `<p class="settings-page-note" style="padding:16px;">Carregando conversa…</p>` : `
+            <div class="wa-conversa-lista conversas-chat-lista" id="conversas-chat-lista">
+              ${conversaMensagens.length ? conversaMensagens.map(m=>`
+                <div class="wa-msg wa-msg-${m.direction}">
+                  <p>${esc(m.texto)}</p>
+                  <span>${new Date(m.timestamp).toLocaleString('pt-BR')} ${m.direction==='out' ? statusMensagemIcone(m.status) : ''}</span>
+                </div>
+              `).join('') : '<p class="settings-page-note">Nenhuma mensagem ainda.</p>'}
+            </div>
+          `}
+          <div class="wa-conversa-input-row">
+            <input type="text" id="conversas-nova-msg" placeholder="Digite uma mensagem..." value="${esc(conversaTexto)}" />
+            <button type="button" class="btn-primary" id="conversas-enviar-btn" ${conversaEnviando?'disabled':''}>Enviar</button>
+          </div>
+        `}
+      </div>
+
+      <div class="conversas-col-detalhes">
+        ${!card ? `<div class="conversas-vazio">—</div>` : `
+          <div class="settings-page-subtitle">Detalhes do cliente</div>
+          <div class="field">
+            <label>Nome</label>
+            <input type="text" id="cv-det-nome" value="${esc(card.cliente)}" />
+          </div>
+          <div class="field">
+            <label>Telefone</label>
+            <input type="text" id="cv-det-telefone" value="${esc(card.telefone||'')}" />
+          </div>
+          <div class="field">
+            <label>Valor</label>
+            <div class="money-wrap">
+              <span>R$</span>
+              <input type="text" inputmode="numeric" id="cv-det-valor" value="${card.valor ? Number(card.valor).toLocaleString('pt-BR') : ''}" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Qualificação</label>
+            <select id="cv-det-temp">
+              <option value="quente" ${card.temperatura==='quente'?'selected':''}>🔥 Quente</option>
+              <option value="morno" ${card.temperatura==='morno'?'selected':''}>☀️ Morno</option>
+              <option value="frio" ${card.temperatura==='frio'?'selected':''}>❄️ Frio</option>
+            </select>
+          </div>
+          <button class="btn-outline" data-action="open-edit-card" data-card-id="${card.id}" style="width:100%; margin-top:4px;">Ver ficha completa</button>
+
+          <div class="settings-sep-line"></div>
+          <div class="settings-page-subtitle">Automações dessa etapa</div>
+          ${automacoesRelevantes.length ? automacoesRelevantes.map(a=>`
+            <div class="conversas-automacao-item">
+              <span>${esc(a.nome)}</span>
+              <div class="settings-btn-row">
+                <button class="btn-outline" data-action="executar-automacao-manual" data-automacao-id="${a.id}" title="Executar agora nesse cliente">▶</button>
+                <button class="icon-btn" data-action="editar-automacao-conversa" data-automacao-id="${a.id}" title="Editar">${ICON_EDIT}</button>
+              </div>
+            </div>
+          `).join('') : `<p class="settings-page-note">Nenhuma automação configurada pra coluna atual desse cliente.</p>`}
+          <button class="btn-outline" data-action="open-new-automacao-conversa" style="width:100%; margin-top:8px;">+ Nova automação</button>
+        `}
+      </div>
+    </div>
   `;
 }
 
@@ -5930,10 +6132,10 @@ function renderContratoModal(){
 }
 
 /* ---------- modal de automação ---------- */
-function openNewAutomacao(){
+function openNewAutomacao(colunaPreSelecionada){
   automacaoModalForm = {
     __isNew:true, id:null, nome:'',
-    colunaGatilhoId: (board.columns[0]||{}).id || '',
+    colunaGatilhoId: colunaPreSelecionada || (board.columns[0]||{}).id || '',
     gatilhoTipo:'entrada_coluna',
     acaoTipo:'criar_tarefa',
     acaoParams:{ titulo:'', diasParaVencimento:3, diasParado:5, colunaDestinoId:(board.columns[0]||{}).id || '' },
