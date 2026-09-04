@@ -639,3 +639,8 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
   .conversas-col-lista, .conversas-col-detalhes{ width:100%; }
   .conversas-col-chat{ min-height:420px; }
 }
+
+/* ---------- painel flutuante dentro de Conversas (Automações/Disparos/Agendar) ---------- */
+.conversas-overlay-backdrop{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:60; display:flex; align-items:center; justify-content:center; padding:24px; }
+.conversas-overlay-painel{ position:relative; width:100%; max-width:1080px; max-height:88vh; overflow-y:auto; background:var(--bg); border-radius:16px; padding:28px 32px; box-shadow:0 24px 60px rgba(0,0,0,.35); }
+.conversas-overlay-fechar{ position:sticky; top:0; float:right; margin-left:12px; z-index:2; }

@@ -194,6 +194,7 @@ let conversaMensagensLoaded = false;
 let conversaTexto = '';
 let conversaEnviando = false;
 let conversaBusca = '';
+let conversasOverlay = null; // null | 'automacoes' | 'disparos' | 'agendamentos'
 let conversaPollingTimer = null;
 let notifOpen = false;
 let buscaGlobalAberta = false;
@@ -3008,10 +3009,7 @@ const NAV_PADRAO = [
   ['conversas', 'Conversas', ICON_CONVERSAS],
   ['comissoes', 'Comissões', ICON_COMISSOES],
   ['relatorios', 'Relatórios', ICON_RELATORIOS],
-  ['disparos', 'Disparos', ICON_DISPAROS],
-  ['automacoes', 'Automações', ICON_AUTOMACOES],
   ['fluxos', 'Fluxos', ICON_FLUXOS],
-  ['agendamentos', 'Agendar Mensagem', ICON_AGENDAMENTOS],
   ['import-export', 'Importar/Exportar', ICON_IMPORT_EXPORT],
   ['equipe', 'Equipe', ICON_CHAT_INTERNO],
   ['tarefas', 'Agenda/Tarefas', ICON_TASKS],
@@ -4178,6 +4176,17 @@ function bindAppEvents(){
   /* -- Conversas (3 colunas) -- */
   const conversasBuscaInput = document.getElementById('conversas-busca-input');
   if(conversasBuscaInput) conversasBuscaInput.addEventListener('input', (e)=>{ conversaBusca = e.target.value; renderApp(); });
+  app.querySelectorAll('[data-action="abrir-overlay-conversas"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      conversasOverlay = btn.dataset.overlay;
+      if(conversasOverlay==='automacoes' && !automacoesLoaded) loadAutomacoes();
+      if(conversasOverlay==='agendamentos' && !agendamentosLoaded) loadAgendamentos();
+      renderApp();
+    });
+  });
+  app.querySelectorAll('[data-action="fechar-overlay-conversas"]').forEach(el=>{
+    el.addEventListener('click', ()=>{ conversasOverlay = null; renderApp(); });
+  });
   app.querySelectorAll('[data-action="selecionar-conversa"]').forEach(el=>{
     el.addEventListener('click', ()=> selecionarConversa(el.dataset.cardId));
   });
@@ -5328,6 +5337,11 @@ function renderConversasPage(){
         <h1>Conversas</h1>
         <p>${conversas.length} conversa${conversas.length===1?'':'s'} no WhatsApp</p>
       </div>
+      <div class="page-head-actions">
+        <button class="btn-outline" data-action="abrir-overlay-conversas" data-overlay="automacoes">⚡ Automações</button>
+        <button class="btn-outline" data-action="abrir-overlay-conversas" data-overlay="disparos">📣 Disparos</button>
+        <button class="btn-outline" data-action="abrir-overlay-conversas" data-overlay="agendamentos">🕐 Agendar Mensagem</button>
+      </div>
     </div>
     <div class="conversas-3col">
       <div class="conversas-col-lista">
@@ -5413,6 +5427,16 @@ function renderConversasPage(){
         `}
       </div>
     </div>
+    ${conversasOverlay ? `
+      <div class="conversas-overlay-backdrop" data-action="fechar-overlay-conversas">
+        <div class="conversas-overlay-painel" onclick="event.stopPropagation()">
+          <button class="icon-btn conversas-overlay-fechar" data-action="fechar-overlay-conversas" title="Fechar">✕</button>
+          ${conversasOverlay==='automacoes' ? renderAutomacoesPage() : ''}
+          ${conversasOverlay==='disparos' ? renderDisparosPage() : ''}
+          ${conversasOverlay==='agendamentos' ? renderAgendamentosPage() : ''}
+        </div>
+      </div>
+    ` : ''}
   `;
 }
 
