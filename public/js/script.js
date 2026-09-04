@@ -280,6 +280,8 @@ let comissoesMonth = currentMonthKey();
 let contratoModalForm = null;
 let nomeNovoVal = '';
 let nomeMsg = null;
+let verificandoAtualizacao = false;
+let atualizacaoMsg = null;
 let nomeSalvando = false;
 let modalAlterarNomeAberto = false;
 let logoutAllMsg = null;
@@ -1833,6 +1835,24 @@ async function disconnectGoogleCalendar(){
   }
   renderApp();
 }
+async function verificarAtualizacaoApp(){
+  verificandoAtualizacao = true;
+  atualizacaoMsg = null;
+  renderApp();
+  try{
+    if('serviceWorker' in navigator){
+      const reg = await navigator.serviceWorker.getRegistration();
+      if(reg) await reg.update();
+    }
+    atualizacaoMsg = { tipo:'ok', texto:'Tudo certo! Recarregando a página...' };
+    renderApp();
+    setTimeout(()=>{ window.location.reload(); }, 700);
+  }catch(e){
+    atualizacaoMsg = { tipo:'erro', texto:'Não foi possível verificar agora. Tenta fechar e abrir o app de novo.' };
+    verificandoAtualizacao = false;
+    renderApp();
+  }
+}
 async function syncCalendarNow(){
   if(calendarSyncing) return;
   calendarSyncing = true;
@@ -2038,12 +2058,22 @@ const ESCOPOS = {
   Pessoal: { label:'Pessoal', color:'var(--ink-soft)', bg:'var(--badge-neutral-bg)' },
   Empresa: { label:'Empresa', color:'#FFFFFF',         bg:'var(--accent)' },
 };
-// mesma regra fixa do widget original: 10 parcelas a 0,00103388 + 3 parcelas a 0,00190561
+// mesma regra fixa do back-end: Imóvel/Investimento/Serviços = 10 parcelas a 0,00103388 + 3 a
+// 0,00190561; Veículo = 1,6% do valor da carta, dividido em 11 parcelas iguais.
 function calcComissaoPreview(creditoValor){
   const credito = parseFloat(creditoValor) || 0;
   const value1 = Math.round(credito * (1033.88/1000000) * 100) / 100;
   const value2 = Math.round(credito * (1905.61/1000000) * 100) / 100;
   return { value1, value2 };
+}
+function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
+  const credito = parseFloat(creditoValor) || 0;
+  if(tipoCarta === 'veiculo'){
+    const valorParcela = Math.round((credito * 0.016 / 11) * 100) / 100;
+    return { parcelas:11, parcelas1:11, value:valorParcela, value2:0 };
+  }
+  const { value1, value2 } = calcComissaoPreview(credito);
+  return { parcelas:13, parcelas1:10, value:value1, value2 };
 }
 function monthsBetween(anchorYM, targetYM){
   const [ay,am] = anchorYM.split('-').map(Number);
@@ -2357,7 +2387,7 @@ async function toggleTaskConcluida(id){
 async function saveContratoFromModal(){
   const f = contratoModalForm;
   if(!f.desc.trim() || !f.creditoValor) return;
-  const dados = { desc: f.desc, scope: f.scope, date: f.date, creditoValor: f.creditoValor };
+  const dados = { desc: f.desc, scope: f.scope, date: f.date, creditoValor: f.creditoValor, tipoCarta: f.tipoCarta };
   try{
     if(f.__isNew){
       const novo = await apiRequest('POST', '/comissoes', dados);
@@ -3749,6 +3779,7 @@ function renderConfiguracoesPage(){
       <button class="tab-btn" data-action="scroll-to-config" data-target="config-perfil">Perfil</button>
       <button class="tab-btn" data-action="scroll-to-config" data-target="config-integracoes">Integrações</button>
       <button class="tab-btn" data-action="scroll-to-config" data-target="config-aparencia">Aparência</button>
+      <button class="tab-btn" data-action="scroll-to-config" data-target="config-sobre">Sobre</button>
     </div>
 
     <section id="config-perfil" class="config-group">
@@ -4020,6 +4051,18 @@ function renderConfiguracoesPage(){
         </div>
       </div>
     </section>
+
+    <section id="config-sobre" class="config-group">
+      <h2 class="config-group-title">Sobre o aplicativo</h2>
+      <div class="settings-page-grid">
+        <div class="settings-page-section">
+          <h3>Atualizações</h3>
+          <p class="settings-page-note">Se o painel parecer desatualizado (algo que já mudou e não aparece), use esse botão pra forçar buscar a versão mais nova — principalmente útil no app instalado no celular.</p>
+          ${atualizacaoMsg ? `<p class="settings-page-msg ${atualizacaoMsg.tipo}">${esc(atualizacaoMsg.texto)}</p>` : ''}
+          <button class="btn-outline" data-action="verificar-atualizacao" ${verificandoAtualizacao?'disabled':''}>${verificandoAtualizacao?'Verificando…':'Verificar atualizações'}</button>
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -4054,6 +4097,8 @@ function bindAppEvents(){
     setDarkMode(!getDarkMode());
     renderApp();
   });
+  const verificarAtualizacaoBtn = app.querySelector('[data-action="verificar-atualizacao"]');
+  if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
   app.querySelectorAll('[data-action="set-accent"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       setAccentColor(btn.dataset.color);
@@ -5357,68 +5402,43 @@ function renderEquipeSetup(tituloPagina, subtitulo){
 }
 
 /* ---------- página: Chat Interno ---------- */
+function renderMensagensEInput(mensagens, carregado, inputId, enviarAction, valorInput, enviando, vazioTexto){
+  return `
+    ${!carregado ? `<p class="settings-page-note">Carregando conversa…</p>` : `
+      <div class="chat-interno-mensagens" id="${inputId}-mensagens">
+        ${mensagens.length ? mensagens.map(m=>`
+          <div class="wa-msg ${m.remetenteId===(currentUser&&currentUser.id)?'wa-msg-out':'wa-msg-in'}">
+            <p><b>${m.remetenteId===(currentUser&&currentUser.id)?'Você':esc(m.remetenteNome)}:</b> ${esc(m.texto)}</p>
+            <span>${formatDateHora(m.timestamp)}</span>
+          </div>
+        `).join('') : `<p class="settings-page-note">${vazioTexto}</p>`}
+      </div>
+      <div class="wa-conversa-input-row">
+        <input type="text" id="${inputId}" placeholder="Escreva uma mensagem..." value="${esc(valorInput)}" />
+        <button class="btn-primary" data-action="${enviarAction}" ${enviando?'disabled':''}>Enviar</button>
+      </div>
+    `}
+  `;
+}
 function renderChatInternoConteudo(){
+  const conversandoComOutro = !!dmDestinatarioId;
+  const outro = conversandoComOutro ? equipe.membros.find(m=>m.id===dmDestinatarioId) : null;
   return `
     <div class="chat-interno-wrap">
       <div class="chat-interno-membros">
-        <div class="settings-page-subtitle">Membros</div>
-        ${equipe.membros.map(m=>`
-          <div class="chat-membro-item">${esc(m.nome||m.email)} ${m.papel==='supervisor'?'⭐':''}${m.souEu?' (você)':''}</div>
+        <div class="settings-page-subtitle">Conversas</div>
+        <button class="chat-membro-item chat-membro-btn ${!conversandoComOutro?'chat-membro-ativo':''}" data-action="fechar-conversa-individual">💬 Chat da equipe</button>
+        ${equipe.membros.filter(m=>!m.souEu).map(m=>`
+          <button class="chat-membro-item chat-membro-btn ${dmDestinatarioId===m.id?'chat-membro-ativo':''}" data-action="abrir-conversa-individual" data-user-id="${m.id}">${esc(m.nome||m.email)}${m.papel==='supervisor'?' ⭐':''}</button>
         `).join('')}
+        ${equipe.membros.filter(m=>m.souEu).map(m=>`<div class="chat-membro-item chat-membro-eu">${esc(m.nome||m.email)} (você)</div>`).join('')}
       </div>
       <div class="chat-interno-main">
-        ${!chatLoaded ? `<p class="settings-page-note">Carregando conversa…</p>` : `
-          <div class="chat-interno-mensagens" id="chat-interno-mensagens">
-            ${chatMensagens.length ? chatMensagens.map(m=>`
-              <div class="wa-msg ${m.remetenteId===(currentUser&&currentUser.id)?'wa-msg-out':'wa-msg-in'}">
-                <p><b>${m.remetenteId===(currentUser&&currentUser.id)?'Você':esc(m.remetenteNome)}:</b> ${esc(m.texto)}</p>
-                <span>${formatDateHora(m.timestamp)}</span>
-              </div>
-            `).join('') : '<p class="settings-page-note">Nenhuma mensagem ainda. Diga oi pra equipe!</p>'}
-          </div>
-          <div class="wa-conversa-input-row">
-            <input type="text" id="chat-interno-input" placeholder="Escreva uma mensagem..." value="${esc(chatTexto)}" />
-            <button class="btn-primary" data-action="enviar-chat-interno" ${chatEnviando?'disabled':''}>Enviar</button>
-          </div>
-        `}
-      </div>
-    </div>
-  `;
-}
-function renderConversaIndividualConteudo(){
-  if(!dmDestinatarioId){
-    const outros = equipe.membros.filter(m=>!m.souEu);
-    return `
-      <div class="settings-page-section">
-        <h3>Escolha um colega</h3>
-        ${outros.length ? outros.map(m=>`
-          <button class="disparo-lead-item" style="width:100%; text-align:left; cursor:pointer;" data-action="abrir-conversa-individual" data-user-id="${m.id}">
-            ${esc(m.nome||m.email)} ${m.papel==='supervisor'?'⭐':''}
-          </button>
-        `).join('') : '<p class="dash-empty">Não tem mais ninguém na equipe ainda.</p>'}
-      </div>
-    `;
-  }
-  const outro = equipe.membros.find(m=>m.id===dmDestinatarioId);
-  return `
-    <div class="chat-interno-wrap">
-      <div class="chat-interno-main" style="flex:1;">
-        <button class="btn-outline" data-action="fechar-conversa-individual" style="margin-bottom:12px;">← Voltar pros colegas</button>
-        <div class="settings-page-subtitle">Conversa com ${esc(outro ? (outro.nome||outro.email) : '')}</div>
-        ${!dmLoaded ? `<p class="settings-page-note">Carregando conversa…</p>` : `
-          <div class="chat-interno-mensagens" id="chat-individual-mensagens">
-            ${dmMensagens.length ? dmMensagens.map(m=>`
-              <div class="wa-msg ${m.remetenteId===(currentUser&&currentUser.id)?'wa-msg-out':'wa-msg-in'}">
-                <p><b>${m.remetenteId===(currentUser&&currentUser.id)?'Você':esc(m.remetenteNome)}:</b> ${esc(m.texto)}</p>
-                <span>${formatDateHora(m.timestamp)}</span>
-              </div>
-            `).join('') : '<p class="settings-page-note">Nenhuma mensagem ainda.</p>'}
-          </div>
-          <div class="wa-conversa-input-row">
-            <input type="text" id="chat-individual-input" placeholder="Escreva uma mensagem..." value="${esc(dmTexto)}" />
-            <button class="btn-primary" data-action="enviar-chat-individual" ${dmEnviando?'disabled':''}>Enviar</button>
-          </div>
-        `}
+        <div class="settings-page-subtitle">${conversandoComOutro ? `Conversa com ${esc(outro ? (outro.nome||outro.email) : '')}` : 'Chat da equipe'}</div>
+        ${conversandoComOutro
+          ? renderMensagensEInput(dmMensagens, dmLoaded, 'chat-individual-input', 'enviar-chat-individual', dmTexto, dmEnviando, 'Nenhuma mensagem ainda.')
+          : renderMensagensEInput(chatMensagens, chatLoaded, 'chat-interno-input', 'enviar-chat-interno', chatTexto, chatEnviando, 'Nenhuma mensagem ainda. Diga oi pra equipe!')
+        }
       </div>
     </div>
   `;
@@ -5430,7 +5450,7 @@ function renderEquipePage(){
   if(!equipe){
     return renderEquipeSetup('Equipe', 'Você ainda não faz parte de uma equipe');
   }
-  const abas = [['chat','Chat da equipe'],['individual','Conversa individual']];
+  const abas = [['chat','Chat']];
   if(equipe.souSupervisor) abas.push(['supervisao','Supervisão']);
   return `
     <div class="page-head">
@@ -5439,11 +5459,12 @@ function renderEquipePage(){
         <p>${esc(equipe.nome)} · ${equipe.membros.length} membro${equipe.membros.length===1?'':'s'}</p>
       </div>
     </div>
-    <div class="funil-tabs" style="margin-bottom:20px;">
-      ${abas.map(([key,label])=>`<button class="tab-btn ${equipeSubTab===key?'active':''}" data-action="set-equipe-subtab" data-subtab="${key}">${label}</button>`).join('')}
-    </div>
+    ${abas.length > 1 ? `
+      <div class="funil-tabs" style="margin-bottom:20px;">
+        ${abas.map(([key,label])=>`<button class="tab-btn ${equipeSubTab===key?'active':''}" data-action="set-equipe-subtab" data-subtab="${key}">${label}</button>`).join('')}
+      </div>
+    ` : ''}
     ${equipeSubTab==='chat' ? renderChatInternoConteudo() : ''}
-    ${equipeSubTab==='individual' ? renderConversaIndividualConteudo() : ''}
     ${equipeSubTab==='supervisao' && equipe.souSupervisor ? renderSupervisaoConteudo() : ''}
   `;
 }
@@ -5778,23 +5799,36 @@ function renderSuportePage(){
 
 /* ---------- modal do contrato de comissão ---------- */
 function openNewContrato(){
-  contratoModalForm = { __isNew:true, id:null, desc:'', scope:'Pessoal', creditoValor:0, date: comissoesMonth + '-01' };
+  contratoModalForm = { __isNew:true, id:null, desc:'', scope:'Pessoal', creditoValor:0, tipoCarta:'imovel', date: comissoesMonth + '-01' };
   renderContratoModal();
 }
 function openEditContrato(id){
   const c = contratos.find(x=>x.id===id);
   if(!c) return;
-  contratoModalForm = { __isNew:false, id:c.id, desc:c.desc, scope:c.scope, creditoValor:c.creditoValor, date:c.date };
+  contratoModalForm = { __isNew:false, id:c.id, desc:c.desc, scope:c.scope, creditoValor:c.creditoValor, tipoCarta:c.tipoCarta||'imovel', date:c.date };
   renderContratoModal();
 }
 function closeContratoModal(){ contratoModalForm = null; document.getElementById('modal-root').innerHTML=''; }
 
+function previewComissaoHtml(prev){
+  if(prev.parcelas1 === 11 && prev.value2 === 0){
+    return `
+      🔹 11 parcelas iguais: <b>${fmtBRL(prev.value)}</b> cada<br/>
+      Total: 11x parcelas · Total líquido da comissão: <b>${fmtBRL(prev.value * 11)}</b>
+    `;
+  }
+  const total = prev.value*10 + prev.value2*3;
+  return `
+    🔹 10 primeiras parcelas: <b>${fmtBRL(prev.value)}</b> cada<br/>
+    🔹 3 últimas parcelas: <b>${fmtBRL(prev.value2)}</b> cada<br/>
+    Total: 13x parcelas · Total líquido da comissão: <b>${fmtBRL(total)}</b>
+  `;
+}
 function renderContratoModal(){
   const root = document.getElementById('modal-root');
   if(!contratoModalForm){ root.innerHTML=''; return; }
   const f = contratoModalForm;
-  const preview = calcComissaoPreview(f.creditoValor);
-  const previewTotal = preview.value1*10 + preview.value2*3;
+  const preview = calcComissaoPreviewPorTipo(f.creditoValor, f.tipoCarta);
 
   root.innerHTML = `
     <div class="overlay" id="contrato-modal-overlay">
@@ -5816,6 +5850,15 @@ function renderContratoModal(){
             </div>
           </div>
           <div class="field">
+            <label>Tipo de carta de crédito</label>
+            <select id="c-tipo-carta">
+              <option value="imovel" ${f.tipoCarta==='imovel'?'selected':''}>Imóvel</option>
+              <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
+              <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
+              <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
+            </select>
+          </div>
+          <div class="field">
             <label>Valor da carta de crédito vendida</label>
             <div class="money-wrap">
               <span>R$</span>
@@ -5827,9 +5870,7 @@ function renderContratoModal(){
             <input type="month" id="c-mes" value="${(f.date||'').slice(0,7)}" />
           </div>
           <div class="calc-preview" id="c-preview">
-            🔹 10 primeiras parcelas: <b>${fmtBRL(preview.value1)}</b> cada<br/>
-            🔹 3 últimas parcelas: <b>${fmtBRL(preview.value2)}</b> cada<br/>
-            Total: 13x parcelas · Total líquido da comissão: <b>${fmtBRL(previewTotal)}</b>
+            ${previewComissaoHtml(preview)}
           </div>
           <p class="calc-preview-note">O valor de cada parcela é calculado automaticamente a partir da carta de crédito, já líquido.</p>
         </div>
@@ -5860,21 +5901,21 @@ function renderContratoModal(){
     });
   });
 
+  document.getElementById('c-tipo-carta').addEventListener('change', (e)=>{
+    contratoModalForm.tipoCarta = e.target.value;
+    const prev = calcComissaoPreviewPorTipo(contratoModalForm.creditoValor, contratoModalForm.tipoCarta);
+    const previewEl = document.getElementById('c-preview');
+    if(previewEl) previewEl.innerHTML = previewComissaoHtml(prev);
+  });
+
   const creditoInput = document.getElementById('c-credito');
   creditoInput.addEventListener('input', (e)=>{
     const { numero, texto } = maskInteiro(e.target.value);
     contratoModalForm.creditoValor = numero;
     e.target.value = texto;
-    const prev = calcComissaoPreview(numero);
-    const total = prev.value1*10 + prev.value2*3;
+    const prev = calcComissaoPreviewPorTipo(numero, contratoModalForm.tipoCarta);
     const previewEl = document.getElementById('c-preview');
-    if(previewEl){
-      previewEl.innerHTML = `
-        🔹 10 primeiras parcelas: <b>${fmtBRL(prev.value1)}</b> cada<br/>
-        🔹 3 últimas parcelas: <b>${fmtBRL(prev.value2)}</b> cada<br/>
-        Total: 13x parcelas · Total líquido da comissão: <b>${fmtBRL(total)}</b>
-      `;
-    }
+    if(previewEl) previewEl.innerHTML = previewComissaoHtml(prev);
   });
 
   document.getElementById('c-save').addEventListener('click', saveContratoFromModal);

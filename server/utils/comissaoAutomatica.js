@@ -1,6 +1,6 @@
 const Contrato = require('../models/Contrato');
 const Column = require('../models/Column');
-const { COMISSAO_PARCELAS_BLOCO1, COMISSAO_PARCELAS_BLOCO2, calcComissaoParcelas } = require('./comissaoCalc');
+const { calcComissaoPorTipo } = require('./comissaoCalc');
 
 // Quando um cliente entra numa coluna do tipo "ganho" (fechado), gera a comissão
 // dele automaticamente na aba Comissões — só uma vez por cliente, mesmo que passe
@@ -18,7 +18,7 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
     const jaExiste = await Contrato.findOne({ cardId: card._id });
     if (jaExiste) return; // já foi gerada antes pra esse cliente, não duplica
 
-    const { value1, value2 } = calcComissaoParcelas(credito);
+    const { parcelas, parcelas1, value, value2 } = calcComissaoPorTipo(credito, card.tipoCarta);
     const hoje = new Date();
     await Contrato.create({
       userId,
@@ -28,9 +28,10 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
       scope: 'Pessoal',
       date: new Date(hoje.getFullYear(), hoje.getMonth(), 1),
       creditoValor: credito,
-      parcelas: COMISSAO_PARCELAS_BLOCO1 + COMISSAO_PARCELAS_BLOCO2,
-      parcelas1: COMISSAO_PARCELAS_BLOCO1,
-      value: value1,
+      tipoCarta: card.tipoCarta || 'imovel',
+      parcelas,
+      parcelas1,
+      value,
       value2,
     });
   } catch (err) {

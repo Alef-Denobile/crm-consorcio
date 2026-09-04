@@ -9,6 +9,7 @@ const contratoSchema = new mongoose.Schema(
     scope: { type: String, enum: ['Pessoal', 'Empresa'], default: 'Pessoal' },
     date: { type: Date, required: true }, // mês da 1ª parcela (dia 1)
     creditoValor: { type: Number, required: true }, // valor da carta de crédito vendida
+    tipoCarta: { type: String, enum: ['imovel', 'veiculo', 'investimento', 'servicos'], default: 'imovel' },
 
     // calculados uma vez, na criação/edição, e guardados — assim o histórico
     // não muda retroativamente se a regra de cálculo mudar no futuro

@@ -479,6 +479,10 @@ main.pipeline-main{ padding-bottom:4px; }
 .chat-interno-wrap{ display:flex; gap:16px; align-items:flex-start; }
 .chat-interno-membros{ width:200px; flex-shrink:0; background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:16px; }
 .chat-membro-item{ font-size:12px; padding:8px 0; border-bottom:1px solid var(--line); color:var(--ink); }
+.chat-membro-btn{ width:100%; text-align:left; background:none; border:none; border-bottom:1px solid var(--line); cursor:pointer; border-radius:6px; padding:8px 8px; font-family:inherit; }
+.chat-membro-btn:hover{ background:var(--hover-tint); }
+.chat-membro-ativo{ background:var(--accent); color:#fff; }
+.chat-membro-eu{ opacity:.55; }
 .chat-membro-item:last-child{ border-bottom:none; }
 .chat-interno-main{ flex:1; min-width:0; background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:16px; display:flex; flex-direction:column; }
 .chat-interno-mensagens{ display:flex; flex-direction:column; gap:8px; max-height:440px; overflow-y:auto; margin-bottom:12px; padding-right:4px; }
