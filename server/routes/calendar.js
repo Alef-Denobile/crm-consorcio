@@ -34,7 +34,7 @@ router.get('/connect-url', auth, (req, res) => {
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',
-    scope: 'https://www.googleapis.com/auth/calendar.events',
+    scope: 'https://www.googleapis.com/auth/calendar',
     state,
   });
   res.json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
