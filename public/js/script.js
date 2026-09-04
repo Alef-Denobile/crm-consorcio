@@ -466,8 +466,19 @@ function mudarMesAgenda(delta){
   agendaMesAtual = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
   loadAgendaMes(agendaMesAtual);
 }
+// Extrai a data (YYYY-MM-DD) certa do vencimento de uma tarefa, em horário local —
+// mesma lógica usada em openEditTask, pra tarefa com horário não "vazar" pro dia
+// seguinte por causa do UTC.
+function dataLocalDaTarefa(vencimentoIso){
+  if(!vencimentoIso) return null;
+  const d = new Date(vencimentoIso);
+  if(isNaN(d.getTime())) return null;
+  const temHora = d.getUTCHours()!==0 || d.getUTCMinutes()!==0;
+  if(temHora) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return vencimentoIso.slice(0,10);
+}
 function itensDoDiaAgenda(diaISO){
-  const tarefasDoDia = agendaTarefas.filter(t=> t.vencimento && t.vencimento.slice(0,10)===diaISO);
+  const tarefasDoDia = agendaTarefas.filter(t=> dataLocalDaTarefa(t.vencimento)===diaISO);
   const eventosDoDia = agendaEventosGoogle.filter(e=> e.inicio && e.inicio.slice(0,10)===diaISO);
   return { tarefasDoDia, eventosDoDia };
 }
@@ -1935,6 +1946,7 @@ async function syncCalendarNow(){
   try{
     await apiRequest('POST', '/tasks/sync-calendar');
     await loadTasks();
+    if(currentPage==='tarefas') await loadAgendaMes(agendaMesAtual); // busca de novo os eventos do Google pro mês em tela
   }catch(e){
     errorMsg = e.message || 'Não foi possível sincronizar com a Google Agenda agora.';
   }
@@ -2212,7 +2224,7 @@ function goToPage(page){
   sidebarOpen = false;
   renderApp();
   if(page === 'tarefas'){
-    if(!agendaLoaded) loadAgendaMes(agendaMesAtual);
+    loadAgendaMes(agendaMesAtual); // busca de novo toda vez, pra sempre trazer eventos criados direto no Google Agenda
     if(calendarConnected && !calendarSyncedOnce){
       calendarSyncedOnce = true;
       syncCalendarNow();
@@ -2405,8 +2417,12 @@ async function saveCardFromModal(){
 /* ---------- mutações: tarefas ---------- */
 async function saveTaskFromModal(){
   if(!taskModalForm.titulo.trim()) return;
-  const { __isNew, id, ...dados } = taskModalForm;
+  const { __isNew, id, hora, ...dados } = taskModalForm;
   if(!dados.leadId) dados.leadId = null;
+  if(dados.vencimento && hora){
+    const combinado = new Date(`${dados.vencimento}T${hora}`);
+    if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
+  }
   try{
     if(__isNew){
       const nova = await apiRequest('POST', '/tasks', dados);
@@ -3616,6 +3632,41 @@ function renderAgendaDiaModal(){
   const dataObj = new Date(diaISO + 'T00:00:00');
   const dataLabel = dataObj.toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' });
 
+  function horaDaTarefa(t){
+    const d = new Date(t.vencimento);
+    if(isNaN(d.getTime()) || (d.getUTCHours()===0 && d.getUTCMinutes()===0)) return null;
+    return d.getHours();
+  }
+  function horaDoEvento(e){
+    if(e.diaInteiro || !e.inicio) return null;
+    const d = new Date(e.inicio);
+    return isNaN(d.getTime()) ? null : d.getHours();
+  }
+
+  const tarefasSemHora = tarefasDoDia.filter(t=>horaDaTarefa(t)===null);
+  const eventosSemHora = eventosDoDia.filter(e=>horaDoEvento(e)===null);
+  const porHora = Array.from({length:24}, ()=>({ tarefas:[], eventos:[] }));
+  tarefasDoDia.forEach(t=>{ const h=horaDaTarefa(t); if(h!==null) porHora[h].tarefas.push(t); });
+  eventosDoDia.forEach(e=>{ const h=horaDoEvento(e); if(h!==null) porHora[h].eventos.push(e); });
+
+  function renderTarefaMini(t){
+    return `
+      <div class="agenda-dia-item">
+        <span class="check-circle ${t.concluida?'checked':''}" data-task-toggle="${t.id}">${t.concluida?ICON_CHECK:''}</span>
+        <div style="flex:1;">
+          <div class="agenda-dia-item-titulo ${t.concluida?'concluida':''}">${esc(t.titulo)}</div>
+          ${t.clienteNome ? `<div class="agenda-dia-item-hora">👤 ${esc(t.clienteNome)}</div>` : ''}
+        </div>
+        <button class="icon-btn" data-task-edit="${t.id}" title="Editar">${ICON_EDIT}</button>
+      </div>
+    `;
+  }
+  function renderEventoMini(e){
+    return `<div class="agenda-hora-evento">📅 ${esc(e.titulo)}</div>`;
+  }
+
+  const horaAtual = new Date().getHours();
+
   root.innerHTML = `
     <div class="overlay" id="agenda-dia-overlay">
       <div class="modal agenda-dia-modal">
@@ -3624,36 +3675,30 @@ function renderAgendaDiaModal(){
           <button id="agenda-dia-close">✕</button>
         </div>
         <div class="modal-body">
-          ${(!tarefasDoDia.length && !eventosDoDia.length) ? `<p class="dash-empty">Nada marcado pra esse dia ainda.</p>` : ''}
-          ${eventosDoDia.length ? `
-            <div class="settings-page-subtitle">Google Agenda</div>
-            ${eventosDoDia.map(e=>`
+          ${(tarefasSemHora.length || eventosSemHora.length) ? `
+            <div class="settings-page-subtitle">Sem horário definido</div>
+            ${eventosSemHora.map(e=>`
               <div class="agenda-dia-item">
                 <span class="agenda-item-dot agenda-item-evento"></span>
-                <div>
-                  <div class="agenda-dia-item-titulo">${esc(e.titulo)}</div>
-                  ${!e.diaInteiro && e.inicio ? `<div class="agenda-dia-item-hora">${formatHora(e.inicio)}</div>` : ''}
+                <div class="agenda-dia-item-titulo">${esc(e.titulo)}</div>
+              </div>
+            `).join('')}
+            ${tarefasSemHora.map(renderTarefaMini).join('')}
+            <div class="settings-sep-line"></div>
+          ` : ''}
+          <div class="agenda-dia-timeline" id="agenda-dia-timeline">
+            ${porHora.map((conteudo, h)=>`
+              <div class="agenda-hora-row ${h===horaAtual?'agenda-hora-atual':''}" id="agenda-hora-${h}" data-action="nova-tarefa-nesta-hora" data-hora="${String(h).padStart(2,'0')}:00">
+                <span class="agenda-hora-label">${String(h).padStart(2,'0')}:00</span>
+                <div class="agenda-hora-conteudo">
+                  ${conteudo.eventos.map(renderEventoMini).join('')}
+                  ${conteudo.tarefas.map(t=>`
+                    <div class="agenda-hora-tarefa ${t.concluida?'concluida':''}" data-task-edit-hora="${t.id}">✓ ${esc(t.titulo)}</div>
+                  `).join('')}
                 </div>
               </div>
             `).join('')}
-          ` : ''}
-          ${tarefasDoDia.length ? `
-            <div class="settings-page-subtitle" style="margin-top:${eventosDoDia.length?'16px':'0'};">Tarefas</div>
-            ${tarefasDoDia.map(t=>{
-              const p = PRIORIDADES[t.prioridade] || PRIORIDADES.media;
-              return `
-                <div class="agenda-dia-item">
-                  <span class="check-circle ${t.concluida?'checked':''}" data-task-toggle="${t.id}">${t.concluida?ICON_CHECK:''}</span>
-                  <div style="flex:1;">
-                    <div class="agenda-dia-item-titulo ${t.concluida?'concluida':''}">${esc(t.titulo)}</div>
-                    ${t.clienteNome ? `<div class="agenda-dia-item-hora">👤 ${esc(t.clienteNome)}</div>` : ''}
-                  </div>
-                  <span class="badge" style="color:${p.color};background:${p.bg}">${p.label}</span>
-                  <button class="icon-btn" data-task-edit="${t.id}" title="Editar">${ICON_EDIT}</button>
-                </div>
-              `;
-            }).join('')}
-          ` : ''}
+          </div>
         </div>
         <div class="modal-foot">
           <span></span>
@@ -3671,8 +3716,23 @@ function renderAgendaDiaModal(){
     closeAgendaDiaModal();
     openNewTask(diaISO);
   });
+  root.querySelectorAll('[data-action="nova-tarefa-nesta-hora"]').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      const hora = row.dataset.hora;
+      closeAgendaDiaModal();
+      openNewTask(diaISO, hora);
+    });
+  });
+  root.querySelectorAll('[data-task-edit-hora]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation(); // não deixa o clique "vazar" pra linha da hora (que abriria nova tarefa)
+      closeAgendaDiaModal();
+      openEditTask(el.dataset.taskEditHora);
+    });
+  });
   root.querySelectorAll('[data-task-toggle]').forEach(el=>{
-    el.addEventListener('click', async ()=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
       await toggleTaskConcluida(el.dataset.taskToggle);
       renderAgendaDiaModal();
     });
@@ -3683,6 +3743,12 @@ function renderAgendaDiaModal(){
       openEditTask(el.dataset.taskEdit);
     });
   });
+
+  // Rola a linha do tempo até perto da hora atual (ou a 1ª hora com algo marcado, se for antes)
+  const primeiraComItem = porHora.findIndex(c=>c.tarefas.length||c.eventos.length);
+  const horaAlvo = primeiraComItem !== -1 && primeiraComItem < horaAtual ? primeiraComItem : horaAtual;
+  const linhaAlvo = document.getElementById(`agenda-hora-${Math.max(0, horaAlvo-1)}`);
+  if(linhaAlvo) linhaAlvo.scrollIntoView({ block:'start' });
 }
 
 function renderTarefasPage(){
@@ -5133,14 +5199,34 @@ function renderModal(){
 }
 
 /* ---------- modal da tarefa ---------- */
-function openNewTask(dataPreenchida){
-  taskModalForm = { __isNew:true, id:null, titulo:'', vencimento: dataPreenchida||'', prioridade:'media', leadId:'', descricao:'' };
+function openNewTask(dataPreenchida, horaPreenchida){
+  taskModalForm = { __isNew:true, id:null, titulo:'', vencimento: dataPreenchida||'', hora: horaPreenchida||'', prioridade:'media', leadId:'', descricao:'' };
   renderTaskModal();
 }
 function openEditTask(id){
   const t = tasks.find(x=>x.id===id);
   if(!t) return;
-  taskModalForm = { ...t, __isNew:false, vencimento: t.vencimento ? t.vencimento.slice(0,10) : '', leadId: t.leadId || '' };
+  let hora = '';
+  let dataStr = '';
+  if(t.vencimento){
+    const d = new Date(t.vencimento);
+    if(!isNaN(d.getTime())){
+      // Usa hora em UTC (não local) pra checar se tem horário definido: tarefa sem hora
+      // é salva como meia-noite UTC — em horário local (Brasil, UTC-3) isso apareceria
+      // como "21:00 do dia anterior" se checássemos em hora local, o que é errado.
+      const temHora = d.getUTCHours()!==0 || d.getUTCMinutes()!==0;
+      if(temHora){
+        // Tem horário de verdade: usa data E hora em horário LOCAL, já que foi isso
+        // que a pessoa digitou (senão uma tarefa de 23h vira o dia seguinte por causa do UTC).
+        hora = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        dataStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      } else {
+        // Sem horário (só data) — o valor já é meia-noite UTC, pega a data direto da string.
+        dataStr = t.vencimento.slice(0,10);
+      }
+    }
+  }
+  taskModalForm = { ...t, __isNew:false, vencimento: dataStr, hora, leadId: t.leadId || '' };
   renderTaskModal();
 }
 function closeTaskModal(){ taskModalForm = null; document.getElementById('modal-root').innerHTML=''; }
@@ -5267,6 +5353,10 @@ function renderTaskModal(){
               <input type="date" id="t-vencimento" value="${f.vencimento||''}" />
             </div>
             <div class="field">
+              <label>Hora (opcional)</label>
+              <input type="time" id="t-hora" value="${f.hora||''}" />
+            </div>
+            <div class="field">
               <label>Prioridade</label>
               <select id="t-prioridade">
                 ${Object.entries(PRIORIDADES).map(([key,p])=>`<option value="${key}" ${f.prioridade===key?'selected':''}>${p.label}</option>`).join('')}
@@ -5302,6 +5392,7 @@ function renderTaskModal(){
 
   document.getElementById('t-titulo').addEventListener('input', (e)=> taskModalForm.titulo = e.target.value);
   document.getElementById('t-vencimento').addEventListener('change', (e)=> taskModalForm.vencimento = e.target.value);
+  document.getElementById('t-hora').addEventListener('change', (e)=> taskModalForm.hora = e.target.value);
   document.getElementById('t-prioridade').addEventListener('change', (e)=> taskModalForm.prioridade = e.target.value);
   document.getElementById('t-lead').addEventListener('change', (e)=> taskModalForm.leadId = e.target.value);
   document.getElementById('t-descricao').addEventListener('input', (e)=> taskModalForm.descricao = e.target.value);
