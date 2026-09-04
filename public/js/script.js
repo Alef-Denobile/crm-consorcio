@@ -3123,8 +3123,10 @@ function renderSidebar(){
           <button class="nav-item ${currentPage===key?'active':''}" data-action="nav" data-page="${key}">${icon}<span>${label}</span></button>
         `).join('')}
       </nav>
-      <div class="sidebar-footer">
+      <div class="nav-reordenar-wrap">
         <button class="nav-item nav-reordenar-btn" data-action="abrir-reordenar-nav" title="Mudar a ordem das abas">${ICON_REORDER}<span>Reordenar abas</span></button>
+      </div>
+      <div class="sidebar-footer">
         <button class="nav-item ${currentPage==='suporte'?'active':''}" data-action="nav" data-page="suporte">${ICON_SUPORTE}<span>Suporte</span></button>
         <button class="nav-item ${currentPage==='configuracoes'?'active':''}" data-action="nav" data-page="configuracoes">${ICON_SETTINGS}<span>Configurações</span></button>
         <button class="nav-item logout-item" data-action="logout">${ICON_LOGOUT}<span>Sair</span></button>
