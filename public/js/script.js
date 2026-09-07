@@ -293,6 +293,8 @@ let nomeNovoVal = '';
 let nomeMsg = null;
 let verificandoAtualizacao = false;
 let backupGerando = false;
+let backupImportando = false;
+let backupMsg = null;
 let atualizacaoMsg = null;
 let nomeSalvando = false;
 let modalAlterarNomeAberto = false;
@@ -1947,9 +1949,47 @@ async function disconnectGoogleCalendar(){
   }
   renderApp();
 }
+function escolherArquivoBackup(){
+  const input = document.getElementById('backup-import-input');
+  if(input) input.click();
+}
+async function importarArquivoBackup(file){
+  if(!file) return;
+  showConfirm({
+    message: 'Restaurar esse backup? Isso atualiza clientes, tarefas e outros dados que já existirem com o mesmo identificador, e cria o que estiver faltando. Nada é apagado.',
+    onConfirm: async ()=>{
+      closeConfirm();
+      backupImportando = true;
+      backupMsg = null;
+      renderApp();
+      try{
+        const texto = await file.text();
+        const dados = JSON.parse(texto);
+        const token = getToken();
+        const res = await fetch(API_BASE + '/backup/importar-tudo', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados),
+        });
+        const resposta = await res.json();
+        if(!res.ok) throw new Error(resposta.error || 'Não foi possível importar o backup.');
+        const totalOk = Object.values(resposta.resultado||{}).reduce((s,r)=>s+(r.ok||0),0);
+        const totalErro = Object.values(resposta.resultado||{}).reduce((s,r)=>s+(r.erro||0),0);
+        backupMsg = { tipo:'ok', texto: `Backup restaurado: ${totalOk} registro(s) atualizado(s)${totalErro?`, ${totalErro} com erro`:''}.` };
+        // recarrega os dados principais da tela, já que podem ter mudado
+        await Promise.all([loadBoard(), loadTasks(), loadContratos()]);
+      }catch(e){
+        backupMsg = { tipo:'erro', texto: e.message || 'Arquivo inválido ou erro ao importar.' };
+      }
+      backupImportando = false;
+      renderApp();
+    },
+  });
+}
 async function baixarBackupCompleto(){
   if(backupGerando) return;
   backupGerando = true;
+  backupMsg = null;
   renderApp();
   try{
     const token = getToken();
@@ -1967,7 +2007,7 @@ async function baixarBackupCompleto(){
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }catch(e){
-    errorMsg = e.message || 'Não foi possível gerar o backup agora.';
+    backupMsg = { tipo:'erro', texto: e.message || 'Não foi possível gerar o backup agora.' };
   }
   backupGerando = false;
   renderApp();
@@ -4057,7 +4097,7 @@ function renderConfiguracoesPage(){
       <button class="tab-btn" data-action="scroll-to-config" data-target="config-perfil">Perfil</button>
       <button class="tab-btn" data-action="scroll-to-config" data-target="config-integracoes">Integrações</button>
       <button class="tab-btn" data-action="scroll-to-config" data-target="config-aparencia">Aparência</button>
-      <button class="tab-btn" data-action="scroll-to-config" data-target="config-sobre">Sobre</button>
+      <button class="tab-btn" data-action="scroll-to-config" data-target="config-sobre">Manutenção</button>
     </div>
 
     <section id="config-perfil" class="config-group">
@@ -4331,19 +4371,31 @@ function renderConfiguracoesPage(){
     </section>
 
     <section id="config-sobre" class="config-group">
-      <h2 class="config-group-title">Sobre o aplicativo</h2>
-      <div class="settings-page-grid">
-        <div class="settings-page-section">
-          <h3>Atualizações</h3>
-          <p class="settings-page-note">Se o painel parecer desatualizado (algo que já mudou e não aparece), use esse botão pra forçar buscar a versão mais nova — principalmente útil no app instalado no celular.</p>
-          ${atualizacaoMsg ? `<p class="settings-page-msg ${atualizacaoMsg.tipo}">${esc(atualizacaoMsg.texto)}</p>` : ''}
-          <button class="btn-outline" data-action="verificar-atualizacao" ${verificandoAtualizacao?'disabled':''}>${verificandoAtualizacao?'Verificando…':'Verificar atualizações'}</button>
+      <h2 class="config-group-title">Manutenção</h2>
+      <div class="settings-page-section" style="margin-bottom:20px;">
+        <h3>Backup dos seus dados</h3>
+        <p class="settings-page-note">Guarda uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações — útil de tempos em tempos, ou antes de fazer alguma mudança grande.</p>
+        ${backupMsg ? `<p class="settings-page-msg ${backupMsg.tipo}">${esc(backupMsg.texto)}</p>` : ''}
+        <div class="settings-page-subtitle" style="margin-top:14px;">Opções de backup</div>
+        <div class="backup-opcoes-row">
+          <div class="backup-opcao-card">
+            <div class="backup-opcao-titulo">⬇ Exportar</div>
+            <p class="settings-page-note">Baixa um arquivo .json com tudo, pra guardar num lugar seguro (Google Drive, por exemplo).</p>
+            <button class="btn-outline" data-action="baixar-backup" ${backupGerando?'disabled':''}>${backupGerando?'Gerando…':'Baixar backup completo'}</button>
+          </div>
+          <div class="backup-opcao-card">
+            <div class="backup-opcao-titulo">⬆ Importar</div>
+            <p class="settings-page-note">Restaura a partir de um arquivo .json de backup — atualiza o que já existe e cria o que estiver faltando, sem apagar nada.</p>
+            <input type="file" id="backup-import-input" accept="application/json" style="display:none;" />
+            <button class="btn-outline" data-action="escolher-arquivo-backup" ${backupImportando?'disabled':''}>${backupImportando?'Importando…':'Escolher arquivo e restaurar'}</button>
+          </div>
         </div>
-        <div class="settings-page-section">
-          <h3>Backup dos seus dados</h3>
-          <p class="settings-page-note">Baixa um arquivo com todos os seus clientes, tarefas, comissões, mensagens e configurações — guarde num lugar seguro (Google Drive, por exemplo) de tempos em tempos.</p>
-          <button class="btn-outline" data-action="baixar-backup" ${backupGerando?'disabled':''}>${backupGerando?'Gerando…':'⬇ Baixar backup completo'}</button>
-        </div>
+      </div>
+      <div class="settings-page-section">
+        <h3>Atualizações</h3>
+        <p class="settings-page-note">Se o painel parecer desatualizado (algo que já mudou e não aparece), use esse botão pra forçar buscar a versão mais nova — principalmente útil no app instalado no celular.</p>
+        ${atualizacaoMsg ? `<p class="settings-page-msg ${atualizacaoMsg.tipo}">${esc(atualizacaoMsg.texto)}</p>` : ''}
+        <button class="btn-outline" data-action="verificar-atualizacao" ${verificandoAtualizacao?'disabled':''}>${verificandoAtualizacao?'Verificando…':'Verificar atualizações'}</button>
       </div>
     </section>
   `;
@@ -4384,6 +4436,14 @@ function bindAppEvents(){
   if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
   const baixarBackupBtn = app.querySelector('[data-action="baixar-backup"]');
   if(baixarBackupBtn) baixarBackupBtn.addEventListener('click', baixarBackupCompleto);
+  const escolherArquivoBackupBtn = app.querySelector('[data-action="escolher-arquivo-backup"]');
+  if(escolherArquivoBackupBtn) escolherArquivoBackupBtn.addEventListener('click', escolherArquivoBackup);
+  const backupImportInput = document.getElementById('backup-import-input');
+  if(backupImportInput) backupImportInput.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    e.target.value = ''; // permite escolher o mesmo arquivo de novo depois, se precisar
+    importarArquivoBackup(file);
+  });
 
   /* -- Conversas (3 colunas) -- */
   const conversasBuscaInput = document.getElementById('conversas-busca-input');

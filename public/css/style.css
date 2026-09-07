@@ -669,3 +669,8 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .leads-bulk-bar .btn-outline{ background:rgba(255,255,255,.15); border-color:rgba(255,255,255,.4); color:#fff; padding:6px 12px; min-height:auto; }
 .leads-bulk-bar .delete-link{ color:#ffd7d7; padding:6px 12px; min-height:auto; }
 .lead-row-selecionada{ background:var(--hover-tint); }
+
+/* ---------- Manutenção: opções de backup (exportar/importar) ---------- */
+.backup-opcoes-row{ display:flex; gap:16px; flex-wrap:wrap; }
+.backup-opcao-card{ flex:1; min-width:240px; background:var(--col-bg); border:1px solid var(--line); border-radius:12px; padding:16px; }
+.backup-opcao-titulo{ font-size:14px; font-weight:600; color:var(--ink); margin-bottom:6px; }

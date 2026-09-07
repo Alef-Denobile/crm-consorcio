@@ -36,7 +36,7 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/crm_consorcio';
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // API (auth é pública; as outras exigem login dentro de cada rota)
 app.use('/api/auth', authRoutes);
