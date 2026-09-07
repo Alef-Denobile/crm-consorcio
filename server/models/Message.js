@@ -10,6 +10,8 @@ const messageSchema = new mongoose.Schema(
     whatsappMessageId: { type: String, default: null },
     timestamp: { type: Date, default: Date.now },
     enviadoPorAgente: { type: Boolean, default: false }, // true = respondida sozinha pelo agente de IA, não por um humano
+    anexoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Anexo', default: null }, // preenchido quando a mensagem trouxe mídia (foto, áudio, documento)
+    midiaTipo: { type: String, default: null }, // 'image' | 'audio' | 'document' | 'video' | null
   },
   {
     timestamps: true,
@@ -17,6 +19,7 @@ const messageSchema = new mongoose.Schema(
       transform: (_doc, ret) => {
         ret.id = ret._id.toString();
         ret.cardId = ret.cardId ? ret.cardId.toString() : null;
+        ret.anexoId = ret.anexoId ? ret.anexoId.toString() : null;
         delete ret._id;
         delete ret.__v;
       },

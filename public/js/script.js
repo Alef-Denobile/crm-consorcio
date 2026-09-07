@@ -159,6 +159,9 @@ let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
 let mostrarArquivados = false;
+let leadsSelecionados = new Set();
+let leadsBulkEtiquetaAberta = false;
+let leadsBulkEtiquetaValor = '';
 let tarefasShowConcluidas = false;
 let agendaMesAtual = currentMonthKey();
 let agendaLoaded = false;
@@ -289,6 +292,7 @@ let contratoModalForm = null;
 let nomeNovoVal = '';
 let nomeMsg = null;
 let verificandoAtualizacao = false;
+let backupGerando = false;
 let atualizacaoMsg = null;
 let nomeSalvando = false;
 let modalAlterarNomeAberto = false;
@@ -783,6 +787,19 @@ function statusMensagemIcone(status){
   if(status === 'sent') return `<span class="wa-status" title="Enviada">✓</span>`;
   return '';
 }
+// Monta o conteúdo de uma mensagem — texto normal, ou a mídia (foto/áudio/documento/vídeo)
+// quando ela tiver um anexo vinculado. Reaproveitado nas duas telas de chat do app.
+function renderConteudoMensagem(m){
+  if(!m.anexo) return `<p>${esc(m.texto)}</p>`;
+  const a = m.anexo;
+  if(m.midiaTipo==='image'){
+    return `<img src="${a.dadosBase64}" alt="${esc(a.nomeArquivo)}" class="wa-msg-imagem" />`;
+  }
+  if(m.midiaTipo==='audio'){
+    return `<audio controls src="${a.dadosBase64}" class="wa-msg-audio"></audio>`;
+  }
+  return `<a href="${a.dadosBase64}" download="${esc(a.nomeArquivo)}" class="wa-msg-arquivo">${m.midiaTipo==='video'?'🎥':'📄'} ${esc(a.nomeArquivo)}</a>`;
+}
 function renderConversaWhatsapp(mensagens){
   const box = document.getElementById('f-wa-conversa');
   if(!box) return;
@@ -790,7 +807,7 @@ function renderConversaWhatsapp(mensagens){
     <div class="wa-conversa-lista">
       ${mensagens.length ? mensagens.map(m=>`
         <div class="wa-msg wa-msg-${m.direction}">
-          <p>${esc(m.texto)}</p>
+          ${renderConteudoMensagem(m)}
           <span>${new Date(m.timestamp).toLocaleString('pt-BR')} ${m.direction==='out' ? statusMensagemIcone(m.status) : ''}</span>
         </div>
       `).join('') : '<p class="settings-page-note">Nenhuma mensagem ainda.</p>'}
@@ -1822,13 +1839,22 @@ function relatoriosDadosMensais(mesesAtras, cardsBase){
   const agora = new Date();
   for(let i=mesesAtras-1;i>=0;i--){
     const d = new Date(agora.getFullYear(), agora.getMonth()-i, 1);
-    buckets.push({ key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, novos:0 });
+    buckets.push({ key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, novos:0, ganhoValor:0, ganhoQtd:0 });
   }
   const porKey = new Map(buckets.map(b=>[b.key,b]));
   cards.forEach(c=>{
-    if(!c.createdAt) return;
-    const bucket = porKey.get(c.createdAt.slice(0,7));
-    if(bucket) bucket.novos++;
+    if(c.createdAt){
+      const bucket = porKey.get(c.createdAt.slice(0,7));
+      if(bucket) bucket.novos++;
+    }
+    if(c.mes){
+      const bucketGanho = porKey.get(c.mes);
+      const col = board.columns.find(k=>k.id===c.columnId);
+      if(bucketGanho && col && col.tipo==='ganho'){
+        bucketGanho.ganhoValor += Number(c.valor)||0;
+        bucketGanho.ganhoQtd++;
+      }
+    }
   });
   return buckets;
 }
@@ -1919,6 +1945,31 @@ async function disconnectGoogleCalendar(){
   }catch(e){
     errorMsg = 'Não foi possível desconectar da Google Agenda.';
   }
+  renderApp();
+}
+async function baixarBackupCompleto(){
+  if(backupGerando) return;
+  backupGerando = true;
+  renderApp();
+  try{
+    const token = getToken();
+    const res = await fetch(API_BASE + '/backup/exportar-tudo', {
+      headers: { 'Authorization': 'Bearer ' + token },
+    });
+    if(!res.ok) throw new Error('Não foi possível gerar o backup agora.');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup-painel-crm-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível gerar o backup agora.';
+  }
+  backupGerando = false;
   renderApp();
 }
 async function verificarAtualizacaoApp(){
@@ -2289,6 +2340,67 @@ async function deleteCardById(id){
     errorMsg = 'Não foi possível excluir o cliente.';
     renderApp();
   }
+}
+
+function toggleSelecaoLead(id){
+  if(leadsSelecionados.has(id)) leadsSelecionados.delete(id);
+  else leadsSelecionados.add(id);
+  renderApp();
+}
+function toggleSelecionarTodosLeads(idsVisiveis){
+  const todosJaSelecionados = idsVisiveis.length>0 && idsVisiveis.every(id=>leadsSelecionados.has(id));
+  if(todosJaSelecionados) idsVisiveis.forEach(id=>leadsSelecionados.delete(id));
+  else idsVisiveis.forEach(id=>leadsSelecionados.add(id));
+  renderApp();
+}
+async function bulkMoverLeads(columnId){
+  if(!columnId || !leadsSelecionados.size) return;
+  const ids = [...leadsSelecionados];
+  leadsSelecionados.clear();
+  renderApp();
+  await Promise.all(ids.map(id=> moveCard(id, columnId)));
+}
+async function bulkArquivarLeads(){
+  const ids = [...leadsSelecionados];
+  leadsSelecionados.clear();
+  renderApp();
+  await Promise.all(ids.map(async (id)=>{
+    try{
+      const atualizado = await apiRequest('PUT', `/cards/${id}/arquivar`);
+      const idx = board.cards.findIndex(c=>c.id===id);
+      if(idx>-1) board.cards[idx] = atualizado;
+    }catch(e){ /* segue tentando os outros mesmo se um falhar */ }
+  }));
+  renderApp();
+}
+async function bulkExcluirLeads(){
+  const ids = [...leadsSelecionados];
+  leadsSelecionados.clear();
+  for(const id of ids) await deleteCardById(id);
+}
+function confirmarBulkEtiqueta(){
+  const valor = leadsBulkEtiquetaValor;
+  leadsBulkEtiquetaAberta = false;
+  leadsBulkEtiquetaValor = '';
+  bulkEtiquetaLeads(valor);
+}
+async function bulkEtiquetaLeads(etiqueta){
+  if(!etiqueta.trim()) return;
+  const ids = [...leadsSelecionados];
+  leadsSelecionados.clear();
+  renderApp();
+  await Promise.all(ids.map(async (id)=>{
+    const card = board.cards.find(c=>c.id===id);
+    if(!card) return;
+    const etiquetasAtuais = card.etiquetas || [];
+    if(etiquetasAtuais.includes(etiqueta.trim())) return;
+    const novasEtiquetas = [...etiquetasAtuais, etiqueta.trim()];
+    try{
+      await apiRequest('PUT', `/cards/${id}`, { etiquetas: novasEtiquetas });
+      card.etiquetas = novasEtiquetas;
+    }catch(e){ /* segue tentando os outros mesmo se um falhar */ }
+  }));
+  renderApp();
 }
 
 async function renameColumn(id, nome){
@@ -3570,6 +3682,8 @@ function renderCard(card){
 /* ---------- página: Leads ---------- */
 function renderLeadsPage(){
   const leads = filteredLeads();
+  const idsVisiveis = leads.map(c=>c.id);
+  const todosSelecionados = idsVisiveis.length>0 && idsVisiveis.every(id=>leadsSelecionados.has(id));
   return `
     <div class="page-head">
       <div>
@@ -3589,21 +3703,44 @@ function renderLeadsPage(){
       <button class="btn-outline ${mostrarArquivados?'active':''}" data-action="toggle-mostrar-arquivados">${mostrarArquivados?'Voltar aos ativos':'📦 Ver arquivados'}</button>
     </div>
 
+    ${leadsSelecionados.size ? `
+      <div class="leads-bulk-bar">
+        <span>${leadsSelecionados.size} selecionado${leadsSelecionados.size===1?'':'s'}</span>
+        <select id="leads-bulk-coluna">
+          <option value="">Mover para…</option>
+          ${board.columns.map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('')}
+        </select>
+        <button class="btn-outline" data-action="leads-bulk-etiqueta">+ Etiqueta</button>
+        ${leadsBulkEtiquetaAberta ? `
+          <input type="text" id="leads-bulk-etiqueta-input" placeholder="Nome da etiqueta" value="${esc(leadsBulkEtiquetaValor)}" style="width:140px;" autofocus />
+          <button class="btn-primary" data-action="leads-bulk-etiqueta-confirmar">Aplicar</button>
+        ` : ''}
+        <button class="btn-outline" data-action="leads-bulk-arquivar">📦 Arquivar</button>
+        <button class="delete-link" data-action="leads-bulk-excluir">🗑 Excluir</button>
+        <button class="icon-btn" data-action="leads-bulk-limpar" title="Cancelar seleção" style="margin-left:auto;">✕</button>
+      </div>
+    ` : ''}
+
     <div class="leads-table-wrap">
       <table class="leads-table">
         <thead>
-          <tr><th>Nome</th><th>Contato</th><th>Etapa</th><th>Valor</th><th></th></tr>
+          <tr>
+            <th style="width:34px;"><span class="check-circle ${todosSelecionados?'checked':''}" data-action="leads-select-all">${todosSelecionados?ICON_CHECK:''}</span></th>
+            <th>Nome</th><th>Contato</th><th>Etapa</th><th>Valor</th><th></th>
+          </tr>
         </thead>
         <tbody>
           ${leads.length ? leads.map(c=>{
             const col = board.columns.find(k=>k.id===c.columnId);
             const tipo = col ? (TIPOS[col.tipo] || TIPOS.aberto) : TIPOS.aberto;
+            const marcado = leadsSelecionados.has(c.id);
             return `
-              <tr class="clickable" data-action="open-edit-card" data-card-id="${c.id}">
-                <td>${esc(c.cliente) || 'Sem nome'}</td>
-                <td>${c.telefone ? esc(c.telefone) : '—'}</td>
-                <td><span class="badge" style="color:${tipo.color};background:${tipo.bg};${tipo.strike?'text-decoration:line-through;':''}">${col ? esc(col.nome) : '—'}</span></td>
-                <td>${fmtBRL(c.valor)}</td>
+              <tr class="${marcado?'lead-row-selecionada':''}">
+                <td><span class="check-circle ${marcado?'checked':''}" data-action="leads-select-um" data-card-id="${c.id}">${marcado?ICON_CHECK:''}</span></td>
+                <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${esc(c.cliente) || 'Sem nome'}</td>
+                <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${c.telefone ? esc(c.telefone) : '—'}</td>
+                <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}"><span class="badge" style="color:${tipo.color};background:${tipo.bg};${tipo.strike?'text-decoration:line-through;':''}">${col ? esc(col.nome) : '—'}</span></td>
+                <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${fmtBRL(c.valor)}</td>
                 <td>
                   <div class="leads-row-actions">
                     ${c.telefone ? `<button class="icon-btn" data-action="open-whatsapp" data-phone="${esc(c.telefone)}" title="WhatsApp">${WA_ICON}</button>` : ''}
@@ -3611,7 +3748,7 @@ function renderLeadsPage(){
                 </td>
               </tr>
             `;
-          }).join('') : `<tr class="leads-empty-row"><td colspan="5">Nenhum lead encontrado. Cadastre o primeiro no botão "Novo lead".</td></tr>`}
+          }).join('') : `<tr class="leads-empty-row"><td colspan="6">Nenhum lead encontrado. Cadastre o primeiro no botão "Novo lead".</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -4202,6 +4339,11 @@ function renderConfiguracoesPage(){
           ${atualizacaoMsg ? `<p class="settings-page-msg ${atualizacaoMsg.tipo}">${esc(atualizacaoMsg.texto)}</p>` : ''}
           <button class="btn-outline" data-action="verificar-atualizacao" ${verificandoAtualizacao?'disabled':''}>${verificandoAtualizacao?'Verificando…':'Verificar atualizações'}</button>
         </div>
+        <div class="settings-page-section">
+          <h3>Backup dos seus dados</h3>
+          <p class="settings-page-note">Baixa um arquivo com todos os seus clientes, tarefas, comissões, mensagens e configurações — guarde num lugar seguro (Google Drive, por exemplo) de tempos em tempos.</p>
+          <button class="btn-outline" data-action="baixar-backup" ${backupGerando?'disabled':''}>${backupGerando?'Gerando…':'⬇ Baixar backup completo'}</button>
+        </div>
       </div>
     </section>
   `;
@@ -4240,6 +4382,8 @@ function bindAppEvents(){
   });
   const verificarAtualizacaoBtn = app.querySelector('[data-action="verificar-atualizacao"]');
   if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
+  const baixarBackupBtn = app.querySelector('[data-action="baixar-backup"]');
+  if(baixarBackupBtn) baixarBackupBtn.addEventListener('click', baixarBackupCompleto);
 
   /* -- Conversas (3 colunas) -- */
   const conversasBuscaInput = document.getElementById('conversas-busca-input');
@@ -4721,6 +4865,42 @@ function bindAppEvents(){
   if(exportarLeadsBtn) exportarLeadsBtn.addEventListener('click', exportarLeads);
   const toggleArquivadosBtn = app.querySelector('[data-action="toggle-mostrar-arquivados"]');
   if(toggleArquivadosBtn) toggleArquivadosBtn.addEventListener('click', ()=>{ mostrarArquivados = !mostrarArquivados; renderApp(); });
+
+  /* -- Leads: seleção e ações em massa -- */
+  const selectAllEl = app.querySelector('[data-action="leads-select-all"]');
+  if(selectAllEl){
+    selectAllEl.addEventListener('click', ()=>{
+      const idsVisiveis = filteredLeads().map(c=>c.id);
+      toggleSelecionarTodosLeads(idsVisiveis);
+    });
+  }
+  app.querySelectorAll('[data-action="leads-select-um"]').forEach(el=>{
+    el.addEventListener('click', ()=> toggleSelecaoLead(el.dataset.cardId));
+  });
+  const bulkColunaSelect = document.getElementById('leads-bulk-coluna');
+  if(bulkColunaSelect) bulkColunaSelect.addEventListener('change', (e)=> bulkMoverLeads(e.target.value));
+  const bulkArquivarBtn = app.querySelector('[data-action="leads-bulk-arquivar"]');
+  if(bulkArquivarBtn) bulkArquivarBtn.addEventListener('click', bulkArquivarLeads);
+  const bulkExcluirBtn = app.querySelector('[data-action="leads-bulk-excluir"]');
+  if(bulkExcluirBtn) bulkExcluirBtn.addEventListener('click', ()=>{
+    const qtd = leadsSelecionados.size;
+    showConfirm({
+      message: `Excluir ${qtd} cliente${qtd===1?'':'s'} selecionado${qtd===1?'':'s'}? Essa ação não pode ser desfeita.`,
+      onConfirm: ()=>{ bulkExcluirLeads(); closeConfirm(); },
+    });
+  });
+  const bulkLimparBtn = app.querySelector('[data-action="leads-bulk-limpar"]');
+  if(bulkLimparBtn) bulkLimparBtn.addEventListener('click', ()=>{ leadsSelecionados.clear(); renderApp(); });
+  const bulkEtiquetaBtn = app.querySelector('[data-action="leads-bulk-etiqueta"]');
+  if(bulkEtiquetaBtn) bulkEtiquetaBtn.addEventListener('click', ()=>{ leadsBulkEtiquetaAberta = true; renderApp(); });
+  const bulkEtiquetaInput = document.getElementById('leads-bulk-etiqueta-input');
+  if(bulkEtiquetaInput){
+    bulkEtiquetaInput.addEventListener('input', (e)=> leadsBulkEtiquetaValor = e.target.value);
+    bulkEtiquetaInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') confirmarBulkEtiqueta(); });
+  }
+  const bulkEtiquetaConfirmarBtn = app.querySelector('[data-action="leads-bulk-etiqueta-confirmar"]');
+  if(bulkEtiquetaConfirmarBtn) bulkEtiquetaConfirmarBtn.addEventListener('click', confirmarBulkEtiqueta);
+
   const leadsSearchInput = document.getElementById('leads-search-input');
   if(leadsSearchInput) leadsSearchInput.addEventListener('input', (e)=>{
     const cursorPos = e.target.selectionStart;
@@ -5464,7 +5644,7 @@ function renderConversasPage(){
             <div class="wa-conversa-lista conversas-chat-lista" id="conversas-chat-lista">
               ${conversaMensagens.length ? conversaMensagens.map(m=>`
                 <div class="wa-msg wa-msg-${m.direction}">
-                  <p>${esc(m.texto)}</p>
+                  ${renderConteudoMensagem(m)}
                   <span>${new Date(m.timestamp).toLocaleString('pt-BR')} ${m.direction==='out' ? statusMensagemIcone(m.status) : ''}</span>
                 </div>
               `).join('') : '<p class="settings-page-note">Nenhuma mensagem ainda.</p>'}
@@ -5635,8 +5815,9 @@ function cardsParaRelatorio(){
 }
 function renderRelatoriosPage(){
   const cardsRel = cardsParaRelatorio();
-  const dados = relatoriosDadosMensais(6, cardsRel);
+  const dados = relatoriosDadosMensais(12, cardsRel);
   const maxNovos = Math.max(1, ...dados.map(d=>d.novos));
+  const maxGanhoValor = Math.max(1, ...dados.map(d=>d.ganhoValor));
   const totalGanho = cardsRel.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='ganho' ? s+(Number(c.valor)||0) : s; },0);
   const totalPerdido = cardsRel.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='perdido' ? s+(Number(c.valor)||0) : s; },0);
   const porTemp = ['quente','morno','frio'].map(t=>({ temp:t, count: cardsRel.filter(c=>c.temperatura===t).length }));
@@ -5645,7 +5826,7 @@ function renderRelatoriosPage(){
     <div class="page-head">
       <div>
         <h1>Relatórios</h1>
-        <p>Visão consolidada dos últimos 6 meses</p>
+        <p>Visão consolidada dos últimos 12 meses</p>
       </div>
       <div class="page-head-actions">
         <select id="relatorio-funil-select" class="leads-filter">
@@ -5661,6 +5842,18 @@ function renderRelatoriosPage(){
       <div class="metric-card"><div class="metric-card-top"><span>Total ganho</span></div><div class="metric-value">${fmtBRL(totalGanho)}</div></div>
       <div class="metric-card"><div class="metric-card-top"><span>Total perdido</span></div><div class="metric-value">${fmtBRL(totalPerdido)}</div></div>
       <div class="metric-card"><div class="metric-card-top"><span>Total de leads</span></div><div class="metric-value">${cardsRel.length}</div></div>
+    </div>
+
+    <div class="dash-panel">
+      <div class="dash-panel-title">Valor ganho por mês (histórico)</div>
+      <div class="stage-list">
+        ${dados.map(d=>`
+          <div class="stage-row">
+            <div class="stage-row-top"><span>${monthLabel(d.key)}</span><span>${fmtBRL(d.ganhoValor)} ${d.ganhoQtd?`· ${d.ganhoQtd} venda${d.ganhoQtd===1?'':'s'}`:''}</span></div>
+            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${d.ganhoValor/maxGanhoValor*100}%"></div></div>
+          </div>
+        `).join('')}
+      </div>
     </div>
 
     <div class="dash-panel">

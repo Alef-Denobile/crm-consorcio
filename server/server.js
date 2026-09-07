@@ -23,6 +23,7 @@ const camposPersonalizadosRoutes = require('./routes/camposPersonalizados');
 const possiveisLeadsRoutes = require('./routes/possiveisLeads');
 const metasRoutes = require('./routes/metas');
 const auditoriaRoutes = require('./routes/auditoria');
+const backupRoutes = require('./routes/backup');
 
 const app = express();
 // O Render (e a maioria dos serviços de hospedagem) fica atrás de um proxy: o HTTPS
@@ -57,6 +58,7 @@ app.use('/api/campos-personalizados', camposPersonalizadosRoutes);
 app.use('/api/possiveis-leads', possiveisLeadsRoutes);
 app.use('/api/metas', metasRoutes);
 app.use('/api/auditoria', auditoriaRoutes);
+app.use('/api/backup', backupRoutes);
 
 // front-end estático (a pasta public com index.html, css e js)
 app.use(express.static(path.join(__dirname, '..', 'public')));

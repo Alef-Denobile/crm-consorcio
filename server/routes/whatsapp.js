@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
 const Message = require('../models/Message');
+const Anexo = require('../models/Anexo');
 const { perguntarClaude } = require('../utils/anthropic');
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
 
@@ -18,6 +19,43 @@ function normalizarTelefone(str) {
   if (!digitos) return null;
   if (digitos.length <= 11) digitos = '55' + digitos;
   return digitos;
+}
+
+// Baixa uma mídia recebida pelo WhatsApp (foto, áudio, documento, vídeo) usando o
+// mediaId que a Meta manda no webhook, e guarda como Anexo do cliente — igual já
+// fazemos com anexos enviados manualmente no card. Nunca lança erro pra fora: se a
+// mídia não puder ser baixada, a mensagem de texto (legenda) ainda é salva normalmente.
+async function baixarMidiaDoWhatsapp(user, card, mediaId, nomeSugerido) {
+  try {
+    const metaResp = await fetch(`${GRAPH_API}/${mediaId}`, {
+      headers: { Authorization: `Bearer ${user.whatsappBusiness.accessToken}` },
+    });
+    const meta = await metaResp.json();
+    if (!metaResp.ok || !meta.url) return null;
+
+    const arquivoResp = await fetch(meta.url, {
+      headers: { Authorization: `Bearer ${user.whatsappBusiness.accessToken}` },
+    });
+    if (!arquivoResp.ok) return null;
+    const buffer = Buffer.from(await arquivoResp.arrayBuffer());
+    // limite de ~3MB, igual aos anexos manuais — mídia maior que isso não é salva
+    if (buffer.length > 3 * 1024 * 1024) return null;
+
+    const mimeType = meta.mime_type || 'application/octet-stream';
+    const dadosBase64 = `data:${mimeType};base64,${buffer.toString('base64')}`;
+    const anexo = await Anexo.create({
+      userId: user._id,
+      cardId: card._id,
+      nomeArquivo: nomeSugerido || `whatsapp-${mediaId}`,
+      tipoMime: mimeType,
+      dadosBase64,
+      tamanho: buffer.length,
+    });
+    return anexo;
+  } catch (e) {
+    console.error('Erro ao baixar mídia do WhatsApp:', e.message);
+    return null;
+  }
 }
 
 // Envia uma mensagem de texto via Graph API e devolve a resposta da Meta.
@@ -220,12 +258,28 @@ router.post('/webhook', async (req, res) => {
         eraContatoNovo = true;
       }
 
-      const texto = msg.text ? msg.text.body : '[mensagem em formato não suportado]';
+      // Detecta o tipo de mensagem — texto normal, ou algum tipo de mídia (foto,
+      // áudio, documento, vídeo). Mídia é baixada e guardada como anexo do cliente.
+      const TIPOS_MIDIA = { image: 'image', audio: 'audio', document: 'document', video: 'video' };
+      let texto = '[mensagem em formato não suportado]';
+      let anexoId = null;
+      let midiaTipo = null;
+      if (msg.text) {
+        texto = msg.text.body;
+      } else if (msg.type && TIPOS_MIDIA[msg.type] && msg[msg.type] && msg[msg.type].id) {
+        midiaTipo = TIPOS_MIDIA[msg.type];
+        const legendas = { image: '📷 Foto', audio: '🎤 Áudio', document: '📄 Documento', video: '🎥 Vídeo' };
+        texto = msg[msg.type].caption || legendas[midiaTipo];
+        const anexo = await baixarMidiaDoWhatsapp(user, card, msg[msg.type].id, msg[msg.type].filename);
+        if (anexo) anexoId = anexo._id;
+      }
       await Message.create({
         userId: user._id,
         cardId: card._id,
         direction: 'in',
         texto,
+        anexoId,
+        midiaTipo,
         whatsappMessageId: msg.id,
         timestamp: msg.timestamp ? new Date(parseInt(msg.timestamp, 10) * 1000) : new Date(),
       });
@@ -456,7 +510,18 @@ router.get('/conversas/:cardId', auth, async (req, res) => {
     const card = await Card.findOne({ _id: req.params.cardId, userId: req.userId });
     if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
     const mensagens = await Message.find({ userId: req.userId, cardId: card._id }).sort({ timestamp: 1 });
-    res.json({ mensagens: mensagens.map((m) => m.toJSON()) });
+
+    const anexoIds = mensagens.filter((m) => m.anexoId).map((m) => m.anexoId);
+    const anexos = anexoIds.length ? await Anexo.find({ _id: { $in: anexoIds } }) : [];
+    const anexoMap = new Map(anexos.map((a) => [a._id.toString(), a.toJSON()]));
+
+    res.json({
+      mensagens: mensagens.map((m) => {
+        const json = m.toJSON();
+        if (json.anexoId && anexoMap.has(json.anexoId)) json.anexo = anexoMap.get(json.anexoId);
+        return json;
+      }),
+    });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar a conversa.' });
   }
