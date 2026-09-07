@@ -295,6 +295,7 @@ let verificandoAtualizacao = false;
 let backupGerando = false;
 let backupImportando = false;
 let backupMsg = null;
+let backupModalAberto = false;
 let atualizacaoMsg = null;
 let nomeSalvando = false;
 let modalAlterarNomeAberto = false;
@@ -1949,6 +1950,63 @@ async function disconnectGoogleCalendar(){
   }
   renderApp();
 }
+function abrirBackupModal(){
+  backupModalAberto = true;
+  backupMsg = null;
+  renderBackupModal();
+}
+function closeBackupModal(){
+  backupModalAberto = false;
+  const root = document.getElementById('modal-root');
+  if(root) root.innerHTML = '';
+}
+function renderBackupModal(){
+  const root = document.getElementById('modal-root');
+  if(!backupModalAberto){ root.innerHTML=''; return; }
+  root.innerHTML = `
+    <div class="overlay" id="backup-modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Backup dos seus dados</h3>
+          <button id="backup-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-page-note">Guarda ou restaura uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações.</p>
+          ${backupMsg ? `<p class="settings-page-msg ${backupMsg.tipo}">${esc(backupMsg.texto)}</p>` : ''}
+          <div class="backup-opcoes-row" style="margin-top:14px;">
+            <div class="backup-opcao-card">
+              <div class="backup-opcao-titulo">⬇ Exportar</div>
+              <p class="settings-page-note">Baixa um arquivo .json com tudo, pra guardar num lugar seguro (Google Drive, por exemplo).</p>
+              <button class="btn-outline" id="backup-modal-exportar" ${backupGerando?'disabled':''}>${backupGerando?'Gerando…':'Baixar backup completo'}</button>
+            </div>
+            <div class="backup-opcao-card">
+              <div class="backup-opcao-titulo">⬆ Importar</div>
+              <p class="settings-page-note">Restaura a partir de um arquivo .json de backup — atualiza o que já existe e cria o que estiver faltando, sem apagar nada.</p>
+              <input type="file" id="backup-import-input" accept="application/json" style="display:none;" />
+              <button class="btn-outline" id="backup-modal-importar" ${backupImportando?'disabled':''}>${backupImportando?'Importando…':'Escolher arquivo e restaurar'}</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="backup-modal-fechar">Fechar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('backup-modal-close').addEventListener('click', closeBackupModal);
+  document.getElementById('backup-modal-fechar').addEventListener('click', closeBackupModal);
+  document.getElementById('backup-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='backup-modal-overlay') closeBackupModal(); });
+  document.getElementById('backup-modal-exportar').addEventListener('click', baixarBackupCompleto);
+  document.getElementById('backup-modal-importar').addEventListener('click', escolherArquivoBackup);
+  document.getElementById('backup-import-input').addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    e.target.value = '';
+    importarArquivoBackup(file);
+  });
+}
 function escolherArquivoBackup(){
   const input = document.getElementById('backup-import-input');
   if(input) input.click();
@@ -1962,6 +2020,7 @@ async function importarArquivoBackup(file){
       backupImportando = true;
       backupMsg = null;
       renderApp();
+      if(backupModalAberto) renderBackupModal();
       try{
         const texto = await file.text();
         const dados = JSON.parse(texto);
@@ -1983,6 +2042,7 @@ async function importarArquivoBackup(file){
       }
       backupImportando = false;
       renderApp();
+      if(backupModalAberto) renderBackupModal();
     },
   });
 }
@@ -1991,6 +2051,7 @@ async function baixarBackupCompleto(){
   backupGerando = true;
   backupMsg = null;
   renderApp();
+  if(backupModalAberto) renderBackupModal();
   try{
     const token = getToken();
     const res = await fetch(API_BASE + '/backup/exportar-tudo', {
@@ -2011,6 +2072,7 @@ async function baixarBackupCompleto(){
   }
   backupGerando = false;
   renderApp();
+  if(backupModalAberto) renderBackupModal();
 }
 async function verificarAtualizacaoApp(){
   verificandoAtualizacao = true;
@@ -4374,22 +4436,8 @@ function renderConfiguracoesPage(){
       <h2 class="config-group-title">Manutenção</h2>
       <div class="settings-page-section" style="margin-bottom:20px;">
         <h3>Backup dos seus dados</h3>
-        <p class="settings-page-note">Guarda uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações — útil de tempos em tempos, ou antes de fazer alguma mudança grande.</p>
-        ${backupMsg ? `<p class="settings-page-msg ${backupMsg.tipo}">${esc(backupMsg.texto)}</p>` : ''}
-        <div class="settings-page-subtitle" style="margin-top:14px;">Opções de backup</div>
-        <div class="backup-opcoes-row">
-          <div class="backup-opcao-card">
-            <div class="backup-opcao-titulo">⬇ Exportar</div>
-            <p class="settings-page-note">Baixa um arquivo .json com tudo, pra guardar num lugar seguro (Google Drive, por exemplo).</p>
-            <button class="btn-outline" data-action="baixar-backup" ${backupGerando?'disabled':''}>${backupGerando?'Gerando…':'Baixar backup completo'}</button>
-          </div>
-          <div class="backup-opcao-card">
-            <div class="backup-opcao-titulo">⬆ Importar</div>
-            <p class="settings-page-note">Restaura a partir de um arquivo .json de backup — atualiza o que já existe e cria o que estiver faltando, sem apagar nada.</p>
-            <input type="file" id="backup-import-input" accept="application/json" style="display:none;" />
-            <button class="btn-outline" data-action="escolher-arquivo-backup" ${backupImportando?'disabled':''}>${backupImportando?'Importando…':'Escolher arquivo e restaurar'}</button>
-          </div>
-        </div>
+        <p class="settings-page-note">Guarda ou restaura uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações.</p>
+        <button class="btn-outline" data-action="abrir-backup-modal">📦 Backup</button>
       </div>
       <div class="settings-page-section">
         <h3>Atualizações</h3>
@@ -4434,16 +4482,8 @@ function bindAppEvents(){
   });
   const verificarAtualizacaoBtn = app.querySelector('[data-action="verificar-atualizacao"]');
   if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
-  const baixarBackupBtn = app.querySelector('[data-action="baixar-backup"]');
-  if(baixarBackupBtn) baixarBackupBtn.addEventListener('click', baixarBackupCompleto);
-  const escolherArquivoBackupBtn = app.querySelector('[data-action="escolher-arquivo-backup"]');
-  if(escolherArquivoBackupBtn) escolherArquivoBackupBtn.addEventListener('click', escolherArquivoBackup);
-  const backupImportInput = document.getElementById('backup-import-input');
-  if(backupImportInput) backupImportInput.addEventListener('change', (e)=>{
-    const file = e.target.files[0];
-    e.target.value = ''; // permite escolher o mesmo arquivo de novo depois, se precisar
-    importarArquivoBackup(file);
-  });
+  const abrirBackupModalBtn = app.querySelector('[data-action="abrir-backup-modal"]');
+  if(abrirBackupModalBtn) abrirBackupModalBtn.addEventListener('click', abrirBackupModal);
 
   /* -- Conversas (3 colunas) -- */
   const conversasBuscaInput = document.getElementById('conversas-busca-input');
