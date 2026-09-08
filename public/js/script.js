@@ -252,6 +252,7 @@ let mostrarDesativar2FA = false;
 let auditoriaEventos = [];
 let auditoriaCarregada = false;
 let auditoriaExpandida = false;
+let configCategoriaAtiva = 'perfil';
 let monitoramentoExpandido = false;
 let monitoramentoLoaded = false;
 let monitoramentoErros = [];
@@ -4298,7 +4299,442 @@ function renderContratoCard(c){
 }
 
 /* ---------- página: Configurações ---------- */
+const CONFIG_CATEGORIAS = [
+  { grupo: 'Conta', itens: [
+    ['perfil', 'Seu perfil'],
+    ['seguranca', 'Login e segurança'],
+    ['aparencia', 'Aparência'],
+  ]},
+  { grupo: 'Integrações', itens: [
+    ['whatsapp', 'WhatsApp Business'],
+    ['google-agenda', 'Google Agenda'],
+    ['instagram', 'Instagram'],
+    ['webhooks', 'Webhooks'],
+    ['agendamento', 'Link de agendamento'],
+  ]},
+  { grupo: 'Dados', itens: [
+    ['campos', 'Campos personalizados'],
+    ['importar', 'Importar leads'],
+  ]},
+  { grupo: 'Sistema', itens: [
+    ['manutencao', 'Manutenção'],
+  ]},
+];
+
+function renderConfigPerfil(){
+  return `
+    <div class="settings-page-section">
+      <h3>Seu perfil</h3>
+      <div class="avatar-upload-row">
+        <div class="avatar-preview">${currentUser && currentUser.avatarUrl ? `<img src="${currentUser.avatarUrl}" alt="Foto de perfil" />` : esc(iniciaisDoNome((currentUser&&currentUser.nome)||''))}</div>
+        <div>
+          <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/webp" style="display:none;" />
+          <div class="settings-btn-row">
+            <button class="btn-outline" id="avatar-upload-btn" ${avatarSalvando?'disabled':''}>${avatarSalvando?'Enviando…':'Enviar foto'}</button>
+            ${currentUser && currentUser.avatarUrl ? `<button class="btn-outline" id="avatar-remover-btn" ${avatarSalvando?'disabled':''}>Remover</button>` : ''}
+          </div>
+          <p class="settings-page-note">PNG, JPG ou WebP — redimensionamos automaticamente.</p>
+        </div>
+      </div>
+      ${avatarMsg ? `<p class="settings-page-msg ${avatarMsg.tipo}">${esc(avatarMsg.texto)}</p>` : ''}
+      <div class="settings-page-row"><span>Nome</span><span>${esc((currentUser && currentUser.nome) || '—')}</span></div>
+      <div class="settings-page-row"><span>E-mail</span><span>${esc((currentUser && currentUser.email) || '—')}</span></div>
+
+      <div class="settings-sep-line"></div>
+
+      <div class="settings-page-subtitle">Sessões ativas</div>
+      <p class="settings-page-note">Desconecte todos os dispositivos onde você está logado — útil se perdeu um aparelho ou compartilhou sua senha. Você vai precisar entrar de novo aqui também.</p>
+      ${logoutAllMsg ? `<p class="settings-page-msg ${logoutAllMsg.tipo}">${esc(logoutAllMsg.texto)}</p>` : ''}
+      <button class="btn-danger" data-action="desconectar-todos" ${logoutAllEnviando?'disabled':''}>${logoutAllEnviando?'Desconectando…':'Desconectar todos os dispositivos'}</button>
+    </div>
+  `;
+}
+
+function renderConfigSeguranca(){
+  return `
+    <div class="settings-page-section">
+      <h3>Login e segurança</h3>
+      <div class="settings-page-row">
+        <span>Nome</span>
+        <button class="btn-outline" data-action="abrir-alterar-nome">Alterar nome</button>
+      </div>
+
+      <div class="settings-sep-line"></div>
+
+      <div class="settings-page-row">
+        <span>Senha</span>
+        <button class="btn-outline" data-action="abrir-alterar-senha">Mudar senha</button>
+      </div>
+
+      <div class="settings-sep-line"></div>
+
+      <div class="settings-page-subtitle">Verificação em duas etapas (2FA)</div>
+      ${renderSecao2FA()}
+
+      <div class="settings-sep-line"></div>
+
+      <button class="settings-page-row auditoria-toggle" data-action="toggle-auditoria" style="width:100%; border:none; border-bottom:1px solid var(--line); background:none; cursor:pointer; font-family:inherit;">
+        <span class="settings-page-subtitle" style="margin:0;">Log de auditoria</span>
+        <span class="auditoria-toggle-seta ${auditoriaExpandida?'aberta':''}">▾</span>
+      </button>
+      ${auditoriaExpandida ? `
+        <p class="settings-page-note">Últimos eventos de segurança da sua conta.</p>
+        ${!auditoriaCarregada ? `<p class="settings-page-note">Carregando…</p>` : (auditoriaEventos.length ? `
+          <div class="historico-lista">
+            ${auditoriaEventos.map(e=>`
+              <div class="historico-item">
+                <span class="historico-item-texto">${esc(e.detalhe || e.acao)}</span>
+                <span class="historico-item-data">${formatDateHora(e.createdAt)}</span>
+              </div>
+            `).join('')}
+          </div>
+        ` : `<p class="dash-empty">Nenhum evento registrado ainda.</p>`)}
+      ` : ''}
+    </div>
+  `;
+}
+
+function renderConfigAparencia(){
+  return `
+    <div class="settings-page-section">
+      <h3>Modo noturno e cor de destaque</h3>
+      <label class="settings-toggle-row">
+        <span>Modo noturno</span>
+        <span class="switch ${getDarkMode()?'on':''}" data-action="toggle-dark-mode">
+          <span class="switch-knob"></span>
+        </span>
+      </label>
+      <div class="settings-page-subtitle">Cor de destaque</div>
+      <div class="theme-swatches">
+        ${ACCENT_PRESETS.map(cor=>`<button class="theme-swatch ${getAccentColor().toLowerCase()===cor.toLowerCase()?'active':''}" data-action="set-accent" data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).join('')}
+      </div>
+      <label class="theme-custom-label">
+        Outra cor
+        <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
+      </label>
+    </div>
+  `;
+}
+
+function renderConfigWhatsapp(){
+  return `
+    <div class="settings-page-section">
+      <h3>WhatsApp Business API</h3>
+      <div class="settings-page-row">
+        <span>Status</span>
+        <span>${whatsappConnected ? '✓ Conectado' : 'Não conectado'}</span>
+      </div>
+      ${whatsappConnected ? `
+        <p class="settings-page-note">Conversas ficam registradas dentro do card de cada cliente. Pra reconfigurar, desconecte e conecte de novo com os dados atualizados.</p>
+        <div class="settings-page-row">
+          <span>Agente IA (responde clientes sozinho)</span>
+          <span class="switch ${agenteIaAtivo?'on':''}" data-action="toggle-agente-ia" title="${agenteIaAtivo?'Ativado':'Desativado'}"><span class="switch-knob"></span></span>
+        </div>
+        ${agenteIaAtivo ? `<p class="settings-page-msg erro">⚠️ O agente está respondendo mensagens automaticamente, sem revisão sua. Ele fica em silêncio por 30 min sempre que você responder um cliente manualmente. Desative quando quiser assumir de vez.</p>` : `<p class="settings-page-note">Quando ativado, a IA responde sozinha as mensagens novas do WhatsApp — sem você revisar antes de enviar.</p>`}
+
+        <div class="settings-sep-line"></div>
+
+        <div class="settings-page-row">
+          <span>IA proativa (sugestões automáticas)</span>
+          <span class="switch ${iaProativaAtiva?'on':''}" data-action="toggle-ia-proativa" title="${iaProativaAtiva?'Ativada':'Desativada'}"><span class="switch-knob"></span></span>
+        </div>
+        <p class="settings-page-note">Analisa a conversa quando o cliente responde e deixa uma sugestão de mensagem e tarefa prontas no card — nunca envia nada sozinha, é sempre você quem decide usar.</p>
+
+        <button class="btn-outline" data-action="desconectar-whatsapp">Desconectar</button>
+      ` : `
+        <div class="field">
+          <label>Phone Number ID</label>
+          <input type="text" id="wa-phone-id" placeholder="Ex: 109xxxxxxxxxxxx" />
+        </div>
+        <div class="field">
+          <label>Access Token</label>
+          <input type="password" id="wa-token" placeholder="Token permanente gerado no Meta" />
+        </div>
+        <div class="field">
+          <label>WABA ID (opcional)</label>
+          <input type="text" id="wa-waba-id" placeholder="ID da conta comercial do WhatsApp" />
+        </div>
+        ${whatsappConfigMsg ? `<p class="settings-page-msg ${whatsappConfigMsg.tipo}">${esc(whatsappConfigMsg.texto)}</p>` : ''}
+        <button class="btn-primary" data-action="salvar-whatsapp-config" ${whatsappSalvando?'disabled':''}>${whatsappSalvando?'Salvando…':'Conectar'}</button>
+      `}
+      <p class="settings-page-note">Requer conta comercial no Meta com o produto WhatsApp ativado. Passo a passo completo no README.</p>
+    </div>
+
+    <div class="settings-page-section">
+      <h3>Menu de triagem (primeiro contato)</h3>
+      <p class="settings-page-note">Quando alguém escreve pela primeira vez, manda esse menu automaticamente e move o lead pra coluna certa conforme a resposta (digitando o número da opção).</p>
+      <div class="field">
+        <label>Mensagem inicial</label>
+        <textarea id="mt-mensagem" rows="3" placeholder="Ex: Oi! Sobre o que você quer falar?&#10;1 - Simulação&#10;2 - Já sou cliente&#10;3 - Outro assunto">${esc(menuTriagem.mensagemInicial)}</textarea>
+      </div>
+      <div class="mt-opcoes-lista">
+        ${menuTriagem.opcoes.map((op, idx)=>renderMenuTriagemOpcao(op, idx)).join('')}
+      </div>
+      <button type="button" class="btn-outline" id="mt-add-opcao">+ Adicionar opção</button>
+
+      <div class="settings-sep-line"></div>
+
+      <div class="settings-page-row">
+        <span>Ativar menu de triagem</span>
+        <span class="switch ${menuTriagem.ativo?'on':''}" data-action="toggle-menu-triagem"><span class="switch-knob"></span></span>
+      </div>
+      ${menuTriagem.ativo ? `<p class="settings-page-msg erro">⚠️ O menu é enviado automaticamente pra qualquer contato novo, sem revisão sua.</p>` : ''}
+      ${menuTriagemMsg ? `<p class="settings-page-msg ${menuTriagemMsg.tipo}">${esc(menuTriagemMsg.texto)}</p>` : ''}
+      <button class="btn-primary" id="mt-salvar" ${menuTriagemSalvando?'disabled':''}>${menuTriagemSalvando?'Salvando…':'Salvar menu'}</button>
+    </div>
+
+    <div class="settings-page-section">
+      <h3>Templates de mensagem</h3>
+      <p class="settings-page-note">Crie modelos e envie pra aprovação da Meta. "Sincronizar" atualiza o status de cada um (aprovado, em análise ou rejeitado).</p>
+      <div class="settings-btn-row">
+        <button class="btn-outline" data-action="sincronizar-templates" ${templatesSincronizando?'disabled':''}>${templatesSincronizando?'Sincronizando…':'Sincronizar da Meta'}</button>
+        <button class="btn-primary" data-action="open-new-template">+ Novo template</button>
+      </div>
+      ${templatesMsg ? `<p class="settings-page-msg ${templatesMsg.tipo}">${esc(templatesMsg.texto)}</p>` : ''}
+      ${!templatesCarregados ? `<p class="settings-page-note">Carregando…</p>` : (templatesList.length ? `
+        <div class="templates-list">
+          ${templatesList.map(t=>`
+            <div class="template-item">
+              <span class="template-item-nome">${esc(t.nome)}</span>
+              <span class="template-item-status template-status-${(t.status||'').toLowerCase()}">${statusTemplateLabel(t.status)}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : `<p class="dash-empty">Nenhum template ainda. Crie o primeiro pra começar.</p>`)}
+    </div>
+  `;
+}
+
+function renderConfigGoogleAgenda(){
+  return `
+    <div class="settings-page-section">
+      <h3>Google Agenda</h3>
+      <div class="settings-page-row">
+        <span>Status</span>
+        <span>${calendarConnected ? '✓ Conectada' : 'Não conectada'}</span>
+      </div>
+      ${calendarConnected
+        ? `
+          <div class="settings-btn-row">
+            <button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'Sincronizar agora'}</button>
+            <button class="btn-outline" data-action="disconnect-calendar">Desconectar</button>
+          </div>
+        `
+        : `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
+      }
+      <p class="settings-page-note">O botão do WhatsApp de abrir conversa já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
+    </div>
+  `;
+}
+
+function renderConfigInstagram(){
+  return `
+    <div class="settings-page-section">
+      <h3>Instagram (captação de leads)</h3>
+      <div class="settings-page-row">
+        <span>Status</span>
+        <span>${instagramConnected ? '✓ Conectado' : 'Não conectado'}</span>
+      </div>
+      ${instagramConnected ? `
+        <p class="settings-page-note">Formulário de anúncio preenchido = lead novo automático. Mensagens diretas (DM) também chegam direto na aba Conversas, junto com as do WhatsApp.</p>
+        <button class="btn-outline" data-action="desconectar-instagram">Desconectar</button>
+      ` : `
+        <div class="field">
+          <label>Page ID</label>
+          <input type="text" id="ig-page-id" placeholder="ID da sua Página do Facebook" />
+        </div>
+        <div class="field">
+          <label>Access Token da página</label>
+          <input type="password" id="ig-page-token" placeholder="Token com permissão leads_retrieval e instagram_manage_messages" />
+        </div>
+        <div class="field">
+          <label>ID da conta comercial do Instagram (opcional, pra receber DMs)</label>
+          <input type="text" id="ig-business-id" placeholder="ID da conta profissional do Instagram vinculada" />
+        </div>
+        ${instagramConfigMsg ? `<p class="settings-page-msg ${instagramConfigMsg.tipo}">${esc(instagramConfigMsg.texto)}</p>` : ''}
+        <button class="btn-primary" data-action="salvar-instagram-config" ${instagramSalvando?'disabled':''}>${instagramSalvando?'Salvando…':'Conectar'}</button>
+      `}
+      <p class="settings-page-note">Requer o produto Marketing API no mesmo App do Meta usado no WhatsApp, com sua Página (e Instagram profissional vinculado) conectados. Passo a passo completo no README.</p>
+    </div>
+  `;
+}
+
+function renderConfigWebhooks(){
+  return `
+    <div class="settings-page-section">
+      <h3>Webhooks (Zapier, Make, n8n...)</h3>
+      <p class="settings-page-note">Conecte o painel com qualquer outra ferramenta que aceite receber um POST — Zapier ("Webhooks by Zapier"), Make, n8n, ou o que você já usa. Toda vez que o evento escolhido acontecer, mandamos os dados pra sua URL.</p>
+      ${webhooksSaidaMsg ? `<p class="settings-page-msg ${webhooksSaidaMsg.tipo}">${esc(webhooksSaidaMsg.texto)}</p>` : ''}
+      <div class="disparo-lista-leads" style="max-height:none; margin-bottom:12px;">
+        ${webhooksSaida.length ? webhooksSaida.map(w=>`
+          <div class="disparo-lead-item" style="cursor:default; flex-direction:column; align-items:stretch; gap:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span><b>${esc(w.nome||'Sem nome')}</b> ${!w.ativo?'<span class="settings-page-note">(pausado)</span>':''}</span>
+              <div class="settings-btn-row">
+                <button class="btn-outline" data-action="testar-webhook-saida" data-webhook-id="${w.id}">Testar</button>
+                <button class="btn-outline" data-action="toggle-webhook-saida" data-webhook-id="${w.id}" data-ativo="${w.ativo?'0':'1'}">${w.ativo?'Pausar':'Ativar'}</button>
+                <button class="delete-link" data-action="excluir-webhook-saida" data-webhook-id="${w.id}">🗑</button>
+              </div>
+            </div>
+            <span class="settings-page-note" style="word-break:break-all;">${esc(w.url)}</span>
+            <span class="settings-page-note">Eventos: ${w.eventos.map(ev=>ROTULOS_EVENTOS_WEBHOOK[ev]||ev).join(', ')}${w.ultimoEnvioEm?` · Último disparo: ${formatDateHora(w.ultimoEnvioEm)} (${w.ultimoEnvioStatus==='ok'?'✅':'⚠️'})`:''}</span>
+          </div>
+        `).join('') : '<p class="dash-empty">Nenhum webhook cadastrado ainda.</p>'}
+      </div>
+      <div class="field">
+        <label>Nome (só pra identificar)</label>
+        <input type="text" id="novo-webhook-nome" placeholder="Ex: Zapier - novo lead" />
+      </div>
+      <div class="field">
+        <label>URL de destino</label>
+        <input type="text" id="novo-webhook-url" placeholder="https://hooks.zapier.com/..." />
+      </div>
+      <div class="field">
+        <label>Quando disparar</label>
+        <div class="checkbox-group">
+          ${Object.entries(ROTULOS_EVENTOS_WEBHOOK).map(([key,label])=>`
+            <label class="checkbox-item"><input type="checkbox" class="novo-webhook-evento" value="${key}" /> ${label}</label>
+          `).join('')}
+        </div>
+      </div>
+      <button class="btn-outline" data-action="criar-webhook-saida">+ Adicionar webhook</button>
+    </div>
+  `;
+}
+
+function renderConfigAgendamento(){
+  return `
+    <div class="settings-page-section">
+      <h3>Link de agendamento</h3>
+      <p class="settings-page-note">Um link público onde o cliente escolhe um horário livre e marca sozinho — sem precisar trocar mensagem pra combinar dia e hora. Confere disponibilidade nas suas tarefas e, se conectado, no seu Google Agenda também.</p>
+      ${agendamentoPublicoMsg ? `<p class="settings-page-msg ${agendamentoPublicoMsg.tipo}">${esc(agendamentoPublicoMsg.texto)}</p>` : ''}
+      <div class="settings-page-row">
+        <span>Ativar link de agendamento</span>
+        <span class="switch ${agendamentoPublicoForm.ativo?'on':''}" data-action="toggle-agendamento-publico-ativo"><span class="switch-knob"></span></span>
+      </div>
+      ${agendamentoPublicoForm.ativo ? `
+        <div class="settings-page-row">
+          <span>Seu link</span>
+          <span style="display:flex; gap:8px; align-items:center;">
+            <span class="settings-page-note" style="font-family:'IBM Plex Mono',monospace;">${window.location.origin}/agendar/${currentUser.id}</span>
+            <button class="btn-outline" data-action="copiar-link-agendamento">Copiar</button>
+          </span>
+        </div>
+      ` : ''}
+      <div class="field-row" style="margin-top:12px;">
+        <div class="field"><label>Início do expediente</label><input type="time" id="ap-hora-inicio" value="${agendamentoPublicoForm.horaInicio}" /></div>
+        <div class="field"><label>Fim do expediente</label><input type="time" id="ap-hora-fim" value="${agendamentoPublicoForm.horaFim}" /></div>
+        <div class="field">
+          <label>Duração de cada horário</label>
+          <select id="ap-duracao">
+            ${[15,30,45,60].map(min=>`<option value="${min}" ${agendamentoPublicoForm.duracaoMinutos===min?'selected':''}>${min} min</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Dias da semana</label>
+        <div class="checkbox-group" style="flex-direction:row; flex-wrap:wrap; gap:12px;">
+          ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map((label,i)=>`
+            <label class="checkbox-item"><input type="checkbox" class="ap-dia-semana" value="${i}" ${agendamentoPublicoForm.diasSemana.includes(i)?'checked':''}/> ${label}</label>
+          `).join('')}
+        </div>
+      </div>
+      <div class="field">
+        <label>Cliente novo entra em qual coluna do funil?</label>
+        <select id="ap-coluna-destino">
+          <option value="">Não criar cliente novo automaticamente</option>
+          ${board.columns.map(c=>`<option value="${c.id}" ${agendamentoPublicoForm.colunaDestinoId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn-outline" data-action="salvar-agendamento-publico">Salvar</button>
+    </div>
+  `;
+}
+
+function renderConfigCampos(){
+  return `
+    <div class="settings-page-section">
+      <h3>Campos personalizados</h3>
+      <p class="settings-page-note">Campos extras que aparecem no modal de cada cliente (ex: CPF, data de nascimento).</p>
+      ${!camposPersonalizadosCarregados ? `<p class="settings-page-note">Carregando…</p>` : (camposPersonalizados.length ? `
+        <div class="campos-lista">
+          ${camposPersonalizados.map(c=>`
+            <div class="campo-item">
+              <span>${esc(c.nome)} <span class="settings-page-note">(${c.tipo})</span></span>
+              <button class="icon-btn" data-action="excluir-campo-personalizado" data-campo-id="${c.id}" title="Excluir">${ICON_TRASH}</button>
+            </div>
+          `).join('')}
+        </div>
+      ` : `<p class="dash-empty">Nenhum campo personalizado ainda.</p>`)}
+      <div class="field-row" style="margin-top:12px;">
+        <div class="field"><label>Nome do campo</label><input type="text" id="novo-campo-nome" value="${esc(novoCampoNome)}" placeholder="Ex: CPF" /></div>
+        <div class="field">
+          <label>Tipo</label>
+          <select id="novo-campo-tipo">
+            <option value="texto" ${novoCampoTipo==='texto'?'selected':''}>Texto</option>
+            <option value="numero" ${novoCampoTipo==='numero'?'selected':''}>Número</option>
+            <option value="data" ${novoCampoTipo==='data'?'selected':''}>Data</option>
+          </select>
+        </div>
+      </div>
+      ${camposPersonalizadosMsg ? `<p class="settings-page-msg ${camposPersonalizadosMsg.tipo}">${esc(camposPersonalizadosMsg.texto)}</p>` : ''}
+      <button class="btn-outline" data-action="criar-campo-personalizado">+ Adicionar campo</button>
+    </div>
+  `;
+}
+
+function renderConfigImportar(){
+  return `
+    <div class="settings-page-section">
+      <h3>Importar leads</h3>
+      <p class="settings-page-note">Envie um arquivo CSV com as colunas <b>Nome, Telefone, Valor</b> (nessa ordem, cabeçalho na primeira linha).</p>
+      <div class="field">
+        <label>Coluna de destino</label>
+        <select id="import-coluna">
+          ${board.columns.map(c=>`<option value="${c.id}" ${importColumnId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Arquivo CSV</label>
+        <input type="file" id="import-arquivo" accept=".csv,text/csv" />
+      </div>
+      ${importResultado ? `<p class="settings-page-msg ok">${importResultado.sucesso} lead(s) importado(s)${importResultado.falha ? `, ${importResultado.falha} falharam` : ''}.</p>` : ''}
+      <button class="btn-primary" id="import-btn" ${importando?'disabled':''}>${importando?'Importando…':'Importar'}</button>
+    </div>
+  `;
+}
+
+function renderConfigManutencao(){
+  return `
+    <div class="settings-page-section">
+      <h3>Backup dos seus dados</h3>
+      <p class="settings-page-note">Guarda ou restaura uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações.</p>
+      <button class="btn-outline" data-action="abrir-backup-modal">📦 Backup</button>
+    </div>
+    <div class="settings-page-section">
+      <h3>Atualizações</h3>
+      <p class="settings-page-note">Se o painel parecer desatualizado (algo que já mudou e não aparece), use esse botão pra forçar buscar a versão mais nova — principalmente útil no app instalado no celular.</p>
+      ${atualizacaoMsg ? `<p class="settings-page-msg ${atualizacaoMsg.tipo}">${esc(atualizacaoMsg.texto)}</p>` : ''}
+      <button class="btn-outline" data-action="verificar-atualizacao" ${verificandoAtualizacao?'disabled':''}>${verificandoAtualizacao?'Verificando…':'Verificar atualizações'}</button>
+    </div>
+  `;
+}
+
 function renderConfiguracoesPage(){
+  const CONTEUDO_CATEGORIA = {
+    'perfil': renderConfigPerfil,
+    'seguranca': renderConfigSeguranca,
+    'aparencia': renderConfigAparencia,
+    'whatsapp': renderConfigWhatsapp,
+    'google-agenda': renderConfigGoogleAgenda,
+    'instagram': renderConfigInstagram,
+    'webhooks': renderConfigWebhooks,
+    'agendamento': renderConfigAgendamento,
+    'campos': renderConfigCampos,
+    'importar': renderConfigImportar,
+    'manutencao': renderConfigManutencao,
+  };
+  const renderFn = CONTEUDO_CATEGORIA[configCategoriaAtiva] || renderConfigPerfil;
   return `
     <div class="page-head">
       <div>
@@ -4307,385 +4743,17 @@ function renderConfiguracoesPage(){
       </div>
     </div>
 
-    <div class="config-tabs">
-      <button class="tab-btn" data-action="scroll-to-config" data-target="config-perfil">Perfil</button>
-      <button class="tab-btn" data-action="scroll-to-config" data-target="config-integracoes">Integrações</button>
-      <button class="tab-btn" data-action="scroll-to-config" data-target="config-aparencia">Aparência</button>
-      <button class="tab-btn" data-action="scroll-to-config" data-target="config-sobre">Manutenção</button>
+    <div class="config-layout">
+      <div class="config-sidebar">
+        ${CONFIG_CATEGORIAS.map(g=>`
+          <div class="config-sidebar-grupo">${g.grupo}</div>
+          ${g.itens.map(([key,label])=>`<button class="config-sidebar-item ${configCategoriaAtiva===key?'active':''}" data-action="set-config-categoria" data-categoria="${key}">${label}</button>`).join('')}
+        `).join('')}
+      </div>
+      <div class="config-content">
+        ${renderFn()}
+      </div>
     </div>
-
-    <section id="config-perfil" class="config-group">
-      <h2 class="config-group-title">Perfil</h2>
-      <div class="settings-page-grid">
-        <div class="settings-page-section">
-          <h3>Seu perfil</h3>
-          <div class="avatar-upload-row">
-            <div class="avatar-preview">${currentUser && currentUser.avatarUrl ? `<img src="${currentUser.avatarUrl}" alt="Foto de perfil" />` : esc(iniciaisDoNome((currentUser&&currentUser.nome)||''))}</div>
-            <div>
-              <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/webp" style="display:none;" />
-              <div class="settings-btn-row">
-                <button class="btn-outline" id="avatar-upload-btn" ${avatarSalvando?'disabled':''}>${avatarSalvando?'Enviando…':'Enviar foto'}</button>
-                ${currentUser && currentUser.avatarUrl ? `<button class="btn-outline" id="avatar-remover-btn" ${avatarSalvando?'disabled':''}>Remover</button>` : ''}
-              </div>
-              <p class="settings-page-note">PNG, JPG ou WebP — redimensionamos automaticamente.</p>
-            </div>
-          </div>
-          ${avatarMsg ? `<p class="settings-page-msg ${avatarMsg.tipo}">${esc(avatarMsg.texto)}</p>` : ''}
-          <div class="settings-page-row"><span>Nome</span><span>${esc((currentUser && currentUser.nome) || '—')}</span></div>
-          <div class="settings-page-row"><span>E-mail</span><span>${esc((currentUser && currentUser.email) || '—')}</span></div>
-
-          <div class="settings-sep-line"></div>
-
-          <div class="settings-page-subtitle">Sessões ativas</div>
-          <p class="settings-page-note">Desconecte todos os dispositivos onde você está logado — útil se perdeu um aparelho ou compartilhou sua senha. Você vai precisar entrar de novo aqui também.</p>
-          ${logoutAllMsg ? `<p class="settings-page-msg ${logoutAllMsg.tipo}">${esc(logoutAllMsg.texto)}</p>` : ''}
-          <button class="btn-danger" data-action="desconectar-todos" ${logoutAllEnviando?'disabled':''}>${logoutAllEnviando?'Desconectando…':'Desconectar todos os dispositivos'}</button>
-        </div>
-
-        <div class="settings-page-section">
-          <h3>Login e segurança</h3>
-          <div class="settings-page-row">
-            <span>Nome</span>
-            <button class="btn-outline" data-action="abrir-alterar-nome">Alterar nome</button>
-          </div>
-
-          <div class="settings-sep-line"></div>
-
-          <div class="settings-page-row">
-            <span>Senha</span>
-            <button class="btn-outline" data-action="abrir-alterar-senha">Mudar senha</button>
-          </div>
-
-          <div class="settings-sep-line"></div>
-
-          <div class="settings-page-subtitle">Verificação em duas etapas (2FA)</div>
-          ${renderSecao2FA()}
-
-          <div class="settings-sep-line"></div>
-
-          <button class="settings-page-row auditoria-toggle" data-action="toggle-auditoria" style="width:100%; border:none; border-bottom:1px solid var(--line); background:none; cursor:pointer; font-family:inherit;">
-            <span class="settings-page-subtitle" style="margin:0;">Log de auditoria</span>
-            <span class="auditoria-toggle-seta ${auditoriaExpandida?'aberta':''}">▾</span>
-          </button>
-          ${auditoriaExpandida ? `
-            <p class="settings-page-note">Últimos eventos de segurança da sua conta.</p>
-            ${!auditoriaCarregada ? `<p class="settings-page-note">Carregando…</p>` : (auditoriaEventos.length ? `
-              <div class="historico-lista">
-                ${auditoriaEventos.map(e=>`
-                  <div class="historico-item">
-                    <span class="historico-item-texto">${esc(e.detalhe || e.acao)}</span>
-                    <span class="historico-item-data">${formatDateHora(e.createdAt)}</span>
-                  </div>
-                `).join('')}
-              </div>
-            ` : `<p class="dash-empty">Nenhum evento registrado ainda.</p>`)}
-          ` : ''}
-        </div>
-      </div>
-    </section>
-
-    <section id="config-integracoes" class="config-group">
-      <h2 class="config-group-title">Integrações</h2>
-      <div class="settings-page-grid">
-        <div class="settings-page-section">
-          <h3>Google Agenda</h3>
-          <div class="settings-page-row">
-            <span>Status</span>
-            <span>${calendarConnected ? '✓ Conectada' : 'Não conectada'}</span>
-          </div>
-          ${calendarConnected
-            ? `
-              <div class="settings-btn-row">
-                <button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'Sincronizar agora'}</button>
-                <button class="btn-outline" data-action="disconnect-calendar">Desconectar</button>
-              </div>
-            `
-            : `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
-          }
-          <p class="settings-page-note">O botão do WhatsApp de abrir conversa já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
-        </div>
-
-        <div class="settings-page-section">
-          <h3>WhatsApp Business API</h3>
-          <div class="settings-page-row">
-            <span>Status</span>
-            <span>${whatsappConnected ? '✓ Conectado' : 'Não conectado'}</span>
-          </div>
-          ${whatsappConnected ? `
-            <p class="settings-page-note">Conversas ficam registradas dentro do card de cada cliente. Pra reconfigurar, desconecte e conecte de novo com os dados atualizados.</p>
-            <div class="settings-page-row">
-              <span>Agente IA (responde clientes sozinho)</span>
-              <span class="switch ${agenteIaAtivo?'on':''}" data-action="toggle-agente-ia" title="${agenteIaAtivo?'Ativado':'Desativado'}"><span class="switch-knob"></span></span>
-            </div>
-            ${agenteIaAtivo ? `<p class="settings-page-msg erro">⚠️ O agente está respondendo mensagens automaticamente, sem revisão sua. Ele fica em silêncio por 30 min sempre que você responder um cliente manualmente. Desative quando quiser assumir de vez.</p>` : `<p class="settings-page-note">Quando ativado, a IA responde sozinha as mensagens novas do WhatsApp — sem você revisar antes de enviar.</p>`}
-
-            <div class="settings-sep-line"></div>
-
-            <div class="settings-page-row">
-              <span>IA proativa (sugestões automáticas)</span>
-              <span class="switch ${iaProativaAtiva?'on':''}" data-action="toggle-ia-proativa" title="${iaProativaAtiva?'Ativada':'Desativada'}"><span class="switch-knob"></span></span>
-            </div>
-            <p class="settings-page-note">Analisa a conversa quando o cliente responde e deixa uma sugestão de mensagem e tarefa prontas no card — nunca envia nada sozinha, é sempre você quem decide usar.</p>
-
-            <button class="btn-outline" data-action="desconectar-whatsapp">Desconectar</button>
-          ` : `
-            <div class="field">
-              <label>Phone Number ID</label>
-              <input type="text" id="wa-phone-id" placeholder="Ex: 109xxxxxxxxxxxx" />
-            </div>
-            <div class="field">
-              <label>Access Token</label>
-              <input type="password" id="wa-token" placeholder="Token permanente gerado no Meta" />
-            </div>
-            <div class="field">
-              <label>WABA ID (opcional)</label>
-              <input type="text" id="wa-waba-id" placeholder="ID da conta comercial do WhatsApp" />
-            </div>
-            ${whatsappConfigMsg ? `<p class="settings-page-msg ${whatsappConfigMsg.tipo}">${esc(whatsappConfigMsg.texto)}</p>` : ''}
-            <button class="btn-primary" data-action="salvar-whatsapp-config" ${whatsappSalvando?'disabled':''}>${whatsappSalvando?'Salvando…':'Conectar'}</button>
-          `}
-          <p class="settings-page-note">Requer conta comercial no Meta com o produto WhatsApp ativado. Passo a passo completo no README.</p>
-        </div>
-
-        <div class="settings-page-section">
-          <h3>Menu de triagem (primeiro contato)</h3>
-          <p class="settings-page-note">Quando alguém escreve pela primeira vez, manda esse menu automaticamente e move o lead pra coluna certa conforme a resposta (digitando o número da opção).</p>
-          <div class="field">
-            <label>Mensagem inicial</label>
-            <textarea id="mt-mensagem" rows="3" placeholder="Ex: Oi! Sobre o que você quer falar?&#10;1 - Simulação&#10;2 - Já sou cliente&#10;3 - Outro assunto">${esc(menuTriagem.mensagemInicial)}</textarea>
-          </div>
-          <div class="mt-opcoes-lista">
-            ${menuTriagem.opcoes.map((op, idx)=>renderMenuTriagemOpcao(op, idx)).join('')}
-          </div>
-          <button type="button" class="btn-outline" id="mt-add-opcao">+ Adicionar opção</button>
-
-          <div class="settings-sep-line"></div>
-
-          <div class="settings-page-row">
-            <span>Ativar menu de triagem</span>
-            <span class="switch ${menuTriagem.ativo?'on':''}" data-action="toggle-menu-triagem"><span class="switch-knob"></span></span>
-          </div>
-          ${menuTriagem.ativo ? `<p class="settings-page-msg erro">⚠️ O menu é enviado automaticamente pra qualquer contato novo, sem revisão sua.</p>` : ''}
-          ${menuTriagemMsg ? `<p class="settings-page-msg ${menuTriagemMsg.tipo}">${esc(menuTriagemMsg.texto)}</p>` : ''}
-          <button class="btn-primary" id="mt-salvar" ${menuTriagemSalvando?'disabled':''}>${menuTriagemSalvando?'Salvando…':'Salvar menu'}</button>
-        </div>
-
-        <div class="settings-page-section">
-          <h3>Templates de mensagem</h3>
-          <p class="settings-page-note">Crie modelos e envie pra aprovação da Meta. "Sincronizar" atualiza o status de cada um (aprovado, em análise ou rejeitado).</p>
-          <div class="settings-btn-row">
-            <button class="btn-outline" data-action="sincronizar-templates" ${templatesSincronizando?'disabled':''}>${templatesSincronizando?'Sincronizando…':'Sincronizar da Meta'}</button>
-            <button class="btn-primary" data-action="open-new-template">+ Novo template</button>
-          </div>
-          ${templatesMsg ? `<p class="settings-page-msg ${templatesMsg.tipo}">${esc(templatesMsg.texto)}</p>` : ''}
-          ${!templatesCarregados ? `<p class="settings-page-note">Carregando…</p>` : (templatesList.length ? `
-            <div class="templates-list">
-              ${templatesList.map(t=>`
-                <div class="template-item">
-                  <span class="template-item-nome">${esc(t.nome)}</span>
-                  <span class="template-item-status template-status-${(t.status||'').toLowerCase()}">${statusTemplateLabel(t.status)}</span>
-                </div>
-              `).join('')}
-            </div>
-          ` : `<p class="dash-empty">Nenhum template ainda. Crie o primeiro pra começar.</p>`)}
-        </div>
-
-        <div class="settings-page-section">
-          <h3>Instagram (captação de leads)</h3>
-          <div class="settings-page-row">
-            <span>Status</span>
-            <span>${instagramConnected ? '✓ Conectado' : 'Não conectado'}</span>
-          </div>
-          ${instagramConnected ? `
-            <p class="settings-page-note">Formulário de anúncio preenchido = lead novo automático. Mensagens diretas (DM) também chegam direto na aba Conversas, junto com as do WhatsApp.</p>
-            <button class="btn-outline" data-action="desconectar-instagram">Desconectar</button>
-          ` : `
-            <div class="field">
-              <label>Page ID</label>
-              <input type="text" id="ig-page-id" placeholder="ID da sua Página do Facebook" />
-            </div>
-            <div class="field">
-              <label>Access Token da página</label>
-              <input type="password" id="ig-page-token" placeholder="Token com permissão leads_retrieval e instagram_manage_messages" />
-            </div>
-            <div class="field">
-              <label>ID da conta comercial do Instagram (opcional, pra receber DMs)</label>
-              <input type="text" id="ig-business-id" placeholder="ID da conta profissional do Instagram vinculada" />
-            </div>
-            ${instagramConfigMsg ? `<p class="settings-page-msg ${instagramConfigMsg.tipo}">${esc(instagramConfigMsg.texto)}</p>` : ''}
-            <button class="btn-primary" data-action="salvar-instagram-config" ${instagramSalvando?'disabled':''}>${instagramSalvando?'Salvando…':'Conectar'}</button>
-          `}
-          <p class="settings-page-note">Requer o produto Marketing API no mesmo App do Meta usado no WhatsApp, com sua Página (e Instagram profissional vinculado) conectados. Passo a passo completo no README.</p>
-        </div>
-
-        <div class="settings-page-section">
-          <h3>Importar leads</h3>
-          <p class="settings-page-note">Envie um arquivo CSV com as colunas <b>Nome, Telefone, Valor</b> (nessa ordem, cabeçalho na primeira linha).</p>
-          <div class="field">
-            <label>Coluna de destino</label>
-            <select id="import-coluna">
-              ${board.columns.map(c=>`<option value="${c.id}" ${importColumnId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field">
-            <label>Arquivo CSV</label>
-            <input type="file" id="import-arquivo" accept=".csv,text/csv" />
-          </div>
-          ${importResultado ? `<p class="settings-page-msg ok">${importResultado.sucesso} lead(s) importado(s)${importResultado.falha ? `, ${importResultado.falha} falharam` : ''}.</p>` : ''}
-          <button class="btn-primary" id="import-btn" ${importando?'disabled':''}>${importando?'Importando…':'Importar'}</button>
-        </div>
-
-        <div class="settings-page-section">
-          <h3>Campos personalizados</h3>
-          <p class="settings-page-note">Campos extras que aparecem no modal de cada cliente (ex: CPF, data de nascimento).</p>
-          ${!camposPersonalizadosCarregados ? `<p class="settings-page-note">Carregando…</p>` : (camposPersonalizados.length ? `
-            <div class="campos-lista">
-              ${camposPersonalizados.map(c=>`
-                <div class="campo-item">
-                  <span>${esc(c.nome)} <span class="settings-page-note">(${c.tipo})</span></span>
-                  <button class="icon-btn" data-action="excluir-campo-personalizado" data-campo-id="${c.id}" title="Excluir">${ICON_TRASH}</button>
-                </div>
-              `).join('')}
-            </div>
-          ` : `<p class="dash-empty">Nenhum campo personalizado ainda.</p>`)}
-          <div class="field-row" style="margin-top:12px;">
-            <div class="field"><label>Nome do campo</label><input type="text" id="novo-campo-nome" value="${esc(novoCampoNome)}" placeholder="Ex: CPF" /></div>
-            <div class="field">
-              <label>Tipo</label>
-              <select id="novo-campo-tipo">
-                <option value="texto" ${novoCampoTipo==='texto'?'selected':''}>Texto</option>
-                <option value="numero" ${novoCampoTipo==='numero'?'selected':''}>Número</option>
-                <option value="data" ${novoCampoTipo==='data'?'selected':''}>Data</option>
-              </select>
-            </div>
-          </div>
-          ${camposPersonalizadosMsg ? `<p class="settings-page-msg ${camposPersonalizadosMsg.tipo}">${esc(camposPersonalizadosMsg.texto)}</p>` : ''}
-          <button class="btn-outline" data-action="criar-campo-personalizado">+ Adicionar campo</button>
-        </div>
-
-        <div class="settings-page-section">
-          <h3>Webhooks (Zapier, Make, n8n...)</h3>
-          <p class="settings-page-note">Conecte o painel com qualquer outra ferramenta que aceite receber um POST — Zapier ("Webhooks by Zapier"), Make, n8n, ou o que você já usa. Toda vez que o evento escolhido acontecer, mandamos os dados pra sua URL.</p>
-          ${webhooksSaidaMsg ? `<p class="settings-page-msg ${webhooksSaidaMsg.tipo}">${esc(webhooksSaidaMsg.texto)}</p>` : ''}
-          <div class="disparo-lista-leads" style="max-height:none; margin-bottom:12px;">
-            ${webhooksSaida.length ? webhooksSaida.map(w=>`
-              <div class="disparo-lead-item" style="cursor:default; flex-direction:column; align-items:stretch; gap:6px;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                  <span><b>${esc(w.nome||'Sem nome')}</b> ${!w.ativo?'<span class="settings-page-note">(pausado)</span>':''}</span>
-                  <div class="settings-btn-row">
-                    <button class="btn-outline" data-action="testar-webhook-saida" data-webhook-id="${w.id}">Testar</button>
-                    <button class="btn-outline" data-action="toggle-webhook-saida" data-webhook-id="${w.id}" data-ativo="${w.ativo?'0':'1'}">${w.ativo?'Pausar':'Ativar'}</button>
-                    <button class="delete-link" data-action="excluir-webhook-saida" data-webhook-id="${w.id}">🗑</button>
-                  </div>
-                </div>
-                <span class="settings-page-note" style="word-break:break-all;">${esc(w.url)}</span>
-                <span class="settings-page-note">Eventos: ${w.eventos.map(ev=>ROTULOS_EVENTOS_WEBHOOK[ev]||ev).join(', ')}${w.ultimoEnvioEm?` · Último disparo: ${formatDateHora(w.ultimoEnvioEm)} (${w.ultimoEnvioStatus==='ok'?'✅':'⚠️'})`:''}</span>
-              </div>
-            `).join('') : '<p class="dash-empty">Nenhum webhook cadastrado ainda.</p>'}
-          </div>
-          <div class="field">
-            <label>Nome (só pra identificar)</label>
-            <input type="text" id="novo-webhook-nome" placeholder="Ex: Zapier - novo lead" />
-          </div>
-          <div class="field">
-            <label>URL de destino</label>
-            <input type="text" id="novo-webhook-url" placeholder="https://hooks.zapier.com/..." />
-          </div>
-          <div class="field">
-            <label>Quando disparar</label>
-            <div class="checkbox-group">
-              ${Object.entries(ROTULOS_EVENTOS_WEBHOOK).map(([key,label])=>`
-                <label class="checkbox-item"><input type="checkbox" class="novo-webhook-evento" value="${key}" /> ${label}</label>
-              `).join('')}
-            </div>
-          </div>
-          <button class="btn-outline" data-action="criar-webhook-saida">+ Adicionar webhook</button>
-        </div>
-
-        <div class="settings-page-section">
-          <h3>Link de agendamento</h3>
-          <p class="settings-page-note">Um link público onde o cliente escolhe um horário livre e marca sozinho — sem precisar trocar mensagem pra combinar dia e hora. Confere disponibilidade nas suas tarefas e, se conectado, no seu Google Agenda também.</p>
-          ${agendamentoPublicoMsg ? `<p class="settings-page-msg ${agendamentoPublicoMsg.tipo}">${esc(agendamentoPublicoMsg.texto)}</p>` : ''}
-          <div class="settings-page-row">
-            <span>Ativar link de agendamento</span>
-            <span class="switch ${agendamentoPublicoForm.ativo?'on':''}" data-action="toggle-agendamento-publico-ativo"><span class="switch-knob"></span></span>
-          </div>
-          ${agendamentoPublicoForm.ativo ? `
-            <div class="settings-page-row">
-              <span>Seu link</span>
-              <span style="display:flex; gap:8px; align-items:center;">
-                <span class="settings-page-note" style="font-family:'IBM Plex Mono',monospace;">${window.location.origin}/agendar/${currentUser.id}</span>
-                <button class="btn-outline" data-action="copiar-link-agendamento">Copiar</button>
-              </span>
-            </div>
-          ` : ''}
-          <div class="field-row" style="margin-top:12px;">
-            <div class="field"><label>Início do expediente</label><input type="time" id="ap-hora-inicio" value="${agendamentoPublicoForm.horaInicio}" /></div>
-            <div class="field"><label>Fim do expediente</label><input type="time" id="ap-hora-fim" value="${agendamentoPublicoForm.horaFim}" /></div>
-            <div class="field">
-              <label>Duração de cada horário</label>
-              <select id="ap-duracao">
-                ${[15,30,45,60].map(min=>`<option value="${min}" ${agendamentoPublicoForm.duracaoMinutos===min?'selected':''}>${min} min</option>`).join('')}
-              </select>
-            </div>
-          </div>
-          <div class="field">
-            <label>Dias da semana</label>
-            <div class="checkbox-group" style="flex-direction:row; flex-wrap:wrap; gap:12px;">
-              ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map((label,i)=>`
-                <label class="checkbox-item"><input type="checkbox" class="ap-dia-semana" value="${i}" ${agendamentoPublicoForm.diasSemana.includes(i)?'checked':''}/> ${label}</label>
-              `).join('')}
-            </div>
-          </div>
-          <div class="field">
-            <label>Cliente novo entra em qual coluna do funil?</label>
-            <select id="ap-coluna-destino">
-              <option value="">Não criar cliente novo automaticamente</option>
-              ${board.columns.map(c=>`<option value="${c.id}" ${agendamentoPublicoForm.colunaDestinoId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
-            </select>
-          </div>
-          <button class="btn-outline" data-action="salvar-agendamento-publico">Salvar</button>
-        </div>
-      </div>
-    </section>
-
-    <section id="config-aparencia" class="config-group">
-      <h2 class="config-group-title">Aparência</h2>
-      <div class="settings-page-grid">
-        <div class="settings-page-section">
-          <h3>Modo noturno e cor de destaque</h3>
-          <label class="settings-toggle-row">
-            <span>Modo noturno</span>
-            <span class="switch ${getDarkMode()?'on':''}" data-action="toggle-dark-mode">
-              <span class="switch-knob"></span>
-            </span>
-          </label>
-          <div class="settings-page-subtitle">Cor de destaque</div>
-          <div class="theme-swatches">
-            ${ACCENT_PRESETS.map(cor=>`<button class="theme-swatch ${getAccentColor().toLowerCase()===cor.toLowerCase()?'active':''}" data-action="set-accent" data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).join('')}
-          </div>
-          <label class="theme-custom-label">
-            Outra cor
-            <input type="color" id="theme-custom-input" value="${getAccentColor()}" />
-          </label>
-        </div>
-      </div>
-    </section>
-
-    <section id="config-sobre" class="config-group">
-      <h2 class="config-group-title">Manutenção</h2>
-      <div class="settings-page-section" style="margin-bottom:20px;">
-        <h3>Backup dos seus dados</h3>
-        <p class="settings-page-note">Guarda ou restaura uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações.</p>
-        <button class="btn-outline" data-action="abrir-backup-modal">📦 Backup</button>
-      </div>
-      <div class="settings-page-section">
-        <h3>Atualizações</h3>
-        <p class="settings-page-note">Se o painel parecer desatualizado (algo que já mudou e não aparece), use esse botão pra forçar buscar a versão mais nova — principalmente útil no app instalado no celular.</p>
-        ${atualizacaoMsg ? `<p class="settings-page-msg ${atualizacaoMsg.tipo}">${esc(atualizacaoMsg.texto)}</p>` : ''}
-        <button class="btn-outline" data-action="verificar-atualizacao" ${verificandoAtualizacao?'disabled':''}>${verificandoAtualizacao?'Verificando…':'Verificar atualizações'}</button>
-      </div>
-    </section>
   `;
 }
 
@@ -5075,10 +5143,10 @@ function bindAppEvents(){
   });
 
   /* -- Configurações -- */
-  app.querySelectorAll('[data-action="scroll-to-config"]').forEach(btn=>{
+  app.querySelectorAll('[data-action="set-config-categoria"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      const alvo = document.getElementById(btn.dataset.target);
-      if(alvo) alvo.scrollIntoView({ behavior:'smooth', block:'start' });
+      configCategoriaAtiva = btn.dataset.categoria;
+      renderApp();
     });
   });
   const avatarInput = document.getElementById('avatar-input');

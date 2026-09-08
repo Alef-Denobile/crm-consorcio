@@ -412,10 +412,23 @@ main.pipeline-main{ padding-bottom:4px; }
 .settings-page-msg.erro{ background:var(--danger-soft); color:var(--danger); }
 .settings-page-subtitle{ font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin:0 0 10px; }
 .settings-btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
-.config-tabs{ display:flex; gap:8px; margin-bottom:28px; align-items:center; flex-wrap:wrap; }
-.config-group{ scroll-margin-top:20px; margin-bottom:36px; }
-.config-group:last-child{ margin-bottom:0; }
-.config-group-title{ font-family:'Fraunces',serif; font-size:18px; font-weight:600; margin:0 0 16px; letter-spacing:-.01em; }
+/* ---------- Configurações: menu lateral de categorias + conteúdo ---------- */
+.config-layout{ display:flex; gap:28px; align-items:flex-start; }
+.config-sidebar{ width:200px; flex-shrink:0; display:flex; flex-direction:column; }
+.config-sidebar-grupo{ font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:18px 0 6px; padding:0 10px; }
+.config-sidebar-grupo:first-child{ margin-top:0; }
+.config-sidebar-item{ text-align:left; padding:8px 10px; border-radius:8px; border:none; background:none; font-size:13px; color:var(--ink); cursor:pointer; font-family:inherit; }
+.config-sidebar-item:hover{ background:var(--hover-tint); }
+.config-sidebar-item.active{ background:var(--accent); color:#fff; font-weight:500; }
+.config-content{ flex:1; min-width:0; }
+.config-content .settings-page-section{ margin-bottom:20px; }
+.config-content .settings-page-section:last-child{ margin-bottom:0; }
+
+@media (max-width: 860px){
+  .config-layout{ flex-direction:column; }
+  .config-sidebar{ width:100%; flex-direction:row; flex-wrap:wrap; gap:4px; }
+  .config-sidebar-grupo{ display:none; }
+}
 
 /* ---------- IA (mensagem sugerida, insights, tarefa sugerida) ---------- */
 .wa-actions-row{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px; }
