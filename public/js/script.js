@@ -976,7 +976,6 @@ async function loadEquipe(){
   renderApp();
   if(equipe && currentPage === 'equipe'){
     if(equipeSubTab==='chat' && !chatLoaded) loadChat();
-    if(equipeSubTab==='chat' && !metaVendasEquipeCarregada) loadMetaVendasEquipe();
     if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
     if(equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
   }
@@ -2581,7 +2580,6 @@ function goToPage(page){
     equipeMsg = null;
     if(equipe){
       if(equipeSubTab==='chat' && !chatLoaded) loadChat();
-      if(equipeSubTab==='chat' && !metaVendasEquipeCarregada) loadMetaVendasEquipe();
       if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
       if(equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
     }
@@ -3616,20 +3614,39 @@ function renderDashboardPage(){
       </div>
     </div>
 
-    <div class="dash-panel" style="margin-bottom:20px;">
-      <div class="dash-panel-title">
-        Meta de vendas do mês
-        ${!editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : ''}
-      </div>
-      ${!metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
-        <div class="field-row" style="align-items:flex-end;">
-          <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
-          <button class="btn-primary" id="meta-vendas-salvar" style="margin-bottom:14px;">Salvar</button>
+    <div class="dash-grid" style="margin-bottom:20px;">
+      <div class="dash-panel">
+        <div class="dash-panel-title">
+          Meta de vendas do mês
+          ${!editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : ''}
         </div>
-      ` : (metaVendasValor > 0 ? `
-        <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${Math.min(100, (vendidoNoMesAtual()/metaVendasValor*100))}%"></div></div>
-        <p class="settings-page-note">${fmtBRL(vendidoNoMesAtual())} de ${fmtBRL(metaVendasValor)} — ${Math.round(Math.min(999,vendidoNoMesAtual()/metaVendasValor*100))}%</p>
-      ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`))}
+        ${!metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
+          <div class="field-row" style="align-items:flex-end;">
+            <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
+            <button class="btn-primary" id="meta-vendas-salvar" style="margin-bottom:14px;">Salvar</button>
+          </div>
+        ` : (metaVendasValor > 0 ? `
+          <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${Math.min(100, (vendidoNoMesAtual()/metaVendasValor*100))}%"></div></div>
+          <p class="settings-page-note">${fmtBRL(vendidoNoMesAtual())} de ${fmtBRL(metaVendasValor)} — ${Math.round(Math.min(999,vendidoNoMesAtual()/metaVendasValor*100))}%</p>
+        ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`))}
+      </div>
+      ${equipe ? `
+        <div class="dash-panel">
+          <div class="dash-panel-title">
+            Meta de vendas da equipe
+            ${(equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : ''}
+          </div>
+          ${!metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
+            <div class="field-row" style="align-items:flex-end;">
+              <div class="field"><label>Meta da equipe no mês (R$)</label><input type="number" id="meta-vendas-equipe-input" value="${metaVendasEquipeValor||0}" min="0" step="0.01" /></div>
+              <button class="btn-primary" id="meta-vendas-equipe-salvar" style="margin-bottom:14px;">Salvar</button>
+            </div>
+          ` : `
+            <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${metaVendasEquipeValor ? Math.min(100, (metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%"></div></div>
+            <p class="settings-page-note">${fmtBRL(metaVendasEquipeVendido)} de ${fmtBRL(metaVendasEquipeValor)} — ${metaVendasEquipeValor ? Math.round(Math.min(999,metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%</p>
+          `)}
+        </div>
+      ` : ''}
     </div>
 
     <div class="dash-grid">
@@ -5159,7 +5176,6 @@ function bindAppEvents(){
     btn.addEventListener('click', ()=>{
       equipeSubTab = btn.dataset.subtab;
       if(equipeSubTab==='chat' && !chatLoaded) loadChat();
-      if(equipeSubTab==='chat' && !metaVendasEquipeCarregada) loadMetaVendasEquipe();
       if(equipeSubTab==='supervisao' && equipe && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
       if(equipeSubTab==='monitoramento' && equipe && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
       renderApp();
@@ -6465,23 +6481,6 @@ function renderChatInternoConteudo(){
   const conversandoComOutro = !!dmDestinatarioId;
   const outro = conversandoComOutro ? equipe.membros.find(m=>m.id===dmDestinatarioId) : null;
   return `
-    ${!conversandoComOutro ? `
-      <div class="settings-page-section" style="margin-bottom:16px;">
-        <div class="dash-panel-title">
-          Meta de vendas da equipe
-          ${(equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : ''}
-        </div>
-        ${!metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
-          <div class="field-row" style="align-items:flex-end;">
-            <div class="field"><label>Meta da equipe no mês (R$)</label><input type="number" id="meta-vendas-equipe-input" value="${metaVendasEquipeValor||0}" min="0" step="0.01" /></div>
-            <button class="btn-primary" id="meta-vendas-equipe-salvar" style="margin-bottom:14px;">Salvar</button>
-          </div>
-        ` : `
-          <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${metaVendasEquipeValor ? Math.min(100, (metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%"></div></div>
-          <p class="settings-page-note">${fmtBRL(metaVendasEquipeVendido)} de ${fmtBRL(metaVendasEquipeValor)} — ${metaVendasEquipeValor ? Math.round(Math.min(999,metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%</p>
-        `)}
-      </div>
-    ` : ''}
     <div class="chat-interno-wrap">
       <div class="chat-interno-membros">
         <div class="settings-page-subtitle">Conversas</div>
@@ -7518,6 +7517,7 @@ if(getToken()){
   loadCamposPersonalizados();
   loadPossiveisLeads();
   loadMetaVendas();
+  loadMetaVendasEquipe();
   loadConversas();
   loadEquipe();
   loadAutomacoes();
