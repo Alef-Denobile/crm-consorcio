@@ -175,7 +175,6 @@ let agendaEventosGoogle = [];
 let agendaDiaSelecionado = null;
 let tarefaCopiada = null; // { titulo, prioridade, leadId, descricao } — sem data/hora, que são escolhidas ao colar
 let diaAgendaCopiado = null; // { origemISO, tarefas:[{titulo,prioridade,leadId,descricao,hora}] } — cópia do dia inteiro
-let contextMenuAgenda = null; // { diaISO, x, y } — dia com o menu de botão direito aberto, ou null
 let longPressTimer = null;
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
 let calendarConnected = false;
@@ -508,15 +507,20 @@ function horaLocalDaTarefaOuNull(vencimentoIso){
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 function copiarDiaInteiro(diaISO){
-  const { tarefasDoDia } = itensDoDiaAgenda(diaISO);
-  if(!tarefasDoDia.length) return;
-  diaAgendaCopiado = {
-    origemISO: diaISO,
-    tarefas: tarefasDoDia.map(t=>({
+  const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  const itens = [
+    ...tarefasDoDia.map(t=>({
       titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'',
       hora: horaLocalDaTarefaOuNull(t.vencimento),
     })),
-  };
+    ...eventosDoDia.map(e=>({
+      titulo: e.titulo, prioridade: 'media', leadId: null, descricao: 'Copiado de um evento do Google Agenda.',
+      hora: (e.diaInteiro || !e.inicio) ? null : `${String(new Date(e.inicio).getHours()).padStart(2,'0')}:${String(new Date(e.inicio).getMinutes()).padStart(2,'0')}`,
+    })),
+  ];
+  if(!itens.length) return;
+  diaAgendaCopiado = { origemISO: diaISO, tarefas: itens };
+  if(navigator.vibrate) navigator.vibrate(15);
   renderApp();
 }
 function cancelarDiaCopiado(){
@@ -524,7 +528,7 @@ function cancelarDiaCopiado(){
   renderApp();
 }
 async function colarDiaInteiroEm(diaISO){
-  if(!diaAgendaCopiado) return;
+  if(!diaAgendaCopiado || diaISO===diaAgendaCopiado.origemISO) return;
   try{
     for(const t of diaAgendaCopiado.tarefas){
       const dados = { titulo:t.titulo, prioridade:t.prioridade, leadId:t.leadId, descricao:t.descricao, vencimento: diaISO };
@@ -537,50 +541,9 @@ async function colarDiaInteiroEm(diaISO){
     }
     await loadAgendaMes(agendaMesAtual);
   }catch(e){
-    errorMsg = 'Não foi possível colar as tarefas nesse dia.';
+    errorMsg = 'Não foi possível colar nesse dia.';
     renderApp();
   }
-}
-
-// Menu de botão direito num dia do calendário — copiar tarefas daquele dia, ou colar as
-// que já estavam copiadas. Usa a mesma técnica de raiz flutuante do menu "Mover para",
-// pra não ficar preso em nenhum overflow escondido.
-function abrirMenuContextoAgenda(diaISO, x, y){
-  contextMenuAgenda = { diaISO, x, y };
-  renderFloatingContextMenuAgenda();
-}
-function fecharMenuContextoAgenda(){
-  contextMenuAgenda = null;
-  renderFloatingContextMenuAgenda();
-}
-function renderFloatingContextMenuAgenda(){
-  let root = document.getElementById('floating-context-menu-root');
-  if(!root){
-    root = document.createElement('div');
-    root.id = 'floating-context-menu-root';
-    document.body.appendChild(root);
-  }
-  if(!contextMenuAgenda){ root.innerHTML = ''; return; }
-  const { diaISO, x, y } = contextMenuAgenda;
-  const { tarefasDoDia } = itensDoDiaAgenda(diaISO);
-  const dataLabel = new Date(diaISO+'T00:00:00').toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' });
-  const left = Math.min(x, window.innerWidth - 260);
-  const top = Math.min(y, window.innerHeight - 120);
-
-  root.innerHTML = `
-    <div class="col-menu" style="position:fixed; top:${top}px; left:${left}px; min-width:240px;">
-      <div class="col-menu-title">Dia ${dataLabel}</div>
-      ${tarefasDoDia.length
-        ? `<button class="col-menu-item" data-action="copiar-dia-agenda">📋 Copiar ${tarefasDoDia.length} tarefa${tarefasDoDia.length===1?'':'s'} desse dia</button>`
-        : `<div class="col-menu-item" style="opacity:.5; cursor:default;">Nenhuma tarefa nesse dia pra copiar</div>`
-      }
-      ${diaAgendaCopiado ? `<button class="col-menu-item" data-action="colar-dia-agenda">📥 Colar ${diaAgendaCopiado.tarefas.length} tarefa${diaAgendaCopiado.tarefas.length===1?'':'s'} aqui</button>` : ''}
-    </div>
-  `;
-  const copiarBtn = root.querySelector('[data-action="copiar-dia-agenda"]');
-  if(copiarBtn) copiarBtn.addEventListener('click', ()=>{ copiarDiaInteiro(diaISO); fecharMenuContextoAgenda(); });
-  const colarBtn = root.querySelector('[data-action="colar-dia-agenda"]');
-  if(colarBtn) colarBtn.addEventListener('click', ()=>{ colarDiaInteiroEm(diaISO); fecharMenuContextoAgenda(); });
 }
 function cancelarTarefaCopiada(){
   tarefaCopiada = null;
@@ -4405,7 +4368,7 @@ function renderTarefasPage(){
     ` : ''}
     ${diaAgendaCopiado ? `
       <div class="agenda-clipboard-hint" style="margin-bottom:16px;">
-        📋 ${diaAgendaCopiado.tarefas.length} tarefa${diaAgendaCopiado.tarefas.length===1?'':'s'} copiada${diaAgendaCopiado.tarefas.length===1?'':'s'} do dia ${new Date(diaAgendaCopiado.origemISO+'T00:00:00').toLocaleDateString('pt-BR')} — clique com o botão direito em outro dia e escolha "Colar"
+        📋 ${diaAgendaCopiado.tarefas.length} item${diaAgendaCopiado.tarefas.length===1?'':'s'} copiado${diaAgendaCopiado.tarefas.length===1?'':'s'} do dia ${new Date(diaAgendaCopiado.origemISO+'T00:00:00').toLocaleDateString('pt-BR')} — clique em outro dia pra colar direto
         <button class="icon-btn" data-action="cancelar-dia-copiado" title="Cancelar cópia">✕</button>
       </div>
     ` : ''}
@@ -5160,21 +5123,24 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="abrir-dia-agenda"]').forEach(cel=>{
     cel.addEventListener('click', ()=>{
       if(longPressDisparou){ longPressDisparou = false; return; } // ignora o clique fantasma que o toque dispara depois de segurar
-      agendaDiaSelecionado = cel.dataset.dia; renderAgendaDiaModal();
+      const diaISO = cel.dataset.dia;
+      if(diaAgendaCopiado && diaISO !== diaAgendaCopiado.origemISO){
+        colarDiaInteiroEm(diaISO);
+        if(navigator.vibrate) navigator.vibrate(15);
+        return;
+      }
+      agendaDiaSelecionado = diaISO; renderAgendaDiaModal();
     });
     cel.addEventListener('contextmenu', (e)=>{
       e.preventDefault();
-      abrirMenuContextoAgenda(cel.dataset.dia, e.clientX, e.clientY);
+      copiarDiaInteiro(cel.dataset.dia);
     });
     cel.addEventListener('touchstart', (e)=>{
-      const touch = e.touches[0];
-      const x = touch.clientX, y = touch.clientY;
       clearTimeout(longPressTimer);
       longPressTimer = setTimeout(()=>{
         longPressDisparou = true;
         cel.classList.remove('agenda-cell-pressionando');
-        if(navigator.vibrate) navigator.vibrate(15); // vibração curtinha, só como confirmação — se o aparelho não suportar, não faz nada
-        abrirMenuContextoAgenda(cel.dataset.dia, x, y);
+        copiarDiaInteiro(cel.dataset.dia);
       }, 550);
       cel.classList.add('agenda-cell-pressionando');
     }, { passive:true });
@@ -5838,9 +5804,6 @@ function closeMenusOnOutsideClick(e){
   }
   if(openMoveMenuCardId && !e.target.closest('.card-move-menu') && !e.target.closest('[data-action="toggle-move-menu"]')){
     openMoveMenuCardId = null; renderFloatingMoveMenu();
-  }
-  if(contextMenuAgenda && !e.target.closest('#floating-context-menu-root')){
-    fecharMenuContextoAgenda();
   }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
