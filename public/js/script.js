@@ -7677,7 +7677,7 @@ function showConfirm({ message, onConfirm }){
   confirmState = { message, onConfirm };
   const root = document.getElementById('confirm-root');
   root.innerHTML = `
-    <div class="overlay" id="confirm-overlay" style="z-index:50">
+    <div class="overlay" id="confirm-overlay" style="z-index:90">
       <div class="confirm-box">
         <p>${esc(message)}</p>
         <div class="confirm-actions">
