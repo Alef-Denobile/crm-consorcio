@@ -107,7 +107,7 @@ router.get('/agenda-mes', auth, async (req, res) => {
     const tarefas = await Task.find({
       userId: req.userId,
       vencimento: { $gte: inicioMes, $lte: fimMes },
-    }).select('titulo vencimento prioridade concluida leadId').populate('leadId', 'cliente');
+    }).select('titulo vencimento prioridade concluida leadId descricao').populate('leadId', 'cliente');
 
     let eventosGoogle = [];
     const user = await User.findById(req.userId);
@@ -126,6 +126,7 @@ router.get('/agenda-mes', auth, async (req, res) => {
         vencimento: t.vencimento,
         prioridade: t.prioridade,
         concluida: t.concluida,
+        descricao: t.descricao,
         leadId: t.leadId ? t.leadId._id.toString() : null,
         clienteNome: t.leadId ? t.leadId.cliente : null,
       })),

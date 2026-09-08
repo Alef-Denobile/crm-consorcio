@@ -484,17 +484,22 @@ async function loadTasks(){
   tasksLoaded = true;
   renderApp();
 }
-function copiarTarefa(taskId){
+function copiarTarefa(taskId, elemento){
   const t = tasks.find(x=>x.id===taskId) || agendaTarefas.find(x=>x.id===taskId);
   if(!t) return;
-  tarefaCopiada = { titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'' };
+  tarefaCopiada = { titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'', hora: horaLocalDaTarefaOuNull(t.vencimento) };
+  if(navigator.vibrate) navigator.vibrate(15);
+  if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
   renderApp();
   if(agendaDiaSelecionado) renderAgendaDiaModal();
 }
-function copiarEvento(eventoId){
+function copiarEvento(eventoId, elemento){
   const e = agendaEventosGoogle.find(x=>x.id===eventoId);
   if(!e) return;
-  tarefaCopiada = { titulo: e.titulo, prioridade: 'media', leadId: null, descricao: 'Copiado de um evento do Google Agenda.' };
+  const hora = (e.diaInteiro || !e.inicio) ? null : `${String(new Date(e.inicio).getHours()).padStart(2,'0')}:${String(new Date(e.inicio).getMinutes()).padStart(2,'0')}`;
+  tarefaCopiada = { titulo: e.titulo, prioridade: 'media', leadId: null, descricao: 'Copiado de um evento do Google Agenda.', hora };
+  if(navigator.vibrate) navigator.vibrate(15);
+  if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
   renderApp();
   if(agendaDiaSelecionado) renderAgendaDiaModal();
 }
@@ -506,7 +511,51 @@ function horaLocalDaTarefaOuNull(vencimentoIso){
   if(isNaN(d.getTime()) || (d.getUTCHours()===0 && d.getUTCMinutes()===0)) return null;
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
-function copiarDiaInteiro(diaISO){
+// Mostra um aviso rápido (1s, some sozinho) colado em cima de um elemento —
+// usado pra confirmar "copiado!" sem precisar de uma mensagem fixa na tela.
+function mostrarPopupRapido(elemento, texto){
+  let root = document.getElementById('popup-rapido-root');
+  if(!root){
+    root = document.createElement('div');
+    root.id = 'popup-rapido-root';
+    document.body.appendChild(root);
+  }
+  const rect = elemento.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'popup-rapido';
+  el.textContent = texto;
+  el.style.top = `${rect.top + rect.height/2}px`;
+  el.style.left = `${rect.left + rect.width/2}px`;
+  root.appendChild(el);
+  requestAnimationFrame(()=> el.classList.add('popup-rapido-visivel'));
+  setTimeout(()=>{
+    el.classList.remove('popup-rapido-visivel');
+    setTimeout(()=> el.remove(), 250);
+  }, 1000);
+}
+// Liga o gesto de copiar (botão direito no computador, apertar e segurar em touch)
+// num conjunto de elementos — reaproveitado tanto nas linhas do dia quanto, antes,
+// nas células do calendário mensal.
+function ligarGestoDeCopiar(elementos, callback){
+  elementos.forEach(el=>{
+    el.addEventListener('contextmenu', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      callback(el);
+    });
+    el.addEventListener('touchstart', ()=>{
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(()=>{
+        longPressDisparou = true;
+        callback(el);
+      }, 550);
+    }, { passive:true });
+    el.addEventListener('touchend', (e)=>{ e.stopPropagation(); clearTimeout(longPressTimer); });
+    el.addEventListener('touchmove', ()=> clearTimeout(longPressTimer));
+    el.addEventListener('touchcancel', ()=> clearTimeout(longPressTimer));
+  });
+}
+function copiarDiaInteiro(diaISO, elemento){
   const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
   const itens = [
     ...tarefasDoDia.map(t=>({
@@ -521,14 +570,16 @@ function copiarDiaInteiro(diaISO){
   if(!itens.length) return;
   diaAgendaCopiado = { origemISO: diaISO, tarefas: itens };
   if(navigator.vibrate) navigator.vibrate(15);
+  if(elemento) mostrarPopupRapido(elemento, `📋 ${itens.length} copiado${itens.length===1?'':'s'}`);
   renderApp();
 }
 function cancelarDiaCopiado(){
   diaAgendaCopiado = null;
   renderApp();
 }
-async function colarDiaInteiroEm(diaISO){
+async function colarDiaInteiroEm(diaISO, elemento){
   if(!diaAgendaCopiado || diaISO===diaAgendaCopiado.origemISO) return;
+  const qtd = diaAgendaCopiado.tarefas.length;
   try{
     for(const t of diaAgendaCopiado.tarefas){
       const dados = { titulo:t.titulo, prioridade:t.prioridade, leadId:t.leadId, descricao:t.descricao, vencimento: diaISO };
@@ -539,6 +590,8 @@ async function colarDiaInteiroEm(diaISO){
       const nova = await apiRequest('POST', '/tasks', dados);
       tasks.push(nova);
     }
+    diaAgendaCopiado = null; // colar o dia só acontece uma vez — depois de colado, a cópia se esvazia sozinha
+    if(elemento) mostrarPopupRapido(elemento, `📥 ${qtd} colado${qtd===1?'':'s'}`);
     await loadAgendaMes(agendaMesAtual);
   }catch(e){
     errorMsg = 'Não foi possível colar nesse dia.';
@@ -552,9 +605,11 @@ function cancelarTarefaCopiada(){
 }
 async function colarTarefaEm(diaISO, hora){
   if(!tarefaCopiada) return;
-  const dados = { ...tarefaCopiada, vencimento: diaISO };
-  if(hora){
-    const combinado = new Date(`${diaISO}T${hora}`);
+  const { hora: horaOriginal, ...dadosBase } = tarefaCopiada;
+  const horaFinal = hora || horaOriginal; // usa a hora do horário clicado; sem isso, cai pra hora original que foi copiada
+  const dados = { ...dadosBase, vencimento: diaISO };
+  if(horaFinal){
+    const combinado = new Date(`${diaISO}T${horaFinal}`);
     if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
   }
   try{
@@ -4197,24 +4252,18 @@ function renderAgendaDiaModal(){
 
   function renderTarefaMini(t){
     return `
-      <div class="agenda-dia-item">
+      <div class="agenda-dia-item" data-copiar-tarefa="${t.id}">
         <span class="check-circle ${t.concluida?'checked':''}" data-task-toggle="${t.id}">${t.concluida?ICON_CHECK:''}</span>
         <div style="flex:1;">
           <div class="agenda-dia-item-titulo ${t.concluida?'concluida':''}">${esc(t.titulo)}</div>
           ${t.clienteNome ? `<div class="agenda-dia-item-hora">👤 ${esc(t.clienteNome)}</div>` : ''}
         </div>
-        <button class="icon-btn" data-task-copiar="${t.id}" title="Copiar">📋</button>
         <button class="icon-btn" data-task-edit="${t.id}" title="Editar">${ICON_EDIT}</button>
       </div>
     `;
   }
   function renderEventoMini(e){
-    return `
-      <div class="agenda-hora-tarefa-wrap">
-        <span class="agenda-hora-evento">📅 ${esc(e.titulo)}</span>
-        <button class="icon-btn agenda-hora-tarefa-copiar" data-evento-copiar="${e.id}" title="Copiar como tarefa">📋</button>
-      </div>
-    `;
+    return `<div class="agenda-hora-evento" data-copiar-evento="${e.id}">📅 ${esc(e.titulo)}</div>`;
   }
 
   const horaAtual = new Date().getHours();
@@ -4236,10 +4285,9 @@ function renderAgendaDiaModal(){
           ${(tarefasSemHora.length || eventosSemHora.length) ? `
             <div class="settings-page-subtitle">Sem horário definido</div>
             ${eventosSemHora.map(e=>`
-              <div class="agenda-dia-item">
+              <div class="agenda-dia-item" data-copiar-evento="${e.id}">
                 <span class="agenda-item-dot agenda-item-evento"></span>
                 <div class="agenda-dia-item-titulo" style="flex:1;">${esc(e.titulo)}</div>
-                <button class="icon-btn" data-evento-copiar="${e.id}" title="Copiar como tarefa">📋</button>
               </div>
             `).join('')}
             ${tarefasSemHora.map(renderTarefaMini).join('')}
@@ -4252,10 +4300,7 @@ function renderAgendaDiaModal(){
                 <div class="agenda-hora-conteudo">
                   ${conteudo.eventos.map(renderEventoMini).join('')}
                   ${conteudo.tarefas.map(t=>`
-                    <div class="agenda-hora-tarefa-wrap">
-                      <span class="agenda-hora-tarefa ${t.concluida?'concluida':''}" data-task-edit-hora="${t.id}">✓ ${esc(t.titulo)}</span>
-                      <button class="icon-btn agenda-hora-tarefa-copiar" data-task-copiar="${t.id}" title="Copiar">📋</button>
-                    </div>
+                    <span class="agenda-hora-tarefa ${t.concluida?'concluida':''}" data-task-edit-hora="${t.id}" data-copiar-tarefa="${t.id}">✓ ${esc(t.titulo)}</span>
                   `).join('')}
                   ${tarefaCopiada ? `<span class="agenda-hora-colar-hint">+ Colar aqui</span>` : ''}
                 </div>
@@ -4266,7 +4311,7 @@ function renderAgendaDiaModal(){
         <div class="modal-foot">
           <span></span>
           <div class="modal-foot-actions">
-            <button class="btn-save" id="agenda-dia-nova-tarefa">+ Nova tarefa nesse dia</button>
+            <button class="btn-save" id="agenda-dia-nova-tarefa">${tarefaCopiada ? '📋 Colar aqui' : '+ Nova tarefa nesse dia'}</button>
           </div>
         </div>
       </div>
@@ -4276,6 +4321,7 @@ function renderAgendaDiaModal(){
   document.getElementById('agenda-dia-close').addEventListener('click', closeAgendaDiaModal);
   document.getElementById('agenda-dia-overlay').addEventListener('click', (e)=>{ if(e.target.id==='agenda-dia-overlay') closeAgendaDiaModal(); });
   document.getElementById('agenda-dia-nova-tarefa').addEventListener('click', ()=>{
+    if(tarefaCopiada){ colarTarefaEm(diaISO); return; }
     closeAgendaDiaModal();
     openNewTask(diaISO);
   });
@@ -4310,18 +4356,8 @@ function renderAgendaDiaModal(){
       openEditTask(el.dataset.taskEdit);
     });
   });
-  root.querySelectorAll('[data-task-copiar]').forEach(el=>{
-    el.addEventListener('click', (e)=>{
-      e.stopPropagation(); // não deixa o clique vazar pra linha da hora
-      copiarTarefa(el.dataset.taskCopiar);
-    });
-  });
-  root.querySelectorAll('[data-evento-copiar]').forEach(el=>{
-    el.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      copiarEvento(el.dataset.eventoCopiar);
-    });
-  });
+  ligarGestoDeCopiar(root.querySelectorAll('[data-copiar-tarefa]'), (el)=> copiarTarefa(el.dataset.copiarTarefa, el));
+  ligarGestoDeCopiar(root.querySelectorAll('[data-copiar-evento]'), (el)=> copiarEvento(el.dataset.copiarEvento, el));
   const cancelarCopiaBtn = root.querySelector('[data-action="cancelar-tarefa-copiada"]');
   if(cancelarCopiaBtn) cancelarCopiaBtn.addEventListener('click', cancelarTarefaCopiada);
 
@@ -4364,12 +4400,6 @@ function renderTarefasPage(){
       <div class="agenda-clipboard-hint" style="margin-bottom:16px;">
         📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — abra qualquer dia e clique num horário vazio pra colar
         <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
-      </div>
-    ` : ''}
-    ${diaAgendaCopiado ? `
-      <div class="agenda-clipboard-hint" style="margin-bottom:16px;">
-        📋 ${diaAgendaCopiado.tarefas.length} item${diaAgendaCopiado.tarefas.length===1?'':'s'} copiado${diaAgendaCopiado.tarefas.length===1?'':'s'} do dia ${new Date(diaAgendaCopiado.origemISO+'T00:00:00').toLocaleDateString('pt-BR')} — clique em outro dia pra colar direto
-        <button class="icon-btn" data-action="cancelar-dia-copiado" title="Cancelar cópia">✕</button>
       </div>
     ` : ''}
 
@@ -5113,8 +5143,6 @@ function bindAppEvents(){
   });
   const cancelarCopiaPrincipalBtn = app.querySelector('[data-action="cancelar-tarefa-copiada"]');
   if(cancelarCopiaPrincipalBtn) cancelarCopiaPrincipalBtn.addEventListener('click', cancelarTarefaCopiada);
-  const cancelarDiaCopiadoBtn = app.querySelector('[data-action="cancelar-dia-copiado"]');
-  if(cancelarDiaCopiadoBtn) cancelarDiaCopiadoBtn.addEventListener('click', cancelarDiaCopiado);
   const agendaHojeBtn = app.querySelector('[data-action="agenda-hoje"]');
   if(agendaHojeBtn) agendaHojeBtn.addEventListener('click', ()=>{
     agendaMesAtual = currentMonthKey();
@@ -5125,7 +5153,7 @@ function bindAppEvents(){
       if(longPressDisparou){ longPressDisparou = false; return; } // ignora o clique fantasma que o toque dispara depois de segurar
       const diaISO = cel.dataset.dia;
       if(diaAgendaCopiado && diaISO !== diaAgendaCopiado.origemISO){
-        colarDiaInteiroEm(diaISO);
+        colarDiaInteiroEm(diaISO, cel);
         if(navigator.vibrate) navigator.vibrate(15);
         return;
       }
@@ -5133,14 +5161,14 @@ function bindAppEvents(){
     });
     cel.addEventListener('contextmenu', (e)=>{
       e.preventDefault();
-      copiarDiaInteiro(cel.dataset.dia);
+      copiarDiaInteiro(cel.dataset.dia, cel);
     });
     cel.addEventListener('touchstart', (e)=>{
       clearTimeout(longPressTimer);
       longPressTimer = setTimeout(()=>{
         longPressDisparou = true;
         cel.classList.remove('agenda-cell-pressionando');
-        copiarDiaInteiro(cel.dataset.dia);
+        copiarDiaInteiro(cel.dataset.dia, cel);
       }, 550);
       cel.classList.add('agenda-cell-pressionando');
     }, { passive:true });

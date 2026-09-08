@@ -710,7 +710,10 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .agenda-hora-colavel:hover{ background:var(--hover-tint); }
 .agenda-hora-colar-hint{ display:none; font-size:11.5px; color:var(--accent); font-style:italic; }
 .agenda-hora-colavel:hover .agenda-hora-colar-hint{ display:inline; }
-.agenda-hora-tarefa-wrap{ display:flex; align-items:center; gap:4px; }
-.agenda-hora-tarefa-wrap .agenda-hora-tarefa{ flex:1; }
-.agenda-hora-tarefa-copiar{ width:24px; height:24px; opacity:.5; }
-.agenda-hora-tarefa-copiar:hover{ opacity:1; }
+
+/* ---------- popup rápido de confirmação (copiar/colar), fade in/out ---------- */
+.popup-rapido{ position:fixed; transform:translate(-50%,-50%) scale(0.9); background:var(--ink); color:var(--paper); padding:6px 14px; border-radius:20px; font-size:12.5px; font-weight:600; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .2s, transform .2s; z-index:300; box-shadow:0 6px 18px rgba(0,0,0,.25); }
+.popup-rapido-visivel{ opacity:1; transform:translate(-50%,-50%) scale(1); }
+
+/* linhas de tarefa/evento dentro do dia — copiáveis por segurar/botão direito, igual as células do mês */
+[data-copiar-tarefa], [data-copiar-evento]{ -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
