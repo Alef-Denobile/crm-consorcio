@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
     const equipe = await Equipe.findById(user.equipeId);
     if (!equipe) return res.json({ equipe: null });
 
-    const membros = await User.find({ equipeId: equipe._id }).select('nome email papelEquipe');
+    const membros = await User.find({ equipeId: equipe._id }).select('nome email papelEquipe supervisorDeDados');
     const souSupervisor = user.papelEquipe === 'supervisor';
 
     res.json({
@@ -30,11 +30,13 @@ router.get('/', async (req, res) => {
         codigoConvite: souSupervisor ? equipe.codigoConvite : null,
         souDono: equipe.donoId.toString() === req.userId,
         souSupervisor,
+        souSupervisorDeDados: !!user.supervisorDeDados,
         membros: membros.map((m) => ({
           id: m._id.toString(),
           nome: m.nome,
           email: m.email,
           papel: m.papelEquipe,
+          supervisorDeDados: !!m.supervisorDeDados,
           souEu: m._id.toString() === req.userId,
         })),
       },
@@ -56,6 +58,7 @@ router.post('/', async (req, res) => {
     const equipe = await Equipe.create({ nome: nome.trim(), donoId: req.userId });
     user.equipeId = equipe._id;
     user.papelEquipe = 'supervisor';
+    user.supervisorDeDados = true;
     await user.save();
 
     res.status(201).json({ id: equipe._id.toString(), nome: equipe.nome, codigoConvite: equipe.codigoConvite });
@@ -158,6 +161,27 @@ router.put('/membro/:userId/papel', async (req, res) => {
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: 'Erro ao alterar o papel do membro.' });
+  }
+});
+
+// PUT /api/equipe/membro/:userId/supervisor-dados -> concede ou revoga acesso ao
+// monitoramento de erros (separado do papel de gestor da equipe; só gestor concede)
+router.put('/membro/:userId/supervisor-dados', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.userId)) return res.status(400).json({ error: 'ID inválido.' });
+    const user = await User.findById(req.userId);
+    if (!user.equipeId || user.papelEquipe !== 'supervisor') {
+      return res.status(403).json({ error: 'Só o gestor da equipe pode conceder esse acesso.' });
+    }
+    const { ativo } = req.body;
+    const alvo = await User.findOne({ _id: req.params.userId, equipeId: user.equipeId });
+    if (!alvo) return res.status(404).json({ error: 'Membro não encontrado nesta equipe.' });
+
+    alvo.supervisorDeDados = !!ativo;
+    await alvo.save();
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao alterar o acesso de supervisor de dados.' });
   }
 });
 

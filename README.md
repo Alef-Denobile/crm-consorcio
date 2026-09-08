@@ -1,5 +1,22 @@
 # Painel do Consórcio — CRM com MongoDB e login
 
+⚠️ **Testes automatizados:** rode `cd server && npm test` pra rodar os testes
+(usa o test runner nativo do Node, não precisa instalar nada a mais). Hoje cobre
+o cálculo de comissão (as 4 modalidades) e a normalização de telefone — os dois
+pontos que já tiveram bug real antes. Vale adicionar teste novo sempre que
+corrigir um bug de lógica, pra ele nunca mais voltar sem a gente perceber.
+
+⚠️ **Monitoramento de erros:** todo erro registrado com `console.error` (é o
+que toda rota já faz antes de responder com erro 500) também é guardado no
+banco (coleção `ErrorLog`, expira sozinho em 30 dias) e aparece pra quem tem
+acesso de **supervisor de dados** — uma permissão separada do "Gestor" da
+equipe, concedida em Equipe → Gestão → Membros → "Tornar supervisor de dados".
+Falhas graves do servidor (`uncaughtException`/`unhandledRejection`/queda do
+MongoDB) também disparam um **alerta no Telegram**, se configurado (veja
+`TELEGRAM_BOT_TOKEN` e `TELEGRAM_CHAT_ID` no `.env.example` — o passo a passo
+completo de como criar o bot está em `server/utils/telegramAlerta.js`). Não
+depende da API do WhatsApp Business nem de verificação de empresa na Meta.
+
 ⚠️ **Cache do navegador:** `style.css`, `script.js` e `login.js` são
 carregados com `?v=AAAAMMDD` no final da URL (ex: `style.css?v=20260830`).
 Isso existe só pra forçar o navegador a buscar a versão nova depois de um
@@ -287,7 +304,9 @@ Usa o mesmo App do Meta que você já criou pro WhatsApp Business — não
 precisa cadastrar outro. Toda vez que alguém preenche um formulário de
 anúncio (mesmo rodando no Instagram, ele é sempre vinculado a uma
 Página do Facebook), um lead novo é criado automaticamente na primeira
-coluna "em aberto".
+coluna "em aberto". Além disso, **mensagens diretas (DM) do Instagram
+também chegam na aba Conversas**, junto com as do WhatsApp — inbox
+unificado de verdade, e você responde dali mesmo.
 
 **No painel do Meta (mesmo App do WhatsApp):**
 
@@ -296,17 +315,24 @@ coluna "em aberto".
    Facebook (com o Instagram profissional já vinculado a ela) ao App
 3. Configurações da Empresa → Usuários do sistema → gere um **token de
    acesso de página** com as permissões `leads_retrieval`,
-   `pages_manage_ads` e `pages_show_list`
+   `pages_manage_ads`, `pages_show_list`, `instagram_basic` e
+   `instagram_manage_messages` (essas duas últimas são só pras
+   mensagens diretas — se só quiser captar leads de formulário, pode
+   deixar de fora)
 4. No produto Webhooks do App (o mesmo onde você cadastrou o do
    WhatsApp): URL `https://seudominio.com.br/api/instagram/webhook`,
    token de verificação = o mesmo valor que você colocar em
-   `INSTAGRAM_VERIFY_TOKEN` no `.env`/Render — e inscreva-se no campo
-   `leadgen`
+   `INSTAGRAM_VERIFY_TOKEN` no `.env`/Render — inscreva-se no campo
+   `leadgen` (leads de formulário) e também no objeto **Instagram**,
+   campo `messages` (pras mensagens diretas)
+5. Anote o **ID da conta comercial do Instagram** (não é o Page ID) —
+   aparece em Configurações da Empresa → Contas → Contas do Instagram
 
 **No painel do CRM:**
 
 1. Configurações → Integrações → Instagram (captação de leads)
-2. Cole o Page ID e o Access Token da página → Conectar
+2. Cole o Page ID, o Access Token da página e (se for usar mensagens
+   diretas) o ID da conta comercial do Instagram → Conectar
 
 ⚠️ Os nomes dos campos do formulário variam de anúncio pra anúncio.
 O sistema tenta reconhecer automaticamente nome, telefone e e-mail a
@@ -314,6 +340,13 @@ partir dos nomes mais comuns (`full_name`, `phone_number`, `email`,
 entre outros) — se o seu formulário usar nomes de campo muito
 diferentes disso, talvez alguns dados não sejam capturados
 corretamente na primeira tentativa.
+
+⚠️ O formato exato dos eventos de webhook de mensagens do Instagram
+pode variar um pouco conforme a versão da API — se as mensagens não
+aparecerem na aba Conversas depois de configurado, confira os logs do
+servidor (ou o Monitoramento de erros, se você tiver acesso de
+supervisor de dados) pra ver se o formato recebido bateu com o
+esperado.
 
 ## Funis, equipe, PWA e guia de uso
 

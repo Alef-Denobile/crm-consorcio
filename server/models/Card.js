@@ -1,11 +1,5 @@
 const mongoose = require('mongoose');
-
-function normalizarTelefone(tel) {
-  let digitos = String(tel || '').replace(/\D/g, '');
-  if (!digitos) return null;
-  if (digitos.length <= 11) digitos = '55' + digitos; // assume Brasil se não veio com DDI
-  return digitos;
-}
+const { normalizarTelefone } = require('../utils/telefone');
 
 const cardSchema = new mongoose.Schema(
   {
@@ -16,6 +10,7 @@ const cardSchema = new mongoose.Schema(
     temperatura: { type: String, enum: ['quente', 'morno', 'frio'], default: 'morno' },
     telefone: { type: String, default: '' },
     telefoneNormalizado: { type: String, default: null, index: true }, // só dígitos, com DDI — usado pra casar mensagens do WhatsApp
+    instagramId: { type: String, default: null, index: true }, // ID do remetente no Instagram — usado pra casar mensagens de DM
     obs: { type: String, default: '' },
     tipoCarta: { type: String, enum: ['imovel', 'veiculo', 'investimento', 'servicos'], default: 'imovel' },
     mes: { type: String, default: '' }, // formato "YYYY-MM"

@@ -261,6 +261,26 @@ router.put('/nome', auth, async (req, res) => {
   }
 });
 
+// PUT /api/auth/agendamento-publico -> configura o link público de agendamento (o próprio usuário)
+router.put('/agendamento-publico', auth, async (req, res) => {
+  try {
+    const { ativo, horaInicio, horaFim, duracaoMinutos, diasSemana, colunaDestinoId } = req.body;
+    const updates = {};
+    if (typeof ativo === 'boolean') updates['agendamentoPublico.ativo'] = ativo;
+    if (horaInicio) updates['agendamentoPublico.horaInicio'] = horaInicio;
+    if (horaFim) updates['agendamentoPublico.horaFim'] = horaFim;
+    if (duracaoMinutos) updates['agendamentoPublico.duracaoMinutos'] = Number(duracaoMinutos);
+    if (Array.isArray(diasSemana)) updates['agendamentoPublico.diasSemana'] = diasSemana.map(Number);
+    if (colunaDestinoId !== undefined) updates['agendamentoPublico.colunaDestinoId'] = colunaDestinoId || null;
+
+    const user = await User.findByIdAndUpdate(req.userId, { $set: updates }, { new: true, runValidators: true });
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    res.json({ user: user.toJSON() });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao salvar a configuração de agendamento.' });
+  }
+});
+
 // PUT /api/auth/password -> troca (ou define, se a conta só tinha login com Google) a senha
 router.put('/password', auth, async (req, res) => {
   try {

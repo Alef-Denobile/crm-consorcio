@@ -5,9 +5,11 @@ const messageSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     cardId: { type: mongoose.Schema.Types.ObjectId, ref: 'Card', required: true },
     direction: { type: String, enum: ['in', 'out'], required: true }, // in = cliente escreveu, out = nós escrevemos
+    canal: { type: String, enum: ['whatsapp', 'instagram'], default: 'whatsapp' },
     texto: { type: String, default: '' },
     status: { type: String, default: null }, // sent | delivered | read | failed (só pra 'out')
     whatsappMessageId: { type: String, default: null },
+    instagramMessageId: { type: String, default: null },
     timestamp: { type: Date, default: Date.now },
     enviadoPorAgente: { type: Boolean, default: false }, // true = respondida sozinha pelo agente de IA, não por um humano
     anexoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Anexo', default: null }, // preenchido quando a mensagem trouxe mídia (foto, áudio, documento)

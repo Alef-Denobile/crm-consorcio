@@ -4,7 +4,8 @@ const auth = require('../middleware/auth');
 const Task = require('../models/Task');
 const Card = require('../models/Card');
 const User = require('../models/User');
-const { chamarCalendarApi, getOrCreateCalendarId } = require('../utils/calendarSync');
+const { chamarCalendarApi, getOrCreateCalendarId, sincronizarTarefaComCalendar } = require('../utils/calendarSync');
+const { dispararWebhooks } = require('../utils/dispararWebhooks');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de tarefa exigem login
@@ -16,53 +17,6 @@ function filtrarCampos(body) {
     if (body[campo] !== undefined) dados[campo] = body[campo] === '' ? null : body[campo];
   }
   return dados;
-}
-
-// Empurra a tarefa (criação/edição) pra Google Agenda, se o usuário tiver conectado.
-// Nunca deixa um erro aqui quebrar a resposta principal da rota de tarefas.
-async function sincronizarTarefaComCalendar(userId, task) {
-  try {
-    const user = await User.findById(userId);
-    if (!user || !user.googleCalendar || !user.googleCalendar.refreshToken) return;
-    const calendarId = await getOrCreateCalendarId(user);
-
-    if (!task.vencimento) {
-      if (task.googleEventId) {
-        try {
-          await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events/${task.googleEventId}`, { method: 'DELETE' });
-        } catch (e) { /* evento já pode ter sido apagado manualmente */ }
-        task.googleEventId = null;
-        await task.save();
-      }
-      return;
-    }
-
-    const dataStr = new Date(task.vencimento).toISOString().slice(0, 10);
-    const corpoEvento = {
-      summary: task.titulo,
-      description: task.descricao || '',
-      start: { date: dataStr },
-      end: { date: dataStr },
-    };
-
-    if (task.googleEventId) {
-      await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events/${task.googleEventId}`, {
-        method: 'PUT',
-        body: JSON.stringify(corpoEvento),
-      });
-    } else {
-      const criado = await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events`, {
-        method: 'POST',
-        body: JSON.stringify(corpoEvento),
-      });
-      if (criado && criado.id) {
-        task.googleEventId = criado.id;
-        await task.save();
-      }
-    }
-  } catch (err) {
-    console.error('Erro ao sincronizar tarefa com o Google Agenda:', err.message);
-  }
 }
 
 // Remove o evento correspondente na Google Agenda quando a tarefa é excluída no CRM.
@@ -105,6 +59,7 @@ router.post('/', async (req, res) => {
     const task = await Task.create({ ...dados, userId: req.userId });
     res.status(201).json(task.toJSON());
     sincronizarTarefaComCalendar(req.userId, task);
+    dispararWebhooks(req.userId, 'tarefa.criada', { id: task._id.toString(), titulo: task.titulo, vencimento: task.vencimento, prioridade: task.prioridade });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao criar tarefa.' });
   }

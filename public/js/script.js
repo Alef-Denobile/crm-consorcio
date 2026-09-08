@@ -208,6 +208,24 @@ let camposPersonalizadosCarregados = false;
 let novoCampoNome = '';
 let novoCampoTipo = 'texto';
 let camposPersonalizadosMsg = null;
+let webhooksSaida = [];
+let webhooksSaidaMsg = null;
+let agendamentoPublicoMsg = null;
+let agendamentoPublicoForm = {
+  ativo: (currentUser && currentUser.agendamentoPublico && currentUser.agendamentoPublico.ativo) || false,
+  horaInicio: (currentUser && currentUser.agendamentoPublico && currentUser.agendamentoPublico.horaInicio) || '08:00',
+  horaFim: (currentUser && currentUser.agendamentoPublico && currentUser.agendamentoPublico.horaFim) || '18:00',
+  duracaoMinutos: (currentUser && currentUser.agendamentoPublico && currentUser.agendamentoPublico.duracaoMinutos) || 30,
+  diasSemana: (currentUser && currentUser.agendamentoPublico && currentUser.agendamentoPublico.diasSemana) || [1,2,3,4,5],
+  colunaDestinoId: (currentUser && currentUser.agendamentoPublico && currentUser.agendamentoPublico.colunaDestinoId) || '',
+};
+const ROTULOS_EVENTOS_WEBHOOK = {
+  'lead.criado': 'Novo lead criado',
+  'lead.movido': 'Lead mudou de coluna',
+  'lead.ganho': 'Lead marcado como ganho',
+  'mensagem.recebida': 'Mensagem recebida no WhatsApp',
+  'tarefa.criada': 'Nova tarefa criada',
+};
 let anexosDoCard = [];
 let anexosCarregados = false;
 let anexoEnviando = false;
@@ -234,6 +252,9 @@ let mostrarDesativar2FA = false;
 let auditoriaEventos = [];
 let auditoriaCarregada = false;
 let auditoriaExpandida = false;
+let monitoramentoExpandido = false;
+let monitoramentoLoaded = false;
+let monitoramentoErros = [];
 let disparoFiltroColuna = '';
 let disparoFiltroTemp = '';
 let disparoSelecionados = new Set();
@@ -622,8 +643,10 @@ async function loadInstagramStatus(){
 async function salvarInstagramConfig(){
   const pageIdEl = document.getElementById('ig-page-id');
   const tokenEl = document.getElementById('ig-page-token');
+  const igBusinessIdEl = document.getElementById('ig-business-id');
   const pageId = pageIdEl ? pageIdEl.value.trim() : '';
   const pageAccessToken = tokenEl ? tokenEl.value.trim() : '';
+  const igBusinessId = igBusinessIdEl ? igBusinessIdEl.value.trim() : '';
   if(!pageId || !pageAccessToken){
     instagramConfigMsg = { tipo:'erro', texto:'Preencha o Page ID e o Access Token da página.' };
     renderApp();
@@ -633,7 +656,7 @@ async function salvarInstagramConfig(){
   instagramConfigMsg = null;
   renderApp();
   try{
-    await apiRequest('POST', '/instagram/configurar', { pageId, pageAccessToken });
+    await apiRequest('POST', '/instagram/configurar', { pageId, pageAccessToken, igBusinessId });
     instagramConnected = true;
     instagramConfigMsg = { tipo:'ok', texto:'Conectado com sucesso.' };
   }catch(e){
@@ -793,7 +816,8 @@ function statusMensagemIcone(status){
 // Monta o conteúdo de uma mensagem — texto normal, ou a mídia (foto/áudio/documento/vídeo)
 // quando ela tiver um anexo vinculado. Reaproveitado nas duas telas de chat do app.
 function renderConteudoMensagem(m){
-  if(!m.anexo) return `<p>${esc(m.texto)}</p>`;
+  const iconeCanal = m.canal==='instagram' ? '📷 ' : '';
+  if(!m.anexo) return `<p>${iconeCanal}${esc(m.texto)}</p>`;
   const a = m.anexo;
   if(m.midiaTipo==='image'){
     return `<img src="${a.dadosBase64}" alt="${esc(a.nomeArquivo)}" class="wa-msg-imagem" />`;
@@ -946,6 +970,7 @@ async function loadEquipe(){
   if(equipe && currentPage === 'equipe'){
     if(equipeSubTab==='chat' && !chatLoaded) loadChat();
     if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
+    if(equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
   }
 }
 async function loadChat(){
@@ -958,6 +983,33 @@ async function loadChat(){
   }
   chatLoaded = true;
   renderApp();
+}
+async function loadMonitoramento(){
+  monitoramentoLoaded = false;
+  renderApp();
+  try{
+    const data = await apiRequest('GET', '/monitoramento/erros');
+    monitoramentoErros = data.erros || [];
+  }catch(e){
+    monitoramentoErros = [];
+  }
+  monitoramentoLoaded = true;
+  renderApp();
+}
+async function limparMonitoramento(){
+  showConfirm({
+    message: 'Limpar todo o log de erros registrado? Não afeta o funcionamento do sistema, só apaga o histórico.',
+    onConfirm: async ()=>{
+      closeConfirm();
+      try{
+        await apiRequest('DELETE', '/monitoramento/erros');
+        monitoramentoErros = [];
+      }catch(e){
+        errorMsg = 'Não foi possível limpar o log agora.';
+      }
+      renderApp();
+    },
+  });
 }
 async function loadSupervisao(){
   if(!equipe || !equipe.souSupervisor){ supervisaoLoaded = true; renderApp(); return; }
@@ -1447,6 +1499,15 @@ async function alterarPapelMembro(userId, papel){
     renderApp();
   }
 }
+async function alterarSupervisorDeDados(userId, ativo){
+  try{
+    await apiRequest('PUT', `/equipe/membro/${userId}/supervisor-dados`, { ativo });
+    await loadEquipe();
+  }catch(e){
+    errorMsg = 'Não foi possível alterar o acesso de supervisor de dados.';
+    renderApp();
+  }
+}
 async function removerMembro(userId){
   try{
     await apiRequest('DELETE', `/equipe/membro/${userId}`);
@@ -1597,6 +1658,96 @@ function statusTemplateLabel(status){
 }
 
 /* ---------- Campos personalizados ---------- */
+async function toggleAgendamentoPublicoAtivo(){
+  agendamentoPublicoForm.ativo = !agendamentoPublicoForm.ativo;
+  renderApp();
+}
+async function salvarAgendamentoPublico(){
+  agendamentoPublicoForm.horaInicio = document.getElementById('ap-hora-inicio').value || agendamentoPublicoForm.horaInicio;
+  agendamentoPublicoForm.horaFim = document.getElementById('ap-hora-fim').value || agendamentoPublicoForm.horaFim;
+  agendamentoPublicoForm.duracaoMinutos = Number(document.getElementById('ap-duracao').value);
+  agendamentoPublicoForm.diasSemana = [...document.querySelectorAll('.ap-dia-semana:checked')].map(el=>Number(el.value));
+  agendamentoPublicoForm.colunaDestinoId = document.getElementById('ap-coluna-destino').value;
+  try{
+    const data = await apiRequest('PUT', '/auth/agendamento-publico', agendamentoPublicoForm);
+    currentUser = data.user;
+    localStorage.setItem('user', JSON.stringify(currentUser));
+    agendamentoPublicoMsg = { tipo:'ok', texto:'Configuração salva.' };
+  }catch(e){
+    agendamentoPublicoMsg = { tipo:'erro', texto: e.message || 'Não foi possível salvar.' };
+  }
+  renderApp();
+}
+function copiarLinkAgendamento(){
+  const link = `${window.location.origin}/agendar/${currentUser.id}`;
+  navigator.clipboard.writeText(link).then(()=>{
+    agendamentoPublicoMsg = { tipo:'ok', texto:'Link copiado!' };
+    renderApp();
+  });
+}
+async function loadWebhooksSaida(){
+  try{
+    const data = await apiRequest('GET', '/webhooks-saida');
+    webhooksSaida = data.webhooks || [];
+  }catch(e){
+    webhooksSaida = [];
+  }
+  renderApp();
+}
+async function criarWebhookSaida(){
+  const nome = document.getElementById('novo-webhook-nome').value;
+  const url = document.getElementById('novo-webhook-url').value;
+  const eventos = [...document.querySelectorAll('.novo-webhook-evento:checked')].map(el=>el.value);
+  if(!url.trim() || !eventos.length){
+    webhooksSaidaMsg = { tipo:'erro', texto:'Preencha a URL e escolha ao menos um evento.' };
+    renderApp();
+    return;
+  }
+  try{
+    const novo = await apiRequest('POST', '/webhooks-saida', { nome, url, eventos });
+    webhooksSaida.unshift(novo);
+    webhooksSaidaMsg = { tipo:'ok', texto:'Webhook criado.' };
+  }catch(e){
+    webhooksSaidaMsg = { tipo:'erro', texto: e.message || 'Não foi possível criar o webhook.' };
+  }
+  renderApp();
+}
+async function toggleWebhookSaida(id, ativo){
+  try{
+    const atualizado = await apiRequest('PUT', `/webhooks-saida/${id}`, { ativo });
+    const idx = webhooksSaida.findIndex(w=>w.id===id);
+    if(idx>-1) webhooksSaida[idx] = atualizado;
+  }catch(e){
+    webhooksSaidaMsg = { tipo:'erro', texto:'Não foi possível alterar o webhook.' };
+  }
+  renderApp();
+}
+async function excluirWebhookSaida(id){
+  showConfirm({
+    message: 'Remover esse webhook? Ele para de disparar imediatamente.',
+    onConfirm: async ()=>{
+      closeConfirm();
+      try{
+        await apiRequest('DELETE', `/webhooks-saida/${id}`);
+        webhooksSaida = webhooksSaida.filter(w=>w.id!==id);
+      }catch(e){
+        webhooksSaidaMsg = { tipo:'erro', texto:'Não foi possível remover o webhook.' };
+      }
+      renderApp();
+    },
+  });
+}
+async function testarWebhookSaida(id){
+  webhooksSaidaMsg = { tipo:'ok', texto:'Enviando teste…' };
+  renderApp();
+  try{
+    await apiRequest('POST', `/webhooks-saida/${id}/testar`);
+    webhooksSaidaMsg = { tipo:'ok', texto:'Teste enviado — confira do outro lado.' };
+  }catch(e){
+    webhooksSaidaMsg = { tipo:'erro', texto: e.message || 'Não foi possível testar esse webhook agora.' };
+  }
+  renderApp();
+}
 async function loadCamposPersonalizados(){
   try{
     const data = await apiRequest('GET', '/campos-personalizados');
@@ -2399,6 +2550,7 @@ function goToPage(page){
     if(equipe){
       if(equipeSubTab==='chat' && !chatLoaded) loadChat();
       if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
+      if(equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
     }
   }
   if(page === 'comissoes'){
@@ -4345,7 +4497,7 @@ function renderConfiguracoesPage(){
             <span>${instagramConnected ? '✓ Conectado' : 'Não conectado'}</span>
           </div>
           ${instagramConnected ? `
-            <p class="settings-page-note">Toda vez que alguém preencher um formulário de anúncio do Instagram/Facebook, um lead novo é criado automaticamente na primeira coluna "em aberto".</p>
+            <p class="settings-page-note">Formulário de anúncio preenchido = lead novo automático. Mensagens diretas (DM) também chegam direto na aba Conversas, junto com as do WhatsApp.</p>
             <button class="btn-outline" data-action="desconectar-instagram">Desconectar</button>
           ` : `
             <div class="field">
@@ -4354,7 +4506,11 @@ function renderConfiguracoesPage(){
             </div>
             <div class="field">
               <label>Access Token da página</label>
-              <input type="password" id="ig-page-token" placeholder="Token com permissão leads_retrieval" />
+              <input type="password" id="ig-page-token" placeholder="Token com permissão leads_retrieval e instagram_manage_messages" />
+            </div>
+            <div class="field">
+              <label>ID da conta comercial do Instagram (opcional, pra receber DMs)</label>
+              <input type="text" id="ig-business-id" placeholder="ID da conta profissional do Instagram vinculada" />
             </div>
             ${instagramConfigMsg ? `<p class="settings-page-msg ${instagramConfigMsg.tipo}">${esc(instagramConfigMsg.texto)}</p>` : ''}
             <button class="btn-primary" data-action="salvar-instagram-config" ${instagramSalvando?'disabled':''}>${instagramSalvando?'Salvando…':'Conectar'}</button>
@@ -4405,6 +4561,90 @@ function renderConfiguracoesPage(){
           </div>
           ${camposPersonalizadosMsg ? `<p class="settings-page-msg ${camposPersonalizadosMsg.tipo}">${esc(camposPersonalizadosMsg.texto)}</p>` : ''}
           <button class="btn-outline" data-action="criar-campo-personalizado">+ Adicionar campo</button>
+        </div>
+
+        <div class="settings-page-section">
+          <h3>Webhooks (Zapier, Make, n8n...)</h3>
+          <p class="settings-page-note">Conecte o painel com qualquer outra ferramenta que aceite receber um POST — Zapier ("Webhooks by Zapier"), Make, n8n, ou o que você já usa. Toda vez que o evento escolhido acontecer, mandamos os dados pra sua URL.</p>
+          ${webhooksSaidaMsg ? `<p class="settings-page-msg ${webhooksSaidaMsg.tipo}">${esc(webhooksSaidaMsg.texto)}</p>` : ''}
+          <div class="disparo-lista-leads" style="max-height:none; margin-bottom:12px;">
+            ${webhooksSaida.length ? webhooksSaida.map(w=>`
+              <div class="disparo-lead-item" style="cursor:default; flex-direction:column; align-items:stretch; gap:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span><b>${esc(w.nome||'Sem nome')}</b> ${!w.ativo?'<span class="settings-page-note">(pausado)</span>':''}</span>
+                  <div class="settings-btn-row">
+                    <button class="btn-outline" data-action="testar-webhook-saida" data-webhook-id="${w.id}">Testar</button>
+                    <button class="btn-outline" data-action="toggle-webhook-saida" data-webhook-id="${w.id}" data-ativo="${w.ativo?'0':'1'}">${w.ativo?'Pausar':'Ativar'}</button>
+                    <button class="delete-link" data-action="excluir-webhook-saida" data-webhook-id="${w.id}">🗑</button>
+                  </div>
+                </div>
+                <span class="settings-page-note" style="word-break:break-all;">${esc(w.url)}</span>
+                <span class="settings-page-note">Eventos: ${w.eventos.map(ev=>ROTULOS_EVENTOS_WEBHOOK[ev]||ev).join(', ')}${w.ultimoEnvioEm?` · Último disparo: ${formatDateHora(w.ultimoEnvioEm)} (${w.ultimoEnvioStatus==='ok'?'✅':'⚠️'})`:''}</span>
+              </div>
+            `).join('') : '<p class="dash-empty">Nenhum webhook cadastrado ainda.</p>'}
+          </div>
+          <div class="field">
+            <label>Nome (só pra identificar)</label>
+            <input type="text" id="novo-webhook-nome" placeholder="Ex: Zapier - novo lead" />
+          </div>
+          <div class="field">
+            <label>URL de destino</label>
+            <input type="text" id="novo-webhook-url" placeholder="https://hooks.zapier.com/..." />
+          </div>
+          <div class="field">
+            <label>Quando disparar</label>
+            <div class="checkbox-group">
+              ${Object.entries(ROTULOS_EVENTOS_WEBHOOK).map(([key,label])=>`
+                <label class="checkbox-item"><input type="checkbox" class="novo-webhook-evento" value="${key}" /> ${label}</label>
+              `).join('')}
+            </div>
+          </div>
+          <button class="btn-outline" data-action="criar-webhook-saida">+ Adicionar webhook</button>
+        </div>
+
+        <div class="settings-page-section">
+          <h3>Link de agendamento</h3>
+          <p class="settings-page-note">Um link público onde o cliente escolhe um horário livre e marca sozinho — sem precisar trocar mensagem pra combinar dia e hora. Confere disponibilidade nas suas tarefas e, se conectado, no seu Google Agenda também.</p>
+          ${agendamentoPublicoMsg ? `<p class="settings-page-msg ${agendamentoPublicoMsg.tipo}">${esc(agendamentoPublicoMsg.texto)}</p>` : ''}
+          <div class="settings-page-row">
+            <span>Ativar link de agendamento</span>
+            <span class="switch ${agendamentoPublicoForm.ativo?'on':''}" data-action="toggle-agendamento-publico-ativo"><span class="switch-knob"></span></span>
+          </div>
+          ${agendamentoPublicoForm.ativo ? `
+            <div class="settings-page-row">
+              <span>Seu link</span>
+              <span style="display:flex; gap:8px; align-items:center;">
+                <span class="settings-page-note" style="font-family:'IBM Plex Mono',monospace;">${window.location.origin}/agendar/${currentUser.id}</span>
+                <button class="btn-outline" data-action="copiar-link-agendamento">Copiar</button>
+              </span>
+            </div>
+          ` : ''}
+          <div class="field-row" style="margin-top:12px;">
+            <div class="field"><label>Início do expediente</label><input type="time" id="ap-hora-inicio" value="${agendamentoPublicoForm.horaInicio}" /></div>
+            <div class="field"><label>Fim do expediente</label><input type="time" id="ap-hora-fim" value="${agendamentoPublicoForm.horaFim}" /></div>
+            <div class="field">
+              <label>Duração de cada horário</label>
+              <select id="ap-duracao">
+                ${[15,30,45,60].map(min=>`<option value="${min}" ${agendamentoPublicoForm.duracaoMinutos===min?'selected':''}>${min} min</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Dias da semana</label>
+            <div class="checkbox-group" style="flex-direction:row; flex-wrap:wrap; gap:12px;">
+              ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map((label,i)=>`
+                <label class="checkbox-item"><input type="checkbox" class="ap-dia-semana" value="${i}" ${agendamentoPublicoForm.diasSemana.includes(i)?'checked':''}/> ${label}</label>
+              `).join('')}
+            </div>
+          </div>
+          <div class="field">
+            <label>Cliente novo entra em qual coluna do funil?</label>
+            <select id="ap-coluna-destino">
+              <option value="">Não criar cliente novo automaticamente</option>
+              ${board.columns.map(c=>`<option value="${c.id}" ${agendamentoPublicoForm.colunaDestinoId===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+            </select>
+          </div>
+          <button class="btn-outline" data-action="salvar-agendamento-publico">Salvar</button>
         </div>
       </div>
     </section>
@@ -4770,6 +5010,9 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="alterar-papel-membro"]').forEach(btn=>{
     btn.addEventListener('click', ()=> alterarPapelMembro(btn.dataset.userId, btn.dataset.papel));
   });
+  app.querySelectorAll('[data-action="toggle-supervisor-dados"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> alterarSupervisorDeDados(btn.dataset.userId, btn.dataset.ativo==='1'));
+  });
   app.querySelectorAll('[data-action="remover-membro"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       showConfirm({
@@ -4793,6 +5036,7 @@ function bindAppEvents(){
       equipeSubTab = btn.dataset.subtab;
       if(equipeSubTab==='chat' && !chatLoaded) loadChat();
       if(equipeSubTab==='supervisao' && equipe && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
+      if(equipeSubTab==='monitoramento' && equipe && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
       renderApp();
     });
   });
@@ -4859,6 +5103,10 @@ function bindAppEvents(){
   if(abrirSenhaBtn) abrirSenhaBtn.addEventListener('click', abrirAlterarSenhaModal);
   const toggleAuditoriaBtn = app.querySelector('[data-action="toggle-auditoria"]');
   if(toggleAuditoriaBtn) toggleAuditoriaBtn.addEventListener('click', ()=>{ auditoriaExpandida = !auditoriaExpandida; renderApp(); });
+  const atualizarMonitoramentoBtn = app.querySelector('[data-action="atualizar-monitoramento"]');
+  if(atualizarMonitoramentoBtn) atualizarMonitoramentoBtn.addEventListener('click', loadMonitoramento);
+  const limparMonitoramentoBtn = app.querySelector('[data-action="limpar-monitoramento"]');
+  if(limparMonitoramentoBtn) limparMonitoramentoBtn.addEventListener('click', limparMonitoramento);
   const importColunaSelect = document.getElementById('import-coluna');
   if(importColunaSelect) importColunaSelect.addEventListener('change', (e)=> importColumnId = e.target.value);
   const importBtn = document.getElementById('import-btn');
@@ -4870,6 +5118,24 @@ function bindAppEvents(){
   if(novoCampoTipoEl) novoCampoTipoEl.addEventListener('change', (e)=> novoCampoTipo = e.target.value);
   const criarCampoBtn = app.querySelector('[data-action="criar-campo-personalizado"]');
   if(criarCampoBtn) criarCampoBtn.addEventListener('click', criarCampoPersonalizado);
+
+  const criarWebhookBtn = app.querySelector('[data-action="criar-webhook-saida"]');
+  if(criarWebhookBtn) criarWebhookBtn.addEventListener('click', criarWebhookSaida);
+  app.querySelectorAll('[data-action="testar-webhook-saida"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> testarWebhookSaida(btn.dataset.webhookId));
+  });
+  app.querySelectorAll('[data-action="toggle-webhook-saida"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> toggleWebhookSaida(btn.dataset.webhookId, btn.dataset.ativo==='1'));
+  });
+  app.querySelectorAll('[data-action="excluir-webhook-saida"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> excluirWebhookSaida(btn.dataset.webhookId));
+  });
+  const toggleAgendamentoPublicoBtn = app.querySelector('[data-action="toggle-agendamento-publico-ativo"]');
+  if(toggleAgendamentoPublicoBtn) toggleAgendamentoPublicoBtn.addEventListener('click', toggleAgendamentoPublicoAtivo);
+  const salvarAgendamentoPublicoBtn = app.querySelector('[data-action="salvar-agendamento-publico"]');
+  if(salvarAgendamentoPublicoBtn) salvarAgendamentoPublicoBtn.addEventListener('click', salvarAgendamentoPublico);
+  const copiarLinkBtn = app.querySelector('[data-action="copiar-link-agendamento"]');
+  if(copiarLinkBtn) copiarLinkBtn.addEventListener('click', copiarLinkAgendamento);
   app.querySelectorAll('[data-action="excluir-campo-personalizado"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const id = btn.dataset.campoId;
@@ -5723,7 +5989,7 @@ function renderConversasPage(){
           ${listaFiltrada.length ? listaFiltrada.map(cv=>`
             <div class="conversa-item ${conversaSelecionadaCardId===cv.card.id?'conversa-item-ativa':''}" data-action="selecionar-conversa" data-card-id="${cv.card.id}">
               <div class="conversa-item-main">
-                <span class="conversa-item-nome">${esc(cv.card.cliente) || 'Sem nome'}</span>
+                <span class="conversa-item-nome">${cv.canal==='instagram'?'📷':'💬'} ${esc(cv.card.cliente) || 'Sem nome'}</span>
                 <span class="conversa-item-preview">${cv.direcaoUltima==='out' ? 'Você: ' : ''}${esc((cv.ultimaMensagem||'').slice(0,60))}</span>
               </div>
               <span class="conversa-item-hora">${formatDateHora(cv.ultimaMensagemEm)}</span>
@@ -6063,7 +6329,8 @@ function renderEquipePage(){
     return renderEquipeSetup('Equipe', 'Você ainda não faz parte de uma equipe');
   }
   const abas = [['chat','Chat']];
-  if(equipe.souSupervisor) abas.push(['supervisao','Supervisão']);
+  if(equipe.souSupervisor) abas.push(['supervisao','Gestão']);
+  if(equipe.souSupervisorDeDados) abas.push(['monitoramento','Monitoramento']);
   return `
     <div class="page-head">
       <div>
@@ -6078,6 +6345,7 @@ function renderEquipePage(){
     ` : ''}
     ${equipeSubTab==='chat' ? renderChatInternoConteudo() : ''}
     ${equipeSubTab==='supervisao' && equipe.souSupervisor ? renderSupervisaoConteudo() : ''}
+    ${equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados ? renderMonitoramentoConteudo() : ''}
   `;
 }
 
@@ -6101,7 +6369,7 @@ function renderRankingSupervisao(membros){
   if(supervisores.length){
     html += supervisores.map(m=>`
       <div class="ranking-supervisor-card">
-        <div class="stage-row-top"><span>⭐ ${esc(m.nome)} <span class="settings-page-note">— Supervisor, fora do ranking de vendas</span></span><span>${fmtBRL(m.ganhoValor)}</span></div>
+        <div class="stage-row-top"><span>⭐ ${esc(m.nome)} <span class="settings-page-note">— Gestor, fora do ranking de vendas</span></span><span>${fmtBRL(m.ganhoValor)}</span></div>
         <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${(m.ganhoValor/maxGanho*100)}%"></div></div>
       </div>
     `).join('');
@@ -6133,14 +6401,17 @@ function renderSupervisaoConteudo(){
       <h3>Membros</h3>
       <div class="disparo-lista-leads" style="max-height:none;">
         ${membrosOrdenados(equipe.membros).map(m=>`
-          <div class="disparo-lead-item ${m.papel==='supervisor'?'membro-supervisor-destaque':''}" style="cursor:default; justify-content:space-between;">
-            <span>${esc(m.nome||m.email)} — ${m.papel==='supervisor'?'⭐ Supervisor':'Membro'}${m.souEu?' (você)':''}</span>
-            ${!m.souEu ? `
-              <div class="settings-btn-row">
-                <button class="btn-outline" data-action="alterar-papel-membro" data-user-id="${m.id}" data-papel="${m.papel==='supervisor'?'membro':'supervisor'}">${m.papel==='supervisor'?'Rebaixar':'Promover'}</button>
-                <button class="btn-outline" data-action="remover-membro" data-user-id="${m.id}">Remover</button>
-              </div>
-            ` : ''}
+          <div class="disparo-lead-item ${m.papel==='supervisor'?'membro-supervisor-destaque':''}" style="cursor:default; flex-direction:column; align-items:stretch; gap:8px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span>${esc(m.nome||m.email)} — ${m.papel==='supervisor'?'⭐ Gestor':'Membro'}${m.supervisorDeDados?' · 🛠 Supervisor de dados':''}${m.souEu?' (você)':''}</span>
+              ${!m.souEu ? `
+                <div class="settings-btn-row">
+                  <button class="btn-outline" data-action="alterar-papel-membro" data-user-id="${m.id}" data-papel="${m.papel==='supervisor'?'membro':'supervisor'}">${m.papel==='supervisor'?'Rebaixar':'Promover'}</button>
+                  <button class="btn-outline" data-action="toggle-supervisor-dados" data-user-id="${m.id}" data-ativo="${m.supervisorDeDados?'0':'1'}">${m.supervisorDeDados?'Remover supervisor de dados':'Tornar supervisor de dados'}</button>
+                  <button class="btn-outline" data-action="remover-membro" data-user-id="${m.id}">Remover</button>
+                </div>
+              ` : ''}
+            </div>
           </div>
         `).join('')}
       </div>
@@ -6172,6 +6443,31 @@ function renderSupervisaoConteudo(){
           </table>
         </div>
       `}
+    </div>
+  `;
+}
+function renderMonitoramentoConteudo(){
+  return `
+    <div class="settings-page-section">
+      <h3>Monitoramento de erros do sistema</h3>
+      <p class="settings-page-note">Erros técnicos registrados automaticamente nos últimos 30 dias — útil pra perceber se algo quebrou sem precisar esperar alguém reclamar.</p>
+      <div class="settings-btn-row" style="margin-bottom:14px;">
+        <button class="btn-outline" data-action="atualizar-monitoramento">Atualizar</button>
+        <button class="delete-link" data-action="limpar-monitoramento">🗑 Limpar log</button>
+      </div>
+      ${!monitoramentoLoaded ? `<p class="settings-page-note">Carregando…</p>` : (monitoramentoErros.length ? `
+        <div class="historico-lista">
+          ${monitoramentoErros.map(e=>`
+            <div class="historico-item" style="align-items:flex-start; flex-direction:column; gap:4px;">
+              <div style="display:flex; justify-content:space-between; width:100%;">
+                <span class="badge" style="background:${e.tipo==='rota'?'var(--badge-neutral-bg)':'var(--danger-soft)'};color:${e.tipo==='rota'?'var(--ink-soft)':'var(--danger)'};">${e.tipo==='excecao_nao_tratada'?'Exceção crítica':e.tipo==='promise_rejeitada'?'Promise sem tratamento':'Erro de rota'}</span>
+                <span class="historico-item-data">${formatDateHora(e.createdAt)}</span>
+              </div>
+              <span class="historico-item-texto">${esc(e.mensagem)}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : `<p class="dash-empty">Nenhum erro registrado — tudo tranquilo por aqui.</p>`)}
     </div>
   `;
 }
@@ -7046,4 +7342,5 @@ if(getToken()){
   loadEquipe();
   loadAutomacoes();
   loadFluxos();
+  loadWebhooksSaida();
 }

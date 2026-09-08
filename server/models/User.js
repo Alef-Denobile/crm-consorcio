@@ -42,6 +42,7 @@ const instagramLeadsSchema = new mongoose.Schema(
   {
     pageId: { type: String, default: null },
     pageAccessToken: { type: String, default: null },
+    igBusinessId: { type: String, default: null }, // ID da conta comercial do Instagram — usado pras mensagens diretas (DM), separado do Page ID usado pra captação de leads
   },
   { _id: false }
 );
@@ -58,6 +59,15 @@ const userSchema = new mongoose.Schema(
     menuTriagem: { type: menuTriagemSchema, default: () => ({ opcoes: [] }) },
     equipeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipe', default: null },
     papelEquipe: { type: String, enum: ['supervisor', 'membro'], default: 'membro' },
+    supervisorDeDados: { type: Boolean, default: false }, // acesso ao monitoramento de erros — separado do papel de gestor da equipe
+    agendamentoPublico: {
+      ativo: { type: Boolean, default: false },
+      horaInicio: { type: String, default: '08:00' },
+      horaFim: { type: String, default: '18:00' },
+      duracaoMinutos: { type: Number, default: 30 },
+      diasSemana: { type: [Number], default: [1, 2, 3, 4, 5] }, // 0=domingo ... 6=sábado
+      colunaDestinoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Column', default: null }, // onde o lead novo entra no funil
+    },
     tokenVersion: { type: Number, default: 0 }, // incrementar invalida todos os tokens já emitidos (logout geral)
     avatarUrl: { type: String, default: null }, // imagem pequena em base64 (data URL)
     twoFactorSecret: { type: String, default: null }, // segredo TOTP — só existe enquanto ativado ou em processo de ativação

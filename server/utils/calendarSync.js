@@ -106,11 +106,75 @@ async function listarEventosPrimario(user, timeMin, timeMax) {
     }));
 }
 
+// Empurra uma tarefa (criação/edição) pra Google Agenda, se o usuário tiver conectado.
+// Nunca deixa um erro aqui quebrar a resposta principal de quem chamou.
+async function sincronizarTarefaComCalendar(userId, task) {
+  try {
+    const user = await User.findById(userId);
+    if (!user || !user.googleCalendar || !user.googleCalendar.refreshToken) return;
+    const calendarId = await getOrCreateCalendarId(user);
+
+    if (!task.vencimento) {
+      if (task.googleEventId) {
+        try {
+          await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events/${task.googleEventId}`, { method: 'DELETE' });
+        } catch (e) { /* evento já pode ter sido apagado manualmente */ }
+        task.googleEventId = null;
+        await task.save();
+      }
+      return;
+    }
+
+    // Se a tarefa tem horário definido (não é meia-noite UTC — mesma checagem usada em
+    // outras partes do sistema), cria um evento COM horário no Google Agenda, com 1h de
+    // duração; senão, mantém o formato antigo de "dia inteiro".
+    const dataObj = new Date(task.vencimento);
+    const temHora = dataObj.getUTCHours() !== 0 || dataObj.getUTCMinutes() !== 0;
+    let corpoEvento;
+    if (temHora) {
+      const fim = new Date(dataObj.getTime() + 60 * 60 * 1000);
+      corpoEvento = {
+        summary: task.titulo,
+        description: task.descricao || '',
+        start: { dateTime: dataObj.toISOString() },
+        end: { dateTime: fim.toISOString() },
+      };
+    } else {
+      const dataStr = dataObj.toISOString().slice(0, 10);
+      corpoEvento = {
+        summary: task.titulo,
+        description: task.descricao || '',
+        start: { date: dataStr },
+        end: { date: dataStr },
+      };
+    }
+
+    if (task.googleEventId) {
+      await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events/${task.googleEventId}`, {
+        method: 'PUT',
+        body: JSON.stringify(corpoEvento),
+      });
+    } else {
+      const criado = await chamarCalendarApi(user, `/calendars/${encodeURIComponent(calendarId)}/events`, {
+        method: 'POST',
+        body: JSON.stringify(corpoEvento),
+      });
+      if (criado && criado.id) {
+        task.googleEventId = criado.id;
+        await task.save();
+      }
+    }
+  } catch (err) {
+    console.error('Erro ao sincronizar tarefa com o Google Agenda:', err.message);
+  }
+}
+
 module.exports = {
   chamarCalendarApi,
   getOrCreateCalendarId,
   getValidAccessToken,
   listarEventosPrimario,
+  sincronizarTarefaComCalendar,
   NOME_CALENDARIO,
   CLIENT_ID,
   CLIENT_SECRET,

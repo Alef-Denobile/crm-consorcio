@@ -6,6 +6,8 @@ const Card = require('../models/Card');
 const Column = require('../models/Column');
 const Message = require('../models/Message');
 const Anexo = require('../models/Anexo');
+const { dispararWebhooks } = require('../utils/dispararWebhooks');
+const { enviarAlertaTelegram } = require('../utils/telegramAlerta');
 const { perguntarClaude } = require('../utils/anthropic');
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
 
@@ -13,13 +15,7 @@ const router = express.Router();
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || '';
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
-
-function normalizarTelefone(str) {
-  let digitos = String(str || '').replace(/\D/g, '');
-  if (!digitos) return null;
-  if (digitos.length <= 11) digitos = '55' + digitos;
-  return digitos;
-}
+const { normalizarTelefone } = require('../utils/telefone');
 
 // Baixa uma mídia recebida pelo WhatsApp (foto, áudio, documento, vídeo) usando o
 // mediaId que a Meta manda no webhook, e guarda como Anexo do cliente — igual já
@@ -224,121 +220,202 @@ router.post('/webhook', async (req, res) => {
   res.sendStatus(200);
   try {
     const entry = (req.body.entry || [])[0];
-    const change = entry && (entry.changes || [])[0];
-    const value = change && change.value;
-    if (!value) return;
+    for (const change of (entry && entry.changes) || []) {
+      const value = change && change.value;
+      if (!value) continue;
 
-    const phoneNumberId = value.metadata && value.metadata.phone_number_id;
-    if (!phoneNumberId) return;
-    const user = await User.findOne({ 'whatsappBusiness.phoneNumberId': phoneNumberId });
-    if (!user) return; // número não pertence a nenhuma conta cadastrada aqui
-
-    for (const msg of value.messages || []) {
-      const telefone = normalizarTelefone(msg.from);
-      let card = await Card.findOne({ userId: user._id, telefoneNormalizado: telefone });
-      let eraContatoNovo = false;
-
-      if (!card) {
-        // mensagem de um número que ainda não existe no funil — cria um lead novo automaticamente
-        const coluna = await Column.findOne({ userId: user._id, tipo: 'aberto' }).sort({ ordem: 1 });
-        if (!coluna) continue; // usuário não tem nenhuma coluna "em aberto" pra receber o lead
-        const nomeContato =
-          (value.contacts && value.contacts[0] && value.contacts[0].profile && value.contacts[0].profile.name) ||
-          'Novo contato (WhatsApp)';
-        card = await Card.create({
-          userId: user._id,
-          columnId: coluna._id,
-          cliente: nomeContato,
-          telefone: msg.from,
-          valor: 0,
-          temperatura: 'morno',
-          obs: '',
-          mes: new Date().toISOString().slice(0, 7),
-        });
-        eraContatoNovo = true;
+      if (change.field === 'messages' || !change.field) {
+        await processarEventoDeMensagens(value);
+      } else if (change.field === 'account_alerts') {
+        await processarAlertaDeConta(value);
+      } else if (change.field === 'account_update') {
+        await processarAtualizacaoDeConta(value);
+      } else if (change.field === 'phone_number_quality_update') {
+        await processarQualidadeDoNumero(value);
+      } else if (change.field === 'message_template_status_update') {
+        await processarStatusDeTemplate(value);
+      } else if (change.field === 'history') {
+        await processarHistoricoImportado(value);
       }
-
-      // Detecta o tipo de mensagem — texto normal, ou algum tipo de mídia (foto,
-      // áudio, documento, vídeo). Mídia é baixada e guardada como anexo do cliente.
-      const TIPOS_MIDIA = { image: 'image', audio: 'audio', document: 'document', video: 'video' };
-      let texto = '[mensagem em formato não suportado]';
-      let anexoId = null;
-      let midiaTipo = null;
-      if (msg.text) {
-        texto = msg.text.body;
-      } else if (msg.type && TIPOS_MIDIA[msg.type] && msg[msg.type] && msg[msg.type].id) {
-        midiaTipo = TIPOS_MIDIA[msg.type];
-        const legendas = { image: '📷 Foto', audio: '🎤 Áudio', document: '📄 Documento', video: '🎥 Vídeo' };
-        texto = msg[msg.type].caption || legendas[midiaTipo];
-        const anexo = await baixarMidiaDoWhatsapp(user, card, msg[msg.type].id, msg[msg.type].filename);
-        if (anexo) anexoId = anexo._id;
-      }
-      await Message.create({
-        userId: user._id,
-        cardId: card._id,
-        direction: 'in',
-        texto,
-        anexoId,
-        midiaTipo,
-        whatsappMessageId: msg.id,
-        timestamp: msg.timestamp ? new Date(parseInt(msg.timestamp, 10) * 1000) : new Date(),
-      });
-
-      let tratadoPeloMenu = false;
-
-      // contato novo + menu de triagem ativo -> manda o menu e espera a resposta
-      if (eraContatoNovo && user.menuTriagem && user.menuTriagem.ativo && user.menuTriagem.mensagemInicial) {
-        try {
-          await enviarMensagemGraph(user, card, user.menuTriagem.mensagemInicial);
-          await Message.create({
-            userId: user._id, cardId: card._id, direction: 'out',
-            texto: user.menuTriagem.mensagemInicial, status: 'sent', timestamp: new Date(), enviadoPorAgente: true,
-          });
-          await Card.findByIdAndUpdate(card._id, { aguardandoMenuTriagem: true });
-          tratadoPeloMenu = true;
-        } catch (e) {
-          console.error('Erro ao enviar menu de triagem:', e.message);
-        }
-      } else if (card.aguardandoMenuTriagem) {
-        // já mandamos o menu antes — confere se a resposta bate com alguma opção
-        const escolha = (texto || '').trim();
-        const opcao = (user.menuTriagem.opcoes || []).find((o) => o.numero === escolha);
-        if (opcao) {
-          await Card.findByIdAndUpdate(card._id, { columnId: opcao.colunaDestinoId, aguardandoMenuTriagem: false });
-          gerarComissaoAutomaticaSeGanho(user._id, card, opcao.colunaDestinoId);
-          if (opcao.respostaConfirmacao) {
-            try {
-              await enviarMensagemGraph(user, card, opcao.respostaConfirmacao);
-              await Message.create({
-                userId: user._id, cardId: card._id, direction: 'out',
-                texto: opcao.respostaConfirmacao, status: 'sent', timestamp: new Date(), enviadoPorAgente: true,
-              });
-            } catch (e) {
-              console.error('Erro ao enviar confirmação do menu:', e.message);
-            }
-          }
-          tratadoPeloMenu = true;
-        } else {
-          await Card.findByIdAndUpdate(card._id, { aguardandoMenuTriagem: false }); // resposta não bateu — segue o fluxo normal
-        }
-      }
-
-      if (!tratadoPeloMenu && user.whatsappBusiness.agenteIaAtivo) {
-        await tentarResponderComAgente(user, card);
-      }
-      if (!tratadoPeloMenu && user.whatsappBusiness.iaProativaAtiva) {
-        gerarSugestaoProativa(user, card); // roda em segundo plano, não precisa esperar
-      }
-    }
-
-    // atualizações de status (entregue/lido) das mensagens que nós mandamos
-    for (const status of value.statuses || []) {
-      await Message.updateOne({ whatsappMessageId: status.id }, { status: status.status });
+      // outros campos (calls, flows, groups, etc.) chegam mas não são processados —
+      // não são relevantes pro uso atual do painel.
     }
   } catch (err) {
     console.error('Erro ao processar webhook do WhatsApp:', err.message);
   }
 });
+
+// field "messages" -> mensagem recebida ou atualização de status de entrega/leitura
+// (é a lógica que já existia, só isolada numa função pra caber no loop de vários campos)
+async function processarEventoDeMensagens(value) {
+  const phoneNumberId = value.metadata && value.metadata.phone_number_id;
+  if (!phoneNumberId) return;
+  const user = await User.findOne({ 'whatsappBusiness.phoneNumberId': phoneNumberId });
+  if (!user) return; // número não pertence a nenhuma conta cadastrada aqui
+
+  for (const msg of value.messages || []) {
+    const telefone = normalizarTelefone(msg.from);
+    let card = await Card.findOne({ userId: user._id, telefoneNormalizado: telefone });
+    let eraContatoNovo = false;
+
+    if (!card) {
+      // mensagem de um número que ainda não existe no funil — cria um lead novo automaticamente
+      const coluna = await Column.findOne({ userId: user._id, tipo: 'aberto' }).sort({ ordem: 1 });
+      if (!coluna) continue; // usuário não tem nenhuma coluna "em aberto" pra receber o lead
+      const nomeContato =
+        (value.contacts && value.contacts[0] && value.contacts[0].profile && value.contacts[0].profile.name) ||
+        'Novo contato (WhatsApp)';
+      card = await Card.create({
+        userId: user._id,
+        columnId: coluna._id,
+        cliente: nomeContato,
+        telefone: msg.from,
+        valor: 0,
+        temperatura: 'morno',
+        obs: '',
+        mes: new Date().toISOString().slice(0, 7),
+      });
+      eraContatoNovo = true;
+    }
+
+    // Detecta o tipo de mensagem — texto normal, ou algum tipo de mídia (foto,
+    // áudio, documento, vídeo). Mídia é baixada e guardada como anexo do cliente.
+    const TIPOS_MIDIA = { image: 'image', audio: 'audio', document: 'document', video: 'video' };
+    let texto = '[mensagem em formato não suportado]';
+    let anexoId = null;
+    let midiaTipo = null;
+    if (msg.text) {
+      texto = msg.text.body;
+    } else if (msg.type && TIPOS_MIDIA[msg.type] && msg[msg.type] && msg[msg.type].id) {
+      midiaTipo = TIPOS_MIDIA[msg.type];
+      const legendas = { image: '📷 Foto', audio: '🎤 Áudio', document: '📄 Documento', video: '🎥 Vídeo' };
+      texto = msg[msg.type].caption || legendas[midiaTipo];
+      const anexo = await baixarMidiaDoWhatsapp(user, card, msg[msg.type].id, msg[msg.type].filename);
+      if (anexo) anexoId = anexo._id;
+    }
+    await Message.create({
+      userId: user._id,
+      cardId: card._id,
+      direction: 'in',
+      texto,
+      anexoId,
+      midiaTipo,
+      whatsappMessageId: msg.id,
+      timestamp: msg.timestamp ? new Date(parseInt(msg.timestamp, 10) * 1000) : new Date(),
+    });
+    dispararWebhooks(user._id, 'mensagem.recebida', { cardId: card._id.toString(), cliente: card.cliente, telefone: card.telefone, texto, midiaTipo });
+
+    let tratadoPeloMenu = false;
+
+    // contato novo + menu de triagem ativo -> manda o menu e espera a resposta
+    if (eraContatoNovo && user.menuTriagem && user.menuTriagem.ativo && user.menuTriagem.mensagemInicial) {
+      try {
+        await enviarMensagemGraph(user, card, user.menuTriagem.mensagemInicial);
+        await Message.create({
+          userId: user._id, cardId: card._id, direction: 'out',
+          texto: user.menuTriagem.mensagemInicial, status: 'sent', timestamp: new Date(), enviadoPorAgente: true,
+        });
+        await Card.findByIdAndUpdate(card._id, { aguardandoMenuTriagem: true });
+        tratadoPeloMenu = true;
+      } catch (e) {
+        console.error('Erro ao enviar menu de triagem:', e.message);
+      }
+    } else if (card.aguardandoMenuTriagem) {
+      // já mandamos o menu antes — confere se a resposta bate com alguma opção
+      const escolha = (texto || '').trim();
+      const opcao = (user.menuTriagem.opcoes || []).find((o) => o.numero === escolha);
+      if (opcao) {
+        await Card.findByIdAndUpdate(card._id, { columnId: opcao.colunaDestinoId, aguardandoMenuTriagem: false });
+        gerarComissaoAutomaticaSeGanho(user._id, card, opcao.colunaDestinoId);
+        if (opcao.respostaConfirmacao) {
+          try {
+            await enviarMensagemGraph(user, card, opcao.respostaConfirmacao);
+            await Message.create({
+              userId: user._id, cardId: card._id, direction: 'out',
+              texto: opcao.respostaConfirmacao, status: 'sent', timestamp: new Date(), enviadoPorAgente: true,
+            });
+          } catch (e) {
+            console.error('Erro ao enviar confirmação do menu:', e.message);
+          }
+        }
+        tratadoPeloMenu = true;
+      } else {
+        await Card.findByIdAndUpdate(card._id, { aguardandoMenuTriagem: false }); // resposta não bateu — segue o fluxo normal
+      }
+    }
+
+    if (!tratadoPeloMenu && user.whatsappBusiness.agenteIaAtivo) {
+      await tentarResponderComAgente(user, card);
+    }
+    if (!tratadoPeloMenu && user.whatsappBusiness.iaProativaAtiva) {
+      gerarSugestaoProativa(user, card); // roda em segundo plano, não precisa esperar
+    }
+  }
+
+  // atualizações de status (entregue/lido) das mensagens que nós mandamos
+  for (const status of value.statuses || []) {
+    await Message.updateOne({ whatsappMessageId: status.id }, { status: status.status });
+  }
+}
+
+// field "account_alerts" -> avisos da Meta sobre a conta (incluindo riscos de restrição)
+async function processarAlertaDeConta(value) {
+  const descricao = value.alert_description || value.alert_type || JSON.stringify(value);
+  await enviarAlertaTelegram(`⚠️ Alerta da Meta sobre sua conta do WhatsApp:\n${descricao}`);
+}
+
+// field "account_update" -> mudança de status da conta (ex: banida, restrita, reativada)
+async function processarAtualizacaoDeConta(value) {
+  const evento = value.event || 'status alterado';
+  const banInfo = value.ban_info ? ` (motivo: ${value.ban_info.waba_ban_reason || value.ban_info.reason || 'não especificado'})` : '';
+  await enviarAlertaTelegram(`⚠️ Status da sua conta do WhatsApp mudou: ${evento}${banInfo}`);
+}
+
+// field "phone_number_quality_update" -> mudança na nota de qualidade do número
+// (aviso importante — cai antes do número ser bloqueado de vez)
+async function processarQualidadeDoNumero(value) {
+  const numero = value.display_phone_number || 'seu número';
+  const qualidade = value.current_limit || value.event || JSON.stringify(value);
+  await enviarAlertaTelegram(`⚠️ A qualidade do número ${numero} no WhatsApp mudou: ${qualidade}`);
+}
+
+// field "message_template_status_update" -> a Meta aprovou, rejeitou ou pausou um modelo
+async function processarStatusDeTemplate(value) {
+  const nome = value.message_template_name || 'modelo';
+  const status = value.event || 'status alterado';
+  const motivo = value.reason ? ` (motivo: ${value.reason})` : '';
+  await enviarAlertaTelegram(`📋 Modelo de mensagem "${nome}": ${status}${motivo}`);
+}
+
+// field "history" -> histórico de mensagens importado durante uma migração de número
+// pro Business API (só acontece durante o processo de migração, quando configurado)
+async function processarHistoricoImportado(value) {
+  const phoneNumberId = value.metadata && value.metadata.phone_number_id;
+  if (!phoneNumberId) return;
+  const user = await User.findOne({ 'whatsappBusiness.phoneNumberId': phoneNumberId });
+  if (!user) return;
+
+  for (const historia of value.history || []) {
+    for (const thread of historia.threads || []) {
+      const telefone = normalizarTelefone(thread.id);
+      let card = await Card.findOne({ userId: user._id, telefoneNormalizado: telefone });
+      if (!card) continue; // histórico de gente que não está no funil — ignora, não cria lead retroativo
+
+      for (const msg of thread.messages || []) {
+        const jaExiste = await Message.findOne({ whatsappMessageId: msg.id });
+        if (jaExiste) continue;
+        await Message.create({
+          userId: user._id,
+          cardId: card._id,
+          direction: msg.from === thread.id ? 'in' : 'out',
+          texto: (msg.text && msg.text.body) || '[mensagem antiga em formato não suportado]',
+          whatsappMessageId: msg.id,
+          timestamp: msg.timestamp ? new Date(parseInt(msg.timestamp, 10) * 1000) : new Date(),
+        });
+      }
+    }
+  }
+}
 
 /* ===================== rotas autenticadas (usadas pelo painel) ===================== */
 
@@ -476,6 +553,7 @@ router.get('/conversas', auth, async (req, res) => {
           ultimaMensagem: { $first: '$texto' },
           ultimaMensagemEm: { $first: '$timestamp' },
           direcaoUltima: { $first: '$direction' },
+          canalUltima: { $first: '$canal' },
         },
       },
     ]);
@@ -489,10 +567,11 @@ router.get('/conversas', auth, async (req, res) => {
         const card = cardMap.get(a._id.toString());
         if (!card) return null;
         return {
-          card: { id: card._id.toString(), cliente: card.cliente, telefone: card.telefone },
+          card: { id: card._id.toString(), cliente: card.cliente, telefone: card.telefone, instagramId: card.instagramId || null },
           ultimaMensagem: a.ultimaMensagem,
           ultimaMensagemEm: a.ultimaMensagemEm,
           direcaoUltima: a.direcaoUltima,
+          canal: a.canalUltima || 'whatsapp',
         };
       })
       .filter(Boolean)
@@ -534,11 +613,37 @@ router.post('/enviar', auth, async (req, res) => {
     if (!texto || !texto.trim()) return res.status(400).json({ error: 'Mensagem vazia.' });
 
     const user = await User.findById(req.userId);
+    const card = await Card.findOne({ _id: cardId, userId: req.userId });
+    if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+    // Descobre por qual canal responder: se a última mensagem trocada com esse
+    // cliente foi pelo Instagram, responde por lá; senão, WhatsApp (padrão de sempre).
+    const ultimaMsg = await Message.findOne({ cardId: card._id }).sort({ timestamp: -1 });
+    const usarInstagram = (ultimaMsg && ultimaMsg.canal === 'instagram') || (!card.telefoneNormalizado && card.instagramId);
+
+    if (usarInstagram) {
+      if (!user.instagramLeads || !user.instagramLeads.pageAccessToken) {
+        return res.status(400).json({ error: 'Instagram não está conectado.' });
+      }
+      if (!card.instagramId) return res.status(400).json({ error: 'Esse cliente não tem uma conversa de Instagram associada.' });
+      const { enviarMensagemInstagram } = require('./instagram');
+      const data = await enviarMensagemInstagram(user, card, texto.trim());
+      const msg = await Message.create({
+        userId: req.userId,
+        cardId: card._id,
+        direction: 'out',
+        canal: 'instagram',
+        texto: texto.trim(),
+        instagramMessageId: data.message_id,
+        status: 'sent',
+        timestamp: new Date(),
+      });
+      return res.status(201).json(msg.toJSON());
+    }
+
     if (!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) {
       return res.status(400).json({ error: 'WhatsApp Business não está conectado.' });
     }
-    const card = await Card.findOne({ _id: cardId, userId: req.userId });
-    if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
     if (!card.telefoneNormalizado) return res.status(400).json({ error: 'Esse cliente não tem telefone cadastrado.' });
 
     const data = await enviarMensagemGraph(user, card, texto);
@@ -547,6 +652,7 @@ router.post('/enviar', auth, async (req, res) => {
       userId: req.userId,
       cardId: card._id,
       direction: 'out',
+      canal: 'whatsapp',
       texto,
       whatsappMessageId: data.messages && data.messages[0] && data.messages[0].id,
       status: 'sent',

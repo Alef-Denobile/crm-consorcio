@@ -11,6 +11,7 @@ const Anexo = require('../models/Anexo');
 const { registrarAuditoria } = require('../utils/auditoria');
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
 const { executarAcaoDeAutomacao } = require('../utils/executarAutomacao');
+const { dispararWebhooks } = require('../utils/dispararWebhooks');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
@@ -81,6 +82,7 @@ router.post('/', async (req, res) => {
     executarAutomacoesDaColuna(req.userId, dados.columnId, card);
     iniciarFluxosDaColuna(req.userId, dados.columnId, card);
     gerarComissaoAutomaticaSeGanho(req.userId, card, dados.columnId);
+    dispararWebhooks(req.userId, 'lead.criado', { id: card._id.toString(), cliente: card.cliente, telefone: card.telefone, valor: card.valor, columnId: card.columnId.toString() });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao criar cliente.' });
   }
@@ -182,6 +184,9 @@ router.put('/:id/move', async (req, res) => {
     executarAutomacoesDaColuna(req.userId, columnId, card);
     iniciarFluxosDaColuna(req.userId, columnId, card);
     gerarComissaoAutomaticaSeGanho(req.userId, card, columnId);
+    const dadosWebhook = { id: card._id.toString(), cliente: card.cliente, telefone: card.telefone, valor: card.valor, columnId: card.columnId.toString(), colunaNome: coluna.nome };
+    dispararWebhooks(req.userId, 'lead.movido', dadosWebhook);
+    if (coluna.tipo === 'ganho') dispararWebhooks(req.userId, 'lead.ganho', dadosWebhook);
   } catch (err) {
     res.status(500).json({ error: 'Erro ao mover cliente.' });
   }
