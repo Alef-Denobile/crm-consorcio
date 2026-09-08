@@ -337,6 +337,7 @@ let importando = false;
 let aiInsights = [];
 let sidebarOpen = false;
 let insightsCarregando = false;
+let insightsPipelineExpandido = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
 let confirmState = null;         // { message, onConfirm }
@@ -3240,7 +3241,7 @@ async function gerarInsightsIA(){
   insightsCarregando = true;
   renderApp();
   try{
-    const data = await apiRequest('POST', '/ai/insights');
+    const data = await apiRequest('POST', '/ai/insights', { funilId: funilAtualId });
     aiInsights = data.insights || [];
   }catch(e){
     errorMsg = e.message || 'Não foi possível gerar os insights.';
@@ -3618,17 +3619,6 @@ function renderDashboardPage(){
         `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>'}
       </div>
     </div>
-
-    <div class="dash-panel">
-      <div class="dash-panel-title-row">
-        <div class="dash-panel-title">${ICON_SPARKLE} Insights da IA</div>
-        <button class="btn-outline" data-action="gerar-insights" ${insightsCarregando?'disabled':''}>${insightsCarregando?'Gerando…':'Gerar'}</button>
-      </div>
-      ${aiInsights.length
-        ? `<ul class="ai-insights-list">${aiInsights.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`
-        : `<p class="dash-empty">Clique em "Gerar" para receber alertas sobre o seu funil.</p>`
-      }
-    </div>
   `;
 }
 
@@ -3702,6 +3692,22 @@ function renderPipelinePage(){
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="pipeline-insights-bar">
+      <button class="pipeline-insights-toggle" data-action="toggle-insights-pipeline">
+        <span>${ICON_SPARKLE} Insights da IA sobre esse funil</span>
+        <span class="auditoria-toggle-seta ${insightsPipelineExpandido?'aberta':''}">▾</span>
+      </button>
+      ${insightsPipelineExpandido ? `
+        <div class="pipeline-insights-conteudo">
+          <button class="btn-outline" data-action="gerar-insights" ${insightsCarregando?'disabled':''}>${insightsCarregando?'Gerando…':'Gerar'}</button>
+          ${aiInsights.length
+            ? `<ul class="ai-insights-list">${aiInsights.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`
+            : `<p class="dash-empty">Clique em "Gerar" para receber alertas sobre esse funil.</p>`
+          }
+        </div>
+      ` : ''}
     </div>
 
     <main class="pipeline-main">
@@ -3886,8 +3892,6 @@ function ativarArrasteHorizontal(){
 function renderCard(card){
   const temp = TEMPS[card.temperatura] || TEMPS.frio;
   const showMonth = filterMonth === null && card.mes;
-  const moveMenuOpen = openMoveMenuCardId === card.id;
-  const colunasDoMesmoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
   return `
     <div class="card" draggable="true" data-action="drag-card" data-card-id="${card.id}">
       <div class="card-drag-handle" title="Arraste para mover">
@@ -3899,16 +3903,6 @@ function renderCard(card){
       </div>
       <div class="card-move-wrap">
         <button class="card-move-btn" data-action="toggle-move-menu" data-card-id="${card.id}" title="Mover pra outra coluna">⇄</button>
-        ${moveMenuOpen ? `
-          <div class="col-menu card-move-menu">
-            <div class="col-menu-title">Mover para</div>
-            ${colunasDoMesmoFunil.map(c=>`
-              <button class="col-menu-item" data-action="mover-para-coluna" data-card-id="${card.id}" data-col-id="${c.id}" ${c.id===card.columnId?'disabled':''}>
-                ${esc(c.nome)} ${c.id===card.columnId?'✓':''}
-              </button>
-            `).join('')}
-          </div>
-        ` : ''}
       </div>
       <div class="card-main">
         <div class="card-perf"></div>
@@ -4880,6 +4874,8 @@ function bindAppEvents(){
   });
   const gerarInsightsBtn = app.querySelector('[data-action="gerar-insights"]');
   if(gerarInsightsBtn) gerarInsightsBtn.addEventListener('click', gerarInsightsIA);
+  const toggleInsightsPipelineBtn = app.querySelector('[data-action="toggle-insights-pipeline"]');
+  if(toggleInsightsPipelineBtn) toggleInsightsPipelineBtn.addEventListener('click', ()=>{ insightsPipelineExpandido = !insightsPipelineExpandido; renderApp(); });
   const editarMetaBtn = app.querySelector('[data-action="editar-meta-vendas"]');
   if(editarMetaBtn) editarMetaBtn.addEventListener('click', ()=>{ editandoMetaVendas = true; renderApp(); });
   const salvarMetaBtn = document.getElementById('meta-vendas-salvar');
@@ -5355,7 +5351,11 @@ function bindAppEvents(){
 
   /* -- Pipeline: funis -- */
   app.querySelectorAll('[data-action="set-funil"]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ funilAtualId = btn.dataset.funilId; renderApp(); });
+    btn.addEventListener('click', ()=>{
+      funilAtualId = btn.dataset.funilId;
+      aiInsights = []; // insights são específicos do funil — limpa pra não mostrar dado desatualizado de outro
+      renderApp();
+    });
   });
   const novoFunilBtn = app.querySelector('[data-action="open-new-funil"]');
   if(novoFunilBtn) novoFunilBtn.addEventListener('click', criarNovoFunil);
@@ -5434,15 +5434,7 @@ function bindAppEvents(){
     btn.addEventListener('click', (e)=>{
       e.stopPropagation();
       openMoveMenuCardId = (openMoveMenuCardId===btn.dataset.cardId) ? null : btn.dataset.cardId;
-      renderApp();
-    });
-  });
-  app.querySelectorAll('[data-action="mover-para-coluna"]').forEach(btn=>{
-    btn.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      if(btn.disabled) return;
-      openMoveMenuCardId = null;
-      moveCard(btn.dataset.cardId, btn.dataset.colId);
+      renderFloatingMoveMenu(); // só o menu flutuante — não precisa redesenhar a página toda (isso resetava a rolagem)
     });
   });
   app.querySelectorAll('[data-action="set-col-tipo"]').forEach(btn=>{
@@ -5529,13 +5521,56 @@ function bindAppEvents(){
   });
 
   document.addEventListener('click', closeMenusOnOutsideClick);
+  renderFloatingMoveMenu();
+}
+// Renderiza o menu "Mover para" fora do card (que tem overflow:hidden e cortava as
+// opções de baixo) — usa uma raiz própria, colada no fim do <body>, posicionada via
+// JS com as coordenadas reais do botão que foi clicado.
+function renderFloatingMoveMenu(){
+  let root = document.getElementById('floating-menu-root');
+  if(!root){
+    root = document.createElement('div');
+    root.id = 'floating-menu-root';
+    document.body.appendChild(root);
+  }
+  if(!openMoveMenuCardId){ root.innerHTML = ''; return; }
+  const btn = document.querySelector(`[data-action="toggle-move-menu"][data-card-id="${openMoveMenuCardId}"]`);
+  const card = board.cards.find(c=>c.id===openMoveMenuCardId);
+  if(!btn || !card){ root.innerHTML = ''; openMoveMenuCardId = null; return; }
+
+  const colunasDoMesmoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
+  const rect = btn.getBoundingClientRect();
+  const alturaEstimada = Math.min(260, colunasDoMesmoFunil.length * 40 + 40);
+  const cabeDeBaixo = rect.bottom + alturaEstimada < window.innerHeight;
+  const top = cabeDeBaixo ? rect.bottom + 4 : rect.top - alturaEstimada - 4;
+  const left = Math.min(rect.left, window.innerWidth - 200); // não deixa vazar pela direita da tela
+
+  root.innerHTML = `
+    <div class="col-menu card-move-menu" style="position:fixed; top:${Math.max(4,top)}px; left:${Math.max(4,left)}px;">
+      <div class="col-menu-title">Mover para</div>
+      ${colunasDoMesmoFunil.map(c=>`
+        <button class="col-menu-item" data-action="mover-para-coluna" data-card-id="${card.id}" data-col-id="${c.id}" ${c.id===card.columnId?'disabled':''}>
+          ${esc(c.nome)} ${c.id===card.columnId?'✓':''}
+        </button>
+      `).join('')}
+    </div>
+  `;
+  root.querySelectorAll('[data-action="mover-para-coluna"]').forEach(b=>{
+    b.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(b.disabled) return;
+      openMoveMenuCardId = null;
+      moveCard(b.dataset.cardId, b.dataset.colId);
+      renderApp();
+    });
+  });
 }
 function closeMenusOnOutsideClick(e){
   if(openMenuColId && !e.target.closest('.col-menu') && !e.target.closest('[data-action="toggle-col-menu"]')){
     openMenuColId = null; renderApp();
   }
   if(openMoveMenuCardId && !e.target.closest('.card-move-menu') && !e.target.closest('[data-action="toggle-move-menu"]')){
-    openMoveMenuCardId = null; renderApp();
+    openMoveMenuCardId = null; renderFloatingMoveMenu();
   }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
