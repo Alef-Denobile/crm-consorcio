@@ -6,6 +6,7 @@ const Equipe = require('../models/Equipe');
 const ChatMensagem = require('../models/ChatMensagem');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
+const MetaVendasEquipe = require('../models/MetaVendasEquipe');
 const { registrarAuditoria } = require('../utils/auditoria');
 
 const router = express.Router();
@@ -330,6 +331,64 @@ router.get('/supervisao', async (req, res) => {
     res.json({ membros: resultado });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar a supervisão.' });
+  }
+});
+
+// GET /api/equipe/meta-vendas/:mes -> meta e total vendido pela equipe inteira naquele mês
+router.get('/meta-vendas/:mes', async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user.equipeId) return res.status(400).json({ error: 'Você não faz parte de nenhuma equipe.' });
+
+    const mes = req.params.mes;
+    const [meta, membros] = await Promise.all([
+      MetaVendasEquipe.findOne({ equipeId: user.equipeId, mes }),
+      User.find({ equipeId: user.equipeId }),
+    ]);
+
+    let vendidoNoMes = 0;
+    for (const m of membros) {
+      const [colunas, cards] = await Promise.all([
+        Column.find({ userId: m._id }),
+        Card.find({ userId: m._id, mes }),
+      ]);
+      cards.forEach((c) => {
+        const col = colunas.find((k) => k._id.toString() === c.columnId.toString());
+        if (col && col.tipo === 'ganho') vendidoNoMes += Number(c.valor) || 0;
+      });
+    }
+
+    res.json({
+      mes,
+      valorMeta: meta ? meta.valorMeta : 12000000,
+      vendidoNoMes,
+      souGestor: user.papelEquipe === 'supervisor',
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao carregar a meta da equipe.' });
+  }
+});
+
+// PUT /api/equipe/meta-vendas/:mes -> define/atualiza a meta da equipe naquele mês (só gestor)
+router.put('/meta-vendas/:mes', async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user.equipeId) return res.status(400).json({ error: 'Você não faz parte de nenhuma equipe.' });
+    if (user.papelEquipe !== 'supervisor') {
+      return res.status(403).json({ error: 'Só o gestor da equipe pode alterar essa meta.' });
+    }
+    const { valorMeta } = req.body;
+    if (typeof valorMeta !== 'number' || valorMeta < 0) {
+      return res.status(400).json({ error: 'Informe um valor de meta válido.' });
+    }
+    const meta = await MetaVendasEquipe.findOneAndUpdate(
+      { equipeId: user.equipeId, mes: req.params.mes },
+      { valorMeta },
+      { new: true, upsert: true, runValidators: true }
+    );
+    res.json(meta.toJSON());
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao salvar a meta da equipe.' });
   }
 });
 

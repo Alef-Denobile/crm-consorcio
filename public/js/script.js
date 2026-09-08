@@ -149,6 +149,10 @@ let dashboardPeriod = 'mes';     // '7dias' | 'mes' | 'trimestre' | 'ano'
 let metaVendasValor = 0;
 let metaVendasCarregada = false;
 let editandoMetaVendas = false;
+let metaVendasEquipeValor = 0;
+let metaVendasEquipeVendido = 0;
+let metaVendasEquipeCarregada = false;
+let editandoMetaVendasEquipe = false;
 let addingCol = false;
 let newColNameVal = '';
 let newColTipoVal = 'aberto';
@@ -972,6 +976,7 @@ async function loadEquipe(){
   renderApp();
   if(equipe && currentPage === 'equipe'){
     if(equipeSubTab==='chat' && !chatLoaded) loadChat();
+    if(equipeSubTab==='chat' && !metaVendasEquipeCarregada) loadMetaVendasEquipe();
     if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
     if(equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
   }
@@ -2376,6 +2381,30 @@ async function salvarMetaVendas(){
   editandoMetaVendas = false;
   renderApp();
 }
+async function loadMetaVendasEquipe(){
+  try{
+    const data = await apiRequest('GET', `/equipe/meta-vendas/${currentMonthKey()}`);
+    metaVendasEquipeValor = data.valorMeta || 0;
+    metaVendasEquipeVendido = data.vendidoNoMes || 0;
+  }catch(e){
+    metaVendasEquipeValor = 0;
+    metaVendasEquipeVendido = 0;
+  }
+  metaVendasEquipeCarregada = true;
+  renderApp();
+}
+async function salvarMetaVendasEquipe(){
+  const input = document.getElementById('meta-vendas-equipe-input');
+  const valor = input ? (parseFloat(input.value) || 0) : 0;
+  try{
+    await apiRequest('PUT', `/equipe/meta-vendas/${currentMonthKey()}`, { valorMeta: valor });
+    metaVendasEquipeValor = valor;
+  }catch(e){
+    errorMsg = 'Não foi possível salvar a meta da equipe.';
+  }
+  editandoMetaVendasEquipe = false;
+  renderApp();
+}
 function dashMetrics(){
   const cards = cardsInPeriod();
   let emNegociacaoValor=0, emNegociacaoCount=0, ganhoValor=0, ganhoCount=0, perdidoCount=0;
@@ -2552,6 +2581,7 @@ function goToPage(page){
     equipeMsg = null;
     if(equipe){
       if(equipeSubTab==='chat' && !chatLoaded) loadChat();
+      if(equipeSubTab==='chat' && !metaVendasEquipeCarregada) loadMetaVendasEquipe();
       if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
       if(equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
     }
@@ -2575,13 +2605,13 @@ async function moveCard(cardId, columnId){
   if(!card || card.columnId===columnId) return;
   const anterior = card.columnId;
   card.columnId = columnId; // otimista
-  renderApp();
+  renderAppPreservandoScroll();
   try{
     await apiRequest('PUT', `/cards/${cardId}/move`, { columnId });
   }catch(e){
     card.columnId = anterior;
     errorMsg = 'Não foi possível mover o cliente. Tente novamente.';
-    renderApp();
+    renderAppPreservandoScroll();
   }
 }
 
@@ -3324,6 +3354,25 @@ async function sugerirTarefaIA(){
 }
 
 /* ---------- render: shell (barra lateral + página atual) ---------- */
+// Redesenha a página igual renderApp(), mas guarda e restaura a posição de rolagem
+// antes/depois — usado em ações do Pipeline (mover card) que não deveriam "resetar"
+// a visão de quem já rolou a tela pra ver um cliente lá embaixo.
+function renderAppPreservandoScroll(){
+  const mainEl = document.querySelector('main.pipeline-main');
+  const scrollHorizontal = mainEl ? mainEl.scrollLeft : null;
+  const scrollsColunas = {};
+  document.querySelectorAll('.cards[data-col-id]').forEach(el=>{
+    scrollsColunas[el.dataset.colId] = el.scrollTop;
+  });
+
+  renderApp();
+
+  const mainEl2 = document.querySelector('main.pipeline-main');
+  if(mainEl2 && scrollHorizontal!==null) mainEl2.scrollLeft = scrollHorizontal;
+  document.querySelectorAll('.cards[data-col-id]').forEach(el=>{
+    if(scrollsColunas[el.dataset.colId]!==undefined) el.scrollTop = scrollsColunas[el.dataset.colId];
+  });
+}
 function renderApp(){
   const app = document.getElementById('app');
   if(!loaded){ app.innerHTML = '<div class="loading">Carregando painel…</div>'; return; }
@@ -3780,7 +3829,7 @@ function renderColumn(col){
         ` : ''}
       </div>
 
-      <div class="cards">
+      <div class="cards" data-col-id="${col.id}">
         ${cards.length===0 ? '<p class="empty-col">Nenhum cliente aqui ainda</p>' : cards.map(card=>renderCard(card)).join('')}
       </div>
     </div>
@@ -4880,6 +4929,10 @@ function bindAppEvents(){
   if(editarMetaBtn) editarMetaBtn.addEventListener('click', ()=>{ editandoMetaVendas = true; renderApp(); });
   const salvarMetaBtn = document.getElementById('meta-vendas-salvar');
   if(salvarMetaBtn) salvarMetaBtn.addEventListener('click', salvarMetaVendas);
+  const editarMetaEquipeBtn = app.querySelector('[data-action="editar-meta-vendas-equipe"]');
+  if(editarMetaEquipeBtn) editarMetaEquipeBtn.addEventListener('click', ()=>{ editandoMetaVendasEquipe = true; renderApp(); });
+  const salvarMetaEquipeBtn = document.getElementById('meta-vendas-equipe-salvar');
+  if(salvarMetaEquipeBtn) salvarMetaEquipeBtn.addEventListener('click', salvarMetaVendasEquipe);
 
   /* -- tarefas (usado no Dashboard e na página Tarefas) -- */
   app.querySelectorAll('[data-action="toggle-task"]').forEach(el=>{
@@ -5106,6 +5159,7 @@ function bindAppEvents(){
     btn.addEventListener('click', ()=>{
       equipeSubTab = btn.dataset.subtab;
       if(equipeSubTab==='chat' && !chatLoaded) loadChat();
+      if(equipeSubTab==='chat' && !metaVendasEquipeCarregada) loadMetaVendasEquipe();
       if(equipeSubTab==='supervisao' && equipe && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
       if(equipeSubTab==='monitoramento' && equipe && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
       renderApp();
@@ -5561,7 +5615,6 @@ function renderFloatingMoveMenu(){
       if(b.disabled) return;
       openMoveMenuCardId = null;
       moveCard(b.dataset.cardId, b.dataset.colId);
-      renderApp();
     });
   });
 }
@@ -6412,6 +6465,23 @@ function renderChatInternoConteudo(){
   const conversandoComOutro = !!dmDestinatarioId;
   const outro = conversandoComOutro ? equipe.membros.find(m=>m.id===dmDestinatarioId) : null;
   return `
+    ${!conversandoComOutro ? `
+      <div class="settings-page-section" style="margin-bottom:16px;">
+        <div class="dash-panel-title">
+          Meta de vendas da equipe
+          ${(equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : ''}
+        </div>
+        ${!metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
+          <div class="field-row" style="align-items:flex-end;">
+            <div class="field"><label>Meta da equipe no mês (R$)</label><input type="number" id="meta-vendas-equipe-input" value="${metaVendasEquipeValor||0}" min="0" step="0.01" /></div>
+            <button class="btn-primary" id="meta-vendas-equipe-salvar" style="margin-bottom:14px;">Salvar</button>
+          </div>
+        ` : `
+          <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${metaVendasEquipeValor ? Math.min(100, (metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%"></div></div>
+          <p class="settings-page-note">${fmtBRL(metaVendasEquipeVendido)} de ${fmtBRL(metaVendasEquipeValor)} — ${metaVendasEquipeValor ? Math.round(Math.min(999,metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%</p>
+        `)}
+      </div>
+    ` : ''}
     <div class="chat-interno-wrap">
       <div class="chat-interno-membros">
         <div class="settings-page-subtitle">Conversas</div>
