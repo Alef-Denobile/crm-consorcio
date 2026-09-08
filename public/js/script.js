@@ -497,7 +497,7 @@ function copiarEvento(eventoId, elemento){
   const e = agendaEventosGoogle.find(x=>x.id===eventoId);
   if(!e) return;
   const hora = (e.diaInteiro || !e.inicio) ? null : `${String(new Date(e.inicio).getHours()).padStart(2,'0')}:${String(new Date(e.inicio).getMinutes()).padStart(2,'0')}`;
-  tarefaCopiada = { titulo: e.titulo, prioridade: 'media', leadId: null, descricao: 'Copiado de um evento do Google Agenda.', hora };
+  tarefaCopiada = { titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'', hora };
   if(navigator.vibrate) navigator.vibrate(15);
   if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
   renderApp();
@@ -563,7 +563,7 @@ function copiarDiaInteiro(diaISO, elemento){
       hora: horaLocalDaTarefaOuNull(t.vencimento),
     })),
     ...eventosDoDia.map(e=>({
-      titulo: e.titulo, prioridade: 'media', leadId: null, descricao: 'Copiado de um evento do Google Agenda.',
+      titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'',
       hora: (e.diaInteiro || !e.inicio) ? null : `${String(new Date(e.inicio).getHours()).padStart(2,'0')}:${String(new Date(e.inicio).getMinutes()).padStart(2,'0')}`,
     })),
   ];
@@ -4328,7 +4328,7 @@ function renderAgendaDiaModal(){
           </div>
         </div>
         <div class="modal-foot">
-          <span></span>
+          ${(tarefasDoDia.length || eventosDoDia.length) ? `<button class="delete-link" id="agenda-dia-excluir-tudo">🗑 Excluir tudo desse dia</button>` : '<span></span>'}
           <div class="modal-foot-actions">
             <button class="btn-save" id="agenda-dia-nova-tarefa">${tarefaCopiada ? '📋 Colar aqui' : '+ Nova tarefa nesse dia'}</button>
           </div>
@@ -4339,6 +4339,8 @@ function renderAgendaDiaModal(){
 
   document.getElementById('agenda-dia-close').addEventListener('click', closeAgendaDiaModal);
   document.getElementById('agenda-dia-overlay').addEventListener('click', (e)=>{ if(e.target.id==='agenda-dia-overlay') closeAgendaDiaModal(); });
+  const excluirTudoBtn = document.getElementById('agenda-dia-excluir-tudo');
+  if(excluirTudoBtn) excluirTudoBtn.addEventListener('click', ()=> excluirTudoDoDia(diaISO, tarefasDoDia, eventosDoDia));
   document.getElementById('agenda-dia-nova-tarefa').addEventListener('click', ()=>{
     if(tarefaCopiada){ colarTarefaEm(diaISO); return; }
     closeAgendaDiaModal();
@@ -6274,6 +6276,33 @@ function renderAlterarSenhaModal(){
 
 // Abre a edição de um evento do Google Agenda — diferente de editar uma tarefa,
 // isso muda o evento de verdade, direto na fonte (no seu Google Agenda).
+function excluirTudoDoDia(diaISO, tarefasDoDia, eventosDoDia){
+  const total = tarefasDoDia.length + eventosDoDia.length;
+  if(!total) return;
+  const temEventos = eventosDoDia.length > 0;
+  showConfirm({
+    message: `Excluir ${total} item${total===1?'':'s'} desse dia?${temEventos ? ' Isso inclui excluir evento(s) direto do seu Google Agenda de verdade, não só daqui.' : ''} Essa ação não pode ser desfeita.`,
+    onConfirm: async ()=>{
+      closeConfirm();
+      closeAgendaDiaModal();
+      for(const t of tarefasDoDia){
+        try{
+          await apiRequest('DELETE', `/tasks/${t.id}`);
+          const idx = tasks.findIndex(x=>x.id===t.id);
+          if(idx>-1) tasks.splice(idx,1);
+        }catch(e){ /* segue tentando os outros mesmo se um falhar */ }
+      }
+      agendaTarefas = agendaTarefas.filter(x => !tarefasDoDia.some(t=>t.id===x.id));
+      for(const e of eventosDoDia){
+        try{
+          await apiRequest('DELETE', `/calendar/eventos/${e.id}`);
+        }catch(err){ /* segue tentando os outros mesmo se um falhar */ }
+      }
+      agendaEventosGoogle = agendaEventosGoogle.filter(x => !eventosDoDia.some(e=>e.id===x.id));
+      renderApp();
+    },
+  });
+}
 function openEditEventoGoogle(eventId){
   const e = agendaEventosGoogle.find(x=>x.id===eventId);
   if(!e) return;
