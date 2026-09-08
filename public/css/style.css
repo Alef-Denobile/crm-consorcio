@@ -144,8 +144,9 @@ main.pipeline-main{ padding-bottom:4px; }
 /* alça de arraste — área bem maior e clara pra segurar o card */
 .card-drag-handle{ flex-shrink:0; width:34px; display:flex; align-items:center; justify-content:center; cursor:grab; color:#C2C2C2; background:var(--col-bg); border-right:1px dashed var(--line); touch-action:none; }
 .card-move-wrap{ position:relative; flex-shrink:0; width:26px; display:flex; align-items:center; justify-content:center; background:var(--col-bg); border-right:1px dashed var(--line); }
-.card-move-btn{ width:22px; height:22px; border:none; background:none; color:var(--ink-soft); cursor:pointer; border-radius:6px; font-size:13px; display:flex; align-items:center; justify-content:center; }
+.card-move-btn{ width:36px; height:36px; border:none; background:none; color:var(--ink-soft); cursor:pointer; border-radius:8px; font-size:17px; display:flex; align-items:center; justify-content:center; }
 .card-move-btn:hover{ background:var(--hover-tint); color:var(--ink); }
+.card-move-btn:active{ background:var(--accent); color:#fff; }
 .card-move-menu{ position:absolute; left:0; right:auto; top:30px; max-height:260px; overflow-y:auto; }
 .card-move-menu .col-menu-item:disabled{ opacity:.5; cursor:default; }
 .card-drag-handle:active{ cursor:grabbing; background:var(--line); }
@@ -177,6 +178,7 @@ main.pipeline-main{ padding-bottom:4px; }
 .add-col-btn:hover{ background:var(--hover-tint); border-color:var(--ink); }
 .add-col-form{ background:var(--col-bg); border:1px solid var(--line); border-radius:14px; padding:14px; }
 .add-col-form input{ width:100%; padding:9px 10px; min-height:40px; border-radius:8px; border:1px solid var(--line); font-size:13px; outline:none; font-family:inherit; }
+.add-col-tipo-select{ width:100%; padding:9px 10px; min-height:40px; border-radius:8px; border:1px solid var(--line); font-size:13px; outline:none; font-family:inherit; margin-top:8px; background:var(--paper); color:var(--ink); }
 .add-col-actions{ display:flex; gap:8px; margin-top:10px; }
 .btn-primary{ padding:9px 16px; min-height:40px; border-radius:8px; border:none; background:var(--accent); color:#fff; font-size:12px; font-weight:600; cursor:pointer; }
 .btn-ghost{ padding:9px 16px; min-height:40px; border-radius:8px; border:none; background:none; color:var(--ink-soft); font-size:12px; cursor:pointer; }

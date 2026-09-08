@@ -151,6 +151,7 @@ let metaVendasCarregada = false;
 let editandoMetaVendas = false;
 let addingCol = false;
 let newColNameVal = '';
+let newColTipoVal = 'aberto';
 let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
@@ -2747,11 +2748,14 @@ async function reorderColumns(draggedId, targetId){
 
 async function addColumn(){
   const nome = newColNameVal.trim();
+  const tipoEl = document.getElementById('new-col-tipo');
+  const tipo = tipoEl ? tipoEl.value : 'aberto';
   addingCol = false;
   newColNameVal = '';
+  newColTipoVal = 'aberto';
   if(!nome || !funilAtualId){ renderApp(); return; }
   try{
-    const novaCol = await apiRequest('POST', '/columns', { nome, tipo:'aberto', funilId: funilAtualId });
+    const novaCol = await apiRequest('POST', '/columns', { nome, tipo, funilId: funilAtualId });
     board.columns.push(novaCol);
     renderApp();
     abrirPickerLeadsParaColuna(novaCol.id);
@@ -3707,6 +3711,9 @@ function renderPipelinePage(){
           ${addingCol ? `
             <div class="add-col-form">
               <input type="text" id="new-col-input" placeholder="Nome da coluna" value="${esc(newColNameVal)}" />
+              <select id="new-col-tipo" class="add-col-tipo-select">
+                ${Object.entries(TIPOS).map(([key,t])=>`<option value="${key}" ${newColTipoVal===key?'selected':''}>${t.label}</option>`).join('')}
+              </select>
               <div class="add-col-actions">
                 <button class="btn-primary" data-action="confirm-add-col">Adicionar</button>
                 <button class="btn-ghost" data-action="cancel-add-col">Cancelar</button>
