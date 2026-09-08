@@ -4282,7 +4282,7 @@ function renderAgendaDiaModal(){
     `;
   }
   function renderEventoMini(e){
-    return `<div class="agenda-hora-evento" data-copiar-evento="${e.id}" data-editar-evento="${e.id}">📅 ${esc(e.titulo)}</div>`;
+    return `<div class="agenda-hora-evento" data-copiar-evento="${e.id}" data-editar-evento="${e.id}">📅 ${esc(e.titulo)}${e.clienteNome ? ` <span style="opacity:.7;">· 👤 ${esc(e.clienteNome)}</span>` : ''}</div>`;
   }
 
   const horaAtual = new Date().getHours();
@@ -6287,7 +6287,7 @@ function openEditEventoGoogle(eventId){
       hora = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
   }
-  eventoGoogleModalForm = { eventId, titulo: e.titulo, data, hora };
+  eventoGoogleModalForm = { eventId, titulo: e.titulo, data, hora, descricao: e.descricao||'', prioridade: e.prioridade||'media', leadId: e.leadId||'' };
   renderEventoGoogleModal();
 }
 function closeEventoGoogleModal(){ eventoGoogleModalForm = null; document.getElementById('modal-root').innerHTML=''; }
@@ -6295,11 +6295,12 @@ async function salvarEventoGoogle(){
   const f = eventoGoogleModalForm;
   if(!f || !f.titulo.trim()) return;
   try{
-    await apiRequest('PUT', `/calendar/eventos/${f.eventId}`, { titulo: f.titulo, data: f.data, hora: f.hora || null });
+    await apiRequest('PUT', `/calendar/eventos/${f.eventId}`, { titulo: f.titulo, data: f.data, hora: f.hora || null, descricao: f.descricao, prioridade: f.prioridade, leadId: f.leadId || null });
     const idx = agendaEventosGoogle.findIndex(x=>x.id===f.eventId);
     if(idx>-1){
       const novoInicio = f.hora ? new Date(`${f.data}T${f.hora}`).toISOString() : f.data;
-      agendaEventosGoogle[idx] = { ...agendaEventosGoogle[idx], titulo:f.titulo, inicio:novoInicio, diaInteiro: !f.hora };
+      const card = f.leadId ? board.cards.find(c=>c.id===f.leadId) : null;
+      agendaEventosGoogle[idx] = { ...agendaEventosGoogle[idx], titulo:f.titulo, inicio:novoInicio, diaInteiro: !f.hora, descricao:f.descricao, prioridade:f.prioridade, leadId:f.leadId||null, clienteNome: card ? card.cliente : null };
     }
     closeEventoGoogleModal();
     renderApp();
@@ -6340,10 +6341,9 @@ function renderEventoGoogleModal(){
           <button id="evento-google-modal-close">✕</button>
         </div>
         <div class="modal-body">
-          <p class="settings-page-note">Isso muda o evento de verdade, direto no seu Google Agenda — não é uma cópia.</p>
           <div class="field">
             <label>Título</label>
-            <input type="text" id="eg-titulo" value="${esc(f.titulo)}" />
+            <input type="text" id="eg-titulo" value="${esc(f.titulo)}" placeholder="Ex: Ligar para cliente" />
           </div>
           <div class="field-row">
             <div class="field">
@@ -6354,7 +6354,25 @@ function renderEventoGoogleModal(){
               <label>Hora (opcional)</label>
               <input type="time" id="eg-hora" value="${f.hora}" />
             </div>
+            <div class="field">
+              <label>Prioridade</label>
+              <select id="eg-prioridade">
+                ${Object.entries(PRIORIDADES).map(([key,p])=>`<option value="${key}" ${f.prioridade===key?'selected':''}>${p.label}</option>`).join('')}
+              </select>
+            </div>
           </div>
+          <div class="field">
+            <label>Lead relacionado</label>
+            <select id="eg-lead">
+              <option value="">Sem lead</option>
+              ${board.cards.map(c=>`<option value="${c.id}" ${f.leadId===c.id?'selected':''}>${esc(c.cliente) || 'Sem nome'}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Descrição</label>
+            <textarea id="eg-descricao" rows="3" placeholder="Detalhes do evento...">${esc(f.descricao||'')}</textarea>
+          </div>
+          <p class="settings-page-note">Título, data, hora e descrição mudam o evento de verdade, direto no seu Google Agenda. Prioridade e lead relacionado são exclusivos daqui do CRM — o Google não tem esses campos, então ficam guardados só aqui, amarrados a esse evento.</p>
         </div>
         <div class="modal-foot">
           <button class="delete-link" id="eg-delete">🗑 Excluir</button>
@@ -6373,6 +6391,9 @@ function renderEventoGoogleModal(){
   document.getElementById('eg-titulo').addEventListener('input', (e)=> eventoGoogleModalForm.titulo = e.target.value);
   document.getElementById('eg-data').addEventListener('change', (e)=> eventoGoogleModalForm.data = e.target.value);
   document.getElementById('eg-hora').addEventListener('change', (e)=> eventoGoogleModalForm.hora = e.target.value);
+  document.getElementById('eg-prioridade').addEventListener('change', (e)=> eventoGoogleModalForm.prioridade = e.target.value);
+  document.getElementById('eg-lead').addEventListener('change', (e)=> eventoGoogleModalForm.leadId = e.target.value);
+  document.getElementById('eg-descricao').addEventListener('input', (e)=> eventoGoogleModalForm.descricao = e.target.value);
   document.getElementById('eg-save').addEventListener('click', salvarEventoGoogle);
   document.getElementById('eg-delete').addEventListener('click', excluirEventoGoogle);
 }
