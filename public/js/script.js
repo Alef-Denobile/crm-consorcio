@@ -179,7 +179,6 @@ let longPressTimer = null;
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
 let calendarConnected = false;
 let calendarSyncing = false;
-let calendarSyncedOnce = false;
 let whatsappConnected = false;
 let whatsappSalvando = false;
 let whatsappConfigMsg = null;
@@ -589,10 +588,11 @@ async function colarDiaInteiroEm(diaISO, elemento){
       }
       const nova = await apiRequest('POST', '/tasks', dados);
       tasks.push(nova);
+      atualizarTarefaNaAgendaLocal(nova);
     }
     diaAgendaCopiado = null; // colar o dia só acontece uma vez — depois de colado, a cópia se esvazia sozinha
     if(elemento) mostrarPopupRapido(elemento, `📥 ${qtd} colado${qtd===1?'':'s'}`);
-    await loadAgendaMes(agendaMesAtual);
+    renderApp();
   }catch(e){
     errorMsg = 'Não foi possível colar nesse dia.';
     renderApp();
@@ -615,7 +615,8 @@ async function colarTarefaEm(diaISO, hora){
   try{
     const nova = await apiRequest('POST', '/tasks', dados);
     tasks.push(nova);
-    await loadAgendaMes(agendaMesAtual);
+    atualizarTarefaNaAgendaLocal(nova);
+    renderApp();
   }catch(e){
     errorMsg = 'Não foi possível colar a tarefa.';
     renderApp();
@@ -653,6 +654,25 @@ function dataLocalDaTarefa(vencimentoIso){
   const temHora = d.getUTCHours()!==0 || d.getUTCMinutes()!==0;
   if(temHora) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   return vencimentoIso.slice(0,10);
+}
+// Atualiza (ou remove) uma tarefa direto no estado local da Agenda, sem precisar
+// buscar tudo de novo no servidor — evita uma ida desnecessária ao Google Agenda
+// (que só deveria acontecer quando a pessoa clica em "Sincronizar Agenda" de propósito).
+function atualizarTarefaNaAgendaLocal(t){
+  if(!t.vencimento || !agendaMesAtual) return;
+  const mesDaTarefa = dataLocalDaTarefa(t.vencimento).slice(0,7);
+  const idx = agendaTarefas.findIndex(x=>x.id===t.id);
+  if(mesDaTarefa !== agendaMesAtual){
+    if(idx>-1) agendaTarefas.splice(idx,1); // mudou pra fora do mês em tela — some da visão atual
+    return;
+  }
+  const card = t.leadId ? board.cards.find(c=>c.id===t.leadId) : null;
+  const comNome = { ...t, clienteNome: card ? card.cliente : null };
+  if(idx>-1) agendaTarefas[idx] = comNome;
+  else agendaTarefas.push(comNome);
+}
+function removerTarefaDaAgendaLocal(id){
+  agendaTarefas = agendaTarefas.filter(x=>x.id!==id);
 }
 function itensDoDiaAgenda(diaISO){
   const tarefasDoDia = agendaTarefas.filter(t=> dataLocalDaTarefa(t.vencimento)===diaISO);
@@ -2701,11 +2721,7 @@ function goToPage(page){
   sidebarOpen = false;
   renderApp();
   if(page === 'tarefas'){
-    loadAgendaMes(agendaMesAtual); // busca de novo toda vez, pra sempre trazer eventos criados direto no Google Agenda
-    if(calendarConnected && !calendarSyncedOnce){
-      calendarSyncedOnce = true;
-      syncCalendarNow();
-    }
+    if(!agendaLoaded) loadAgendaMes(agendaMesAtual); // só busca do zero — depois disso, a tela se mantém atualizada sozinha com as próprias ações, e o Google só é consultado de novo no botão "Sincronizar Agenda"
   }
   if(page === 'configuracoes'){
     senhaMsg = null; senhaAtualVal = ''; senhaNovaVal = '';
@@ -2969,13 +2985,14 @@ async function saveTaskFromModal(){
     if(__isNew){
       const nova = await apiRequest('POST', '/tasks', dados);
       tasks.push(nova);
+      atualizarTarefaNaAgendaLocal(nova);
     } else {
       const atualizada = await apiRequest('PUT', `/tasks/${id}`, dados);
       const idx = tasks.findIndex(t=>t.id===id);
       if(idx>-1) tasks[idx] = atualizada;
+      atualizarTarefaNaAgendaLocal(atualizada);
     }
     closeTaskModal();
-    if(currentPage==='tarefas') loadAgendaMes(agendaMesAtual);
   }catch(e){
     errorMsg = 'Não foi possível salvar a tarefa.';
   }
@@ -2986,12 +3003,13 @@ async function deleteTaskById(id){
   const idx = tasks.findIndex(t=>t.id===id);
   if(idx===-1) return;
   const [removida] = tasks.splice(idx,1);
+  removerTarefaDaAgendaLocal(id);
   renderApp();
   try{
     await apiRequest('DELETE', `/tasks/${id}`);
-    if(currentPage==='tarefas') loadAgendaMes(agendaMesAtual);
   }catch(e){
     tasks.splice(idx,0,removida);
+    atualizarTarefaNaAgendaLocal(removida);
     errorMsg = 'Não foi possível excluir a tarefa.';
     renderApp();
   }
