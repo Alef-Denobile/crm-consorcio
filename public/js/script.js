@@ -347,6 +347,7 @@ let insightsCarregando = false;
 let insightsPipelineExpandido = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
+let eventoGoogleModalForm = null; // { eventId, titulo, data, hora } — edita o evento direto na fonte, no Google
 let confirmState = null;         // { message, onConfirm }
 
 /* ---------- comunicação com a API ---------- */
@@ -4281,7 +4282,7 @@ function renderAgendaDiaModal(){
     `;
   }
   function renderEventoMini(e){
-    return `<div class="agenda-hora-evento" data-copiar-evento="${e.id}">📅 ${esc(e.titulo)}</div>`;
+    return `<div class="agenda-hora-evento" data-copiar-evento="${e.id}" data-editar-evento="${e.id}">📅 ${esc(e.titulo)}</div>`;
   }
 
   const horaAtual = new Date().getHours();
@@ -4303,7 +4304,7 @@ function renderAgendaDiaModal(){
           ${(tarefasSemHora.length || eventosSemHora.length) ? `
             <div class="settings-page-subtitle">Sem horário definido</div>
             ${eventosSemHora.map(e=>`
-              <div class="agenda-dia-item" data-copiar-evento="${e.id}">
+              <div class="agenda-dia-item" data-copiar-evento="${e.id}" data-editar-evento="${e.id}">
                 <span class="agenda-item-dot agenda-item-evento"></span>
                 <div class="agenda-dia-item-titulo" style="flex:1;">${esc(e.titulo)}</div>
               </div>
@@ -4376,6 +4377,12 @@ function renderAgendaDiaModal(){
   });
   ligarGestoDeCopiar(root.querySelectorAll('[data-copiar-tarefa]'), (el)=> copiarTarefa(el.dataset.copiarTarefa, el));
   ligarGestoDeCopiar(root.querySelectorAll('[data-copiar-evento]'), (el)=> copiarEvento(el.dataset.copiarEvento, el));
+  root.querySelectorAll('[data-editar-evento]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation(); // não deixa o clique vazar pra linha da hora (que abriria nova tarefa em branco)
+      openEditEventoGoogle(el.dataset.editarEvento);
+    });
+  });
   const cancelarCopiaBtn = root.querySelector('[data-action="cancelar-tarefa-copiada"]');
   if(cancelarCopiaBtn) cancelarCopiaBtn.addEventListener('click', cancelarTarefaCopiada);
 
@@ -6265,6 +6272,110 @@ function renderAlterarSenhaModal(){
   document.getElementById('s-senha-salvar').addEventListener('click', salvarSenha);
 }
 
+// Abre a edição de um evento do Google Agenda — diferente de editar uma tarefa,
+// isso muda o evento de verdade, direto na fonte (no seu Google Agenda).
+function openEditEventoGoogle(eventId){
+  const e = agendaEventosGoogle.find(x=>x.id===eventId);
+  if(!e) return;
+  let data = '', hora = '';
+  if(e.inicio){
+    if(e.diaInteiro){
+      data = e.inicio.slice(0,10);
+    } else {
+      const d = new Date(e.inicio);
+      data = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      hora = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+  }
+  eventoGoogleModalForm = { eventId, titulo: e.titulo, data, hora };
+  renderEventoGoogleModal();
+}
+function closeEventoGoogleModal(){ eventoGoogleModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+async function salvarEventoGoogle(){
+  const f = eventoGoogleModalForm;
+  if(!f || !f.titulo.trim()) return;
+  try{
+    await apiRequest('PUT', `/calendar/eventos/${f.eventId}`, { titulo: f.titulo, data: f.data, hora: f.hora || null });
+    const idx = agendaEventosGoogle.findIndex(x=>x.id===f.eventId);
+    if(idx>-1){
+      const novoInicio = f.hora ? new Date(`${f.data}T${f.hora}`).toISOString() : f.data;
+      agendaEventosGoogle[idx] = { ...agendaEventosGoogle[idx], titulo:f.titulo, inicio:novoInicio, diaInteiro: !f.hora };
+    }
+    closeEventoGoogleModal();
+    renderApp();
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível salvar o evento no Google Agenda.';
+    renderApp();
+  }
+}
+function excluirEventoGoogle(){
+  const f = eventoGoogleModalForm;
+  if(!f) return;
+  showConfirm({
+    message: 'Excluir este evento do Google Agenda? Ele será removido de verdade, na sua conta do Google — não só daqui.',
+    onConfirm: async ()=>{
+      closeConfirm();
+      try{
+        await apiRequest('DELETE', `/calendar/eventos/${f.eventId}`);
+        agendaEventosGoogle = agendaEventosGoogle.filter(x=>x.id!==f.eventId);
+        closeEventoGoogleModal();
+        renderApp();
+      }catch(e){
+        errorMsg = e.message || 'Não foi possível excluir o evento.';
+        renderApp();
+      }
+    },
+  });
+}
+function renderEventoGoogleModal(){
+  const root = document.getElementById('modal-root');
+  if(!eventoGoogleModalForm){ root.innerHTML=''; return; }
+  const f = eventoGoogleModalForm;
+
+  root.innerHTML = `
+    <div class="overlay" id="evento-google-modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>📅 Editar evento do Google Agenda</h3>
+          <button id="evento-google-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-page-note">Isso muda o evento de verdade, direto no seu Google Agenda — não é uma cópia.</p>
+          <div class="field">
+            <label>Título</label>
+            <input type="text" id="eg-titulo" value="${esc(f.titulo)}" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Data</label>
+              <input type="date" id="eg-data" value="${f.data}" />
+            </div>
+            <div class="field">
+              <label>Hora (opcional)</label>
+              <input type="time" id="eg-hora" value="${f.hora}" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="delete-link" id="eg-delete">🗑 Excluir</button>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="eg-cancel">Cancelar</button>
+            <button class="btn-save" id="eg-save">Salvar evento</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('evento-google-modal-close').addEventListener('click', closeEventoGoogleModal);
+  document.getElementById('eg-cancel').addEventListener('click', closeEventoGoogleModal);
+  document.getElementById('evento-google-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='evento-google-modal-overlay') closeEventoGoogleModal(); });
+  document.getElementById('eg-titulo').addEventListener('input', (e)=> eventoGoogleModalForm.titulo = e.target.value);
+  document.getElementById('eg-data').addEventListener('change', (e)=> eventoGoogleModalForm.data = e.target.value);
+  document.getElementById('eg-hora').addEventListener('change', (e)=> eventoGoogleModalForm.hora = e.target.value);
+  document.getElementById('eg-save').addEventListener('click', salvarEventoGoogle);
+  document.getElementById('eg-delete').addEventListener('click', excluirEventoGoogle);
+}
 function renderTaskModal(){
   const root = document.getElementById('modal-root');
   if(!taskModalForm){ root.innerHTML=''; return; }

@@ -2,7 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
-const { CLIENT_ID, CLIENT_SECRET, listarEventosPrimario } = require('../utils/calendarSync');
+const { CLIENT_ID, CLIENT_SECRET, listarEventosPrimario, chamarCalendarApi } = require('../utils/calendarSync');
 const Task = require('../models/Task');
 
 const router = express.Router();
@@ -134,6 +134,51 @@ router.get('/agenda-mes', auth, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar a agenda do mês.' });
+  }
+});
+
+// PUT /api/calendar/eventos/:eventId -> edita um evento do Google Agenda principal, direto na fonte
+router.put('/eventos/:eventId', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || !user.googleCalendar || !user.googleCalendar.refreshToken) {
+      return res.status(400).json({ error: 'Google Agenda não está conectado.' });
+    }
+    const { titulo, data, hora } = req.body;
+    if (!titulo || !titulo.trim()) return res.status(400).json({ error: 'Título é obrigatório.' });
+    if (!data) return res.status(400).json({ error: 'Data é obrigatória.' });
+
+    let corpoEvento;
+    if (hora) {
+      const inicio = new Date(`${data}T${hora}`);
+      if (isNaN(inicio.getTime())) return res.status(400).json({ error: 'Data ou horário inválido.' });
+      const fim = new Date(inicio.getTime() + 60 * 60 * 1000);
+      corpoEvento = { summary: titulo.trim(), start: { dateTime: inicio.toISOString() }, end: { dateTime: fim.toISOString() } };
+    } else {
+      corpoEvento = { summary: titulo.trim(), start: { date: data }, end: { date: data } };
+    }
+
+    await chamarCalendarApi(user, `/calendars/primary/events/${req.params.eventId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(corpoEvento),
+    });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao editar o evento no Google Agenda.' });
+  }
+});
+
+// DELETE /api/calendar/eventos/:eventId -> remove um evento do Google Agenda principal
+router.delete('/eventos/:eventId', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || !user.googleCalendar || !user.googleCalendar.refreshToken) {
+      return res.status(400).json({ error: 'Google Agenda não está conectado.' });
+    }
+    await chamarCalendarApi(user, `/calendars/primary/events/${req.params.eventId}`, { method: 'DELETE' });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao excluir o evento do Google Agenda.' });
   }
 });
 
