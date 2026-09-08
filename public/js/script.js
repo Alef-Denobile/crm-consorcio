@@ -173,6 +173,7 @@ let agendaLoaded = false;
 let agendaTarefas = [];
 let agendaEventosGoogle = [];
 let agendaDiaSelecionado = null;
+let tarefaCopiada = null; // { titulo, prioridade, leadId, descricao } — sem data/hora, que são escolhidas ao colar
 let calendarConnected = false;
 let calendarSyncing = false;
 let calendarSyncedOnce = false;
@@ -479,6 +480,35 @@ async function loadTasks(){
   }
   tasksLoaded = true;
   renderApp();
+}
+function copiarTarefa(taskId){
+  const t = tasks.find(x=>x.id===taskId) || agendaTarefas.find(x=>x.id===taskId);
+  if(!t) return;
+  tarefaCopiada = { titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'' };
+  renderApp();
+  if(agendaDiaSelecionado) renderAgendaDiaModal();
+}
+function cancelarTarefaCopiada(){
+  tarefaCopiada = null;
+  renderApp();
+  if(agendaDiaSelecionado) renderAgendaDiaModal();
+}
+async function colarTarefaEm(diaISO, hora){
+  if(!tarefaCopiada) return;
+  const dados = { ...tarefaCopiada, vencimento: diaISO };
+  if(hora){
+    const combinado = new Date(`${diaISO}T${hora}`);
+    if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
+  }
+  try{
+    const nova = await apiRequest('POST', '/tasks', dados);
+    tasks.push(nova);
+    await loadAgendaMes(agendaMesAtual);
+  }catch(e){
+    errorMsg = 'Não foi possível colar a tarefa.';
+    renderApp();
+  }
+  if(agendaDiaSelecionado) renderAgendaDiaModal();
 }
 async function loadAgendaMes(mesKey){
   agendaLoaded = false;
@@ -4116,6 +4146,7 @@ function renderAgendaDiaModal(){
           <div class="agenda-dia-item-titulo ${t.concluida?'concluida':''}">${esc(t.titulo)}</div>
           ${t.clienteNome ? `<div class="agenda-dia-item-hora">👤 ${esc(t.clienteNome)}</div>` : ''}
         </div>
+        <button class="icon-btn" data-task-copiar="${t.id}" title="Copiar">📋</button>
         <button class="icon-btn" data-task-edit="${t.id}" title="Editar">${ICON_EDIT}</button>
       </div>
     `;
@@ -4134,6 +4165,12 @@ function renderAgendaDiaModal(){
           <button id="agenda-dia-close">✕</button>
         </div>
         <div class="modal-body">
+          ${tarefaCopiada ? `
+            <div class="agenda-clipboard-hint">
+              📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — clique num horário vazio pra colar aqui
+              <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
+            </div>
+          ` : ''}
           ${(tarefasSemHora.length || eventosSemHora.length) ? `
             <div class="settings-page-subtitle">Sem horário definido</div>
             ${eventosSemHora.map(e=>`
@@ -4147,13 +4184,17 @@ function renderAgendaDiaModal(){
           ` : ''}
           <div class="agenda-dia-timeline" id="agenda-dia-timeline">
             ${porHora.map((conteudo, h)=>`
-              <div class="agenda-hora-row ${h===horaAtual?'agenda-hora-atual':''}" id="agenda-hora-${h}" data-action="nova-tarefa-nesta-hora" data-hora="${String(h).padStart(2,'0')}:00">
+              <div class="agenda-hora-row ${h===horaAtual?'agenda-hora-atual':''} ${tarefaCopiada?'agenda-hora-colavel':''}" id="agenda-hora-${h}" data-action="nova-tarefa-nesta-hora" data-hora="${String(h).padStart(2,'0')}:00">
                 <span class="agenda-hora-label">${String(h).padStart(2,'0')}:00</span>
                 <div class="agenda-hora-conteudo">
                   ${conteudo.eventos.map(renderEventoMini).join('')}
                   ${conteudo.tarefas.map(t=>`
-                    <div class="agenda-hora-tarefa ${t.concluida?'concluida':''}" data-task-edit-hora="${t.id}">✓ ${esc(t.titulo)}</div>
+                    <div class="agenda-hora-tarefa-wrap">
+                      <span class="agenda-hora-tarefa ${t.concluida?'concluida':''}" data-task-edit-hora="${t.id}">✓ ${esc(t.titulo)}</span>
+                      <button class="icon-btn agenda-hora-tarefa-copiar" data-task-copiar="${t.id}" title="Copiar">📋</button>
+                    </div>
                   `).join('')}
+                  ${tarefaCopiada ? `<span class="agenda-hora-colar-hint">+ Colar aqui</span>` : ''}
                 </div>
               </div>
             `).join('')}
@@ -4178,6 +4219,10 @@ function renderAgendaDiaModal(){
   root.querySelectorAll('[data-action="nova-tarefa-nesta-hora"]').forEach(row=>{
     row.addEventListener('click', ()=>{
       const hora = row.dataset.hora;
+      if(tarefaCopiada){
+        colarTarefaEm(diaISO, hora);
+        return;
+      }
       closeAgendaDiaModal();
       openNewTask(diaISO, hora);
     });
@@ -4202,6 +4247,14 @@ function renderAgendaDiaModal(){
       openEditTask(el.dataset.taskEdit);
     });
   });
+  root.querySelectorAll('[data-task-copiar]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation(); // não deixa o clique vazar pra linha da hora
+      copiarTarefa(el.dataset.taskCopiar);
+    });
+  });
+  const cancelarCopiaBtn = root.querySelector('[data-action="cancelar-tarefa-copiada"]');
+  if(cancelarCopiaBtn) cancelarCopiaBtn.addEventListener('click', cancelarTarefaCopiada);
 
   // Rola a linha do tempo até perto da hora atual (ou a 1ª hora com algo marcado, se for antes)
   const primeiraComItem = porHora.findIndex(c=>c.tarefas.length||c.eventos.length);
@@ -4237,6 +4290,13 @@ function renderTarefasPage(){
         <button class="btn-primary" data-action="open-new-task">+ Nova tarefa</button>
       </div>
     </div>
+
+    ${tarefaCopiada ? `
+      <div class="agenda-clipboard-hint" style="margin-bottom:16px;">
+        📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — abra qualquer dia e clique num horário vazio pra colar
+        <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
+      </div>
+    ` : ''}
 
     <div class="month-step-nav" style="margin-bottom:16px;">
       <button class="icon-btn" data-action="agenda-mes" data-delta="-1" title="Mês anterior">‹</button>
@@ -4976,6 +5036,8 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="agenda-mes"]').forEach(btn=>{
     btn.addEventListener('click', ()=> mudarMesAgenda(parseInt(btn.dataset.delta,10)));
   });
+  const cancelarCopiaPrincipalBtn = app.querySelector('[data-action="cancelar-tarefa-copiada"]');
+  if(cancelarCopiaPrincipalBtn) cancelarCopiaPrincipalBtn.addEventListener('click', cancelarTarefaCopiada);
   const agendaHojeBtn = app.querySelector('[data-action="agenda-hoje"]');
   if(agendaHojeBtn) agendaHojeBtn.addEventListener('click', ()=>{
     agendaMesAtual = currentMonthKey();

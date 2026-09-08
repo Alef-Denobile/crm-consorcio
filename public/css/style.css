@@ -700,3 +700,16 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .pipeline-insights-toggle{ width:100%; display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border:none; background:none; cursor:pointer; font-family:inherit; font-size:13px; color:var(--ink); }
 .pipeline-insights-toggle:hover{ background:var(--hover-tint); }
 .pipeline-insights-conteudo{ padding:0 16px 16px; }
+
+/* ---------- Agenda: copiar e colar tarefa ---------- */
+.agenda-clipboard-hint{ display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--gold-soft); border-radius:10px; font-size:13px; color:var(--ink); }
+.agenda-clipboard-hint b{ font-weight:600; }
+.agenda-clipboard-hint .icon-btn{ margin-left:auto; }
+.agenda-hora-colavel{ cursor:pointer; }
+.agenda-hora-colavel:hover{ background:var(--hover-tint); }
+.agenda-hora-colar-hint{ display:none; font-size:11.5px; color:var(--accent); font-style:italic; }
+.agenda-hora-colavel:hover .agenda-hora-colar-hint{ display:inline; }
+.agenda-hora-tarefa-wrap{ display:flex; align-items:center; gap:4px; }
+.agenda-hora-tarefa-wrap .agenda-hora-tarefa{ flex:1; }
+.agenda-hora-tarefa-copiar{ width:24px; height:24px; opacity:.5; }
+.agenda-hora-tarefa-copiar:hover{ opacity:1; }
