@@ -489,7 +489,7 @@ function copiarTarefa(taskId, elemento){
   if(!t) return;
   tarefaCopiada = { titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'', hora: horaLocalDaTarefaOuNull(t.vencimento) };
   if(navigator.vibrate) navigator.vibrate(15);
-  if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
+  if(elemento) mostrarPopupRapido(elemento, 'Copiado');
   renderApp();
   if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
 }
@@ -499,7 +499,7 @@ function copiarEvento(eventoId, elemento){
   const hora = horaLocalDoEventoOuNull(e);
   tarefaCopiada = { titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'', hora };
   if(navigator.vibrate) navigator.vibrate(15);
-  if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
+  if(elemento) mostrarPopupRapido(elemento, 'Copiado');
   renderApp();
   if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
 }
@@ -589,8 +589,8 @@ function renderFloatingMenuDia(){
   const top = Math.min(y, window.innerHeight - 100);
   root.innerHTML = `
     <div class="col-menu" style="position:fixed; top:${Math.max(4,top)}px; left:${Math.max(4,left)}px; min-width:170px;">
-      <button class="col-menu-item" data-action="menu-dia-copiar">📋 Copiar</button>
-      <button class="col-menu-item" data-action="menu-dia-mover">✂️ Mover</button>
+      <button class="col-menu-item" data-action="menu-dia-copiar">Copiar</button>
+      <button class="col-menu-item" data-action="menu-dia-mover">Mover</button>
     </div>
   `;
   const cel = document.querySelector(`[data-action="abrir-dia-agenda"][data-dia="${diaISO}"]`);
@@ -615,7 +615,7 @@ function copiarDiaInteiro(diaISO, elemento, modo){
   if(!itens.length) return;
   diaAgendaCopiado = { origemISO: diaISO, tarefas: itens, modo };
   if(navigator.vibrate) navigator.vibrate(15);
-  if(elemento) mostrarPopupRapido(elemento, `${modo==='mover'?'✂️':'📋'} ${itens.length} ${modo==='mover'?'marcado':'copiado'}${itens.length===1?'':'s'}`);
+  if(elemento) mostrarPopupRapido(elemento, `${itens.length} ${modo==='mover'?'marcado':'copiado'}${itens.length===1?'':'s'}`);
   renderApp();
 }
 async function colarDiaInteiroEm(diaISO, elemento){
@@ -657,7 +657,7 @@ async function colarDiaInteiroEm(diaISO, elemento){
       }
     }
     diaAgendaCopiado = null; // colar/mover o dia só acontece uma vez — depois disso, a "área de transferência" se esvazia sozinha
-    if(elemento) mostrarPopupRapido(elemento, `${modo==='mover'?'✂️':'📥'} ${qtd} ${modo==='mover'?'movido':'colado'}${qtd===1?'':'s'}`);
+    if(elemento) mostrarPopupRapido(elemento, `${qtd} ${modo==='mover'?'movido':'colado'}${qtd===1?'':'s'}`);
     renderApp();
   }catch(e){
     errorMsg = modo==='mover' ? 'Não foi possível mover pra esse dia.' : 'Não foi possível colar nesse dia.';
@@ -4398,7 +4398,7 @@ function renderAgendaDiaModal(){
         <div class="modal-body">
           ${tarefaCopiada ? `
             <div class="agenda-clipboard-hint">
-              <span>📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — ${modoSelecaoMultipla ? `selecione os horários e clique em "Colar" (${horariosSelecionados.size} marcado${horariosSelecionados.size===1?'':'s'})` : 'clique num horário vazio pra colar aqui'}</span>
+              <span>Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — ${modoSelecaoMultipla ? `selecione os horários e clique em "Colar" (${horariosSelecionados.size} marcado${horariosSelecionados.size===1?'':'s'})` : 'clique num horário vazio pra colar aqui'}</span>
               <button class="btn-outline" data-action="toggle-selecao-multipla">${modoSelecaoMultipla ? 'Cancelar seleção' : '☑ Selecionar vários'}</button>
               <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
             </div>
@@ -4437,7 +4437,7 @@ function renderAgendaDiaModal(){
           <div class="modal-foot-actions">
             ${modoSelecaoMultipla
               ? `<button class="btn-save" id="agenda-dia-colar-selecionados" ${horariosSelecionados.size===0?'disabled':''}>📥 Colar em ${horariosSelecionados.size} horário${horariosSelecionados.size===1?'':'s'}</button>`
-              : `<button class="btn-save" id="agenda-dia-nova-tarefa">${tarefaCopiada ? '📋 Colar aqui' : '+ Nova tarefa nesse dia'}</button>`
+              : `<button class="btn-save" id="agenda-dia-nova-tarefa">${tarefaCopiada ? 'Colar aqui' : '+ Nova tarefa nesse dia'}</button>`
             }
           </div>
         </div>
@@ -4546,7 +4546,7 @@ function renderTarefasPage(){
 
     ${tarefaCopiada ? `
       <div class="agenda-clipboard-hint" style="margin-bottom:16px;">
-        📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — abra qualquer dia e clique num horário vazio pra colar
+        Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — abra qualquer dia e clique num horário vazio pra colar
         <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
       </div>
     ` : ''}
