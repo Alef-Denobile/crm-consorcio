@@ -690,26 +690,17 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .pipeline-insights-conteudo{ padding:0 16px 16px; }
 
 /* ---------- Agenda: copiar e colar tarefa ---------- */
-<<<<<<< HEAD
 .agenda-clipboard-hint{ display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--gold-soft); border-radius:10px; font-size:13px; color:var(--ink); flex-wrap:wrap; }
 .agenda-clipboard-hint > span:first-child{ flex:1; min-width:200px; }
-=======
-.agenda-clipboard-hint{ display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--gold-soft); border-radius:10px; font-size:13px; color:var(--ink); }
->>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
 .agenda-clipboard-hint b{ font-weight:600; }
 .agenda-clipboard-hint .icon-btn{ margin-left:auto; }
 .agenda-hora-colavel{ cursor:pointer; }
 .agenda-hora-colavel:hover{ background:var(--hover-tint); }
-<<<<<<< HEAD
 .agenda-hora-selecionada{ background:var(--accent) !important; }
 .agenda-hora-selecionada .agenda-hora-label, .agenda-hora-selecionada .agenda-hora-colar-hint{ color:#fff; }
 .agenda-hora-colar-hint{ display:none; font-size:11.5px; color:var(--accent); font-style:italic; }
 .agenda-hora-colavel:hover .agenda-hora-colar-hint{ display:inline; }
 .agenda-hora-selecionada .agenda-hora-colar-hint{ display:inline; }
-=======
-.agenda-hora-colar-hint{ display:none; font-size:11.5px; color:var(--accent); font-style:italic; }
-.agenda-hora-colavel:hover .agenda-hora-colar-hint{ display:inline; }
->>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
 
 /* ---------- popup rápido de confirmação (copiar/colar), fade in/out ---------- */
 .popup-rapido{ position:fixed; transform:translate(-50%,-50%) scale(0.9); background:var(--ink); color:var(--paper); padding:6px 14px; border-radius:20px; font-size:12.5px; font-weight:600; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .2s, transform .2s; z-index:300; box-shadow:0 6px 18px rgba(0,0,0,.25); }
