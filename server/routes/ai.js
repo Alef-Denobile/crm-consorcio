@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
@@ -34,12 +35,15 @@ Responda só com o texto da mensagem, pronto para enviar, sem explicações ante
 // POST /api/ai/insights -> 2 a 4 alertas curtos sobre o estado atual do funil
 router.post('/insights', async (req, res) => {
   try {
-    const [columns, cards] = await Promise.all([
-      Column.find({ userId: req.userId }),
-      Card.find({ userId: req.userId }),
-    ]);
+    const { funilId } = req.body;
+    const filtroColuna = { userId: req.userId };
+    if (funilId && mongoose.isValidObjectId(funilId)) filtroColuna.funilId = funilId;
+
+    const columns = await Column.find(filtroColuna);
+    const columnIds = columns.map((c) => c._id.toString());
+    const cards = (await Card.find({ userId: req.userId })).filter((c) => columnIds.includes(c.columnId.toString()));
     if (!cards.length) {
-      return res.json({ insights: ['Ainda não há clientes cadastrados para gerar insights.'] });
+      return res.json({ insights: ['Ainda não há clientes cadastrados nesse funil para gerar insights.'] });
     }
 
     const resumo = columns.map((col) => {

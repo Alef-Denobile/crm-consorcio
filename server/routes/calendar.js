@@ -2,8 +2,9 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
-const { CLIENT_ID, CLIENT_SECRET, listarEventosPrimario } = require('../utils/calendarSync');
+const { CLIENT_ID, CLIENT_SECRET, listarEventosPrimario, chamarCalendarApi } = require('../utils/calendarSync');
 const Task = require('../models/Task');
+const EventoGoogleExtra = require('../models/EventoGoogleExtra');
 
 const router = express.Router();
 const JWT_SECRET = auth.JWT_SECRET;
@@ -107,13 +108,24 @@ router.get('/agenda-mes', auth, async (req, res) => {
     const tarefas = await Task.find({
       userId: req.userId,
       vencimento: { $gte: inicioMes, $lte: fimMes },
-    }).select('titulo vencimento prioridade concluida leadId').populate('leadId', 'cliente');
+    }).select('titulo vencimento prioridade concluida leadId descricao').populate('leadId', 'cliente');
 
     let eventosGoogle = [];
     const user = await User.findById(req.userId);
     if (user && user.googleCalendar && user.googleCalendar.refreshToken) {
       try {
         eventosGoogle = await listarEventosPrimario(user, inicioMes, fimMes);
+        const extras = await EventoGoogleExtra.find({ userId: req.userId, eventId: { $in: eventosGoogle.map((e) => e.id) } }).populate('leadId', 'cliente');
+        const extraPorEventId = new Map(extras.map((ex) => [ex.eventId, ex]));
+        eventosGoogle = eventosGoogle.map((ev) => {
+          const extra = extraPorEventId.get(ev.id);
+          return {
+            ...ev,
+            prioridade: extra ? extra.prioridade : 'media',
+            leadId: extra && extra.leadId ? extra.leadId._id.toString() : null,
+            clienteNome: extra && extra.leadId ? extra.leadId.cliente : null,
+          };
+        });
       } catch (e) {
         console.error('Erro ao buscar eventos do Google Agenda:', e.message);
       }
@@ -126,6 +138,7 @@ router.get('/agenda-mes', auth, async (req, res) => {
         vencimento: t.vencimento,
         prioridade: t.prioridade,
         concluida: t.concluida,
+        descricao: t.descricao,
         leadId: t.leadId ? t.leadId._id.toString() : null,
         clienteNome: t.leadId ? t.leadId.cliente : null,
       })),
@@ -133,6 +146,60 @@ router.get('/agenda-mes', auth, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar a agenda do mês.' });
+  }
+});
+
+// PUT /api/calendar/eventos/:eventId -> edita um evento do Google Agenda principal, direto na fonte
+router.put('/eventos/:eventId', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || !user.googleCalendar || !user.googleCalendar.refreshToken) {
+      return res.status(400).json({ error: 'Google Agenda não está conectado.' });
+    }
+    const { titulo, data, hora, descricao, prioridade, leadId } = req.body;
+    if (!titulo || !titulo.trim()) return res.status(400).json({ error: 'Título é obrigatório.' });
+    if (!data) return res.status(400).json({ error: 'Data é obrigatória.' });
+
+    // Campos que o Google entende — vão direto pro evento de verdade.
+    let corpoEvento;
+    if (hora) {
+      const inicio = new Date(`${data}T${hora}`);
+      if (isNaN(inicio.getTime())) return res.status(400).json({ error: 'Data ou horário inválido.' });
+      const fim = new Date(inicio.getTime() + 60 * 60 * 1000);
+      corpoEvento = { summary: titulo.trim(), description: descricao || '', start: { dateTime: inicio.toISOString() }, end: { dateTime: fim.toISOString() } };
+    } else {
+      corpoEvento = { summary: titulo.trim(), description: descricao || '', start: { date: data }, end: { date: data } };
+    }
+    await chamarCalendarApi(user, `/calendars/primary/events/${req.params.eventId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(corpoEvento),
+    });
+
+    // Campos que só existem no nosso CRM — ficam guardados aqui, amarrados pelo ID do evento.
+    await EventoGoogleExtra.findOneAndUpdate(
+      { userId: req.userId, eventId: req.params.eventId },
+      { prioridade: prioridade || 'media', leadId: leadId || null },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao editar o evento no Google Agenda.' });
+  }
+});
+
+// DELETE /api/calendar/eventos/:eventId -> remove um evento do Google Agenda principal
+router.delete('/eventos/:eventId', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || !user.googleCalendar || !user.googleCalendar.refreshToken) {
+      return res.status(400).json({ error: 'Google Agenda não está conectado.' });
+    }
+    await chamarCalendarApi(user, `/calendars/primary/events/${req.params.eventId}`, { method: 'DELETE' });
+    await EventoGoogleExtra.deleteOne({ userId: req.userId, eventId: req.params.eventId });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Erro ao excluir o evento do Google Agenda.' });
   }
 });
 

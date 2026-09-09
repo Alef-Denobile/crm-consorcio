@@ -149,8 +149,13 @@ let dashboardPeriod = 'mes';     // '7dias' | 'mes' | 'trimestre' | 'ano'
 let metaVendasValor = 0;
 let metaVendasCarregada = false;
 let editandoMetaVendas = false;
+let metaVendasEquipeValor = 0;
+let metaVendasEquipeVendido = 0;
+let metaVendasEquipeCarregada = false;
+let editandoMetaVendasEquipe = false;
 let addingCol = false;
 let newColNameVal = '';
+let newColTipoVal = 'aberto';
 let editingColId = null;
 let editingColName = '';
 let openMenuColId = null;
@@ -168,9 +173,14 @@ let agendaLoaded = false;
 let agendaTarefas = [];
 let agendaEventosGoogle = [];
 let agendaDiaSelecionado = null;
+let tarefaCopiada = null; // { titulo, prioridade, leadId, descricao } — sem data/hora, que são escolhidas ao colar
+let modoSelecaoMultipla = false;
+let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar de uma vez, no modo de seleção múltipla
+let diaAgendaCopiado = null; // { origemISO, tarefas:[{titulo,prioridade,leadId,descricao,hora}] } — cópia do dia inteiro
+let longPressTimer = null;
+let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
 let calendarConnected = false;
 let calendarSyncing = false;
-let calendarSyncedOnce = false;
 let whatsappConnected = false;
 let whatsappSalvando = false;
 let whatsappConfigMsg = null;
@@ -202,7 +212,6 @@ let conversaPollingTimer = null;
 let notifOpen = false;
 let buscaGlobalAberta = false;
 let buscaGlobalTexto = '';
-let historicoAberto = false;
 let camposPersonalizados = [];
 let camposPersonalizadosCarregados = false;
 let novoCampoNome = '';
@@ -245,7 +254,6 @@ let completarLeadSalvando = false;
 let completarLeadMsg = null;
 let propostaModalForm = null;
 let twoFactorSetup = null; // { segredo, otpauthUri } enquanto configurando
-let twoFactorCodigoInput = '';
 let twoFactorMsg = null;
 let twoFactorSalvando = false;
 let mostrarDesativar2FA = false;
@@ -253,7 +261,6 @@ let auditoriaEventos = [];
 let auditoriaCarregada = false;
 let auditoriaExpandida = false;
 let configCategoriaAtiva = 'perfil';
-let monitoramentoExpandido = false;
 let monitoramentoLoaded = false;
 let monitoramentoErros = [];
 let disparoFiltroColuna = '';
@@ -336,8 +343,10 @@ let importando = false;
 let aiInsights = [];
 let sidebarOpen = false;
 let insightsCarregando = false;
+let insightsPipelineExpandido = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
+let eventoGoogleModalForm = null; // { eventId, titulo, data, hora } — edita o evento direto na fonte, no Google
 let confirmState = null;         // { message, onConfirm }
 
 /* ---------- comunicação com a API ---------- */
@@ -474,6 +483,174 @@ async function loadTasks(){
   tasksLoaded = true;
   renderApp();
 }
+function copiarTarefa(taskId, elemento){
+  const t = tasks.find(x=>x.id===taskId) || agendaTarefas.find(x=>x.id===taskId);
+  if(!t) return;
+  tarefaCopiada = { titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'', hora: horaLocalDaTarefaOuNull(t.vencimento) };
+  if(navigator.vibrate) navigator.vibrate(15);
+  if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
+  renderApp();
+  if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
+}
+function copiarEvento(eventoId, elemento){
+  const e = agendaEventosGoogle.find(x=>x.id===eventoId);
+  if(!e) return;
+  const hora = horaLocalDoEventoOuNull(e);
+  tarefaCopiada = { titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'', hora };
+  if(navigator.vibrate) navigator.vibrate(15);
+  if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
+  renderApp();
+  if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
+}
+
+// Extrai a hora local (HH:MM) de uma tarefa, ou null se ela não tiver horário definido —
+// mesma checagem em UTC usada no resto do sistema, pra tarefa sem hora não "ganhar" hora à toa.
+function horaLocalDaTarefaOuNull(vencimentoIso){
+  const d = new Date(vencimentoIso);
+  if(isNaN(d.getTime()) || (d.getUTCHours()===0 && d.getUTCMinutes()===0)) return null;
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+// Mesma ideia, mas pra evento do Google — que já vem com a flag diaInteiro explícita,
+// em vez de precisar inferir pela meia-noite UTC como a tarefa.
+function horaLocalDoEventoOuNull(evento){
+  if(evento.diaInteiro || !evento.inicio) return null;
+  const d = new Date(evento.inicio);
+  if(isNaN(d.getTime())) return null;
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+// Mostra um aviso rápido (1s, some sozinho) colado em cima de um elemento —
+// usado pra confirmar "copiado!" sem precisar de uma mensagem fixa na tela.
+function mostrarPopupRapido(elemento, texto){
+  let root = document.getElementById('popup-rapido-root');
+  if(!root){
+    root = document.createElement('div');
+    root.id = 'popup-rapido-root';
+    document.body.appendChild(root);
+  }
+  const rect = elemento.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'popup-rapido';
+  el.textContent = texto;
+  el.style.top = `${rect.top + rect.height/2}px`;
+  el.style.left = `${rect.left + rect.width/2}px`;
+  root.appendChild(el);
+  requestAnimationFrame(()=> el.classList.add('popup-rapido-visivel'));
+  setTimeout(()=>{
+    el.classList.remove('popup-rapido-visivel');
+    setTimeout(()=> el.remove(), 250);
+  }, 1000);
+}
+// Liga o gesto de copiar (botão direito no computador, apertar e segurar em touch)
+// num conjunto de elementos — reaproveitado tanto nas linhas do dia quanto, antes,
+// nas células do calendário mensal.
+function ligarGestoDeCopiar(elementos, callback){
+  elementos.forEach(el=>{
+    el.addEventListener('contextmenu', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      callback(el);
+    });
+    el.addEventListener('touchstart', ()=>{
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(()=>{
+        longPressDisparou = true;
+        callback(el);
+      }, 550);
+    }, { passive:true });
+    el.addEventListener('touchend', (e)=>{ e.stopPropagation(); clearTimeout(longPressTimer); });
+    el.addEventListener('touchmove', ()=> clearTimeout(longPressTimer));
+    el.addEventListener('touchcancel', ()=> clearTimeout(longPressTimer));
+  });
+}
+function copiarDiaInteiro(diaISO, elemento){
+  const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  const itens = [
+    ...tarefasDoDia.map(t=>({
+      titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'',
+      hora: horaLocalDaTarefaOuNull(t.vencimento),
+    })),
+    ...eventosDoDia.map(e=>({
+      titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'',
+      hora: horaLocalDoEventoOuNull(e),
+    })),
+  ];
+  if(!itens.length) return;
+  diaAgendaCopiado = { origemISO: diaISO, tarefas: itens };
+  if(navigator.vibrate) navigator.vibrate(15);
+  if(elemento) mostrarPopupRapido(elemento, `📋 ${itens.length} copiado${itens.length===1?'':'s'}`);
+  renderApp();
+}
+async function colarDiaInteiroEm(diaISO, elemento){
+  if(!diaAgendaCopiado || diaISO===diaAgendaCopiado.origemISO) return;
+  const qtd = diaAgendaCopiado.tarefas.length;
+  try{
+    for(const t of diaAgendaCopiado.tarefas){
+      const dados = { titulo:t.titulo, prioridade:t.prioridade, leadId:t.leadId, descricao:t.descricao, vencimento: diaISO };
+      if(t.hora){
+        const combinado = new Date(`${diaISO}T${t.hora}`);
+        if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
+      }
+      const nova = await apiRequest('POST', '/tasks', dados);
+      tasks.push(nova);
+      atualizarTarefaNaAgendaLocal(nova);
+    }
+    diaAgendaCopiado = null; // colar o dia só acontece uma vez — depois de colado, a cópia se esvazia sozinha
+    if(elemento) mostrarPopupRapido(elemento, `📥 ${qtd} colado${qtd===1?'':'s'}`);
+    renderApp();
+  }catch(e){
+    errorMsg = 'Não foi possível colar nesse dia.';
+    renderApp();
+  }
+}
+function cancelarTarefaCopiada(){
+  tarefaCopiada = null;
+  modoSelecaoMultipla = false;
+  horariosSelecionados.clear();
+  renderApp();
+  if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
+}
+async function colarTarefaEm(diaISO, hora){
+  if(!tarefaCopiada) return;
+  const { hora: horaOriginal, ...dadosBase } = tarefaCopiada;
+  const horaFinal = hora || horaOriginal; // usa a hora do horário clicado; sem isso, cai pra hora original que foi copiada
+  const dados = { ...dadosBase, vencimento: diaISO };
+  if(horaFinal){
+    const combinado = new Date(`${diaISO}T${horaFinal}`);
+    if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
+  }
+  try{
+    const nova = await apiRequest('POST', '/tasks', dados);
+    tasks.push(nova);
+    atualizarTarefaNaAgendaLocal(nova);
+    renderApp();
+  }catch(e){
+    errorMsg = 'Não foi possível colar a tarefa.';
+    renderApp();
+  }
+  if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
+}
+async function colarEmHorariosSelecionados(){
+  if(!tarefaCopiada || !horariosSelecionados.size || !agendaDiaSelecionado) return;
+  const diaISO = agendaDiaSelecionado;
+  const { hora: horaOriginal, ...dadosBase } = tarefaCopiada;
+  const horarios = [...horariosSelecionados];
+  for(const hora of horarios){
+    const dados = { ...dadosBase, vencimento: diaISO };
+    const combinado = new Date(`${diaISO}T${hora}`);
+    if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
+    try{
+      const nova = await apiRequest('POST', '/tasks', dados);
+      tasks.push(nova);
+      atualizarTarefaNaAgendaLocal(nova);
+    }catch(e){
+      errorMsg = 'Não foi possível colar em todos os horários selecionados.';
+    }
+  }
+  modoSelecaoMultipla = false;
+  horariosSelecionados.clear();
+  renderApp();
+  if(agendaDiaSelecionado) renderAgendaDiaModal();
+}
 async function loadAgendaMes(mesKey){
   agendaLoaded = false;
   renderApp();
@@ -505,6 +682,25 @@ function dataLocalDaTarefa(vencimentoIso){
   const temHora = d.getUTCHours()!==0 || d.getUTCMinutes()!==0;
   if(temHora) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   return vencimentoIso.slice(0,10);
+}
+// Atualiza (ou remove) uma tarefa direto no estado local da Agenda, sem precisar
+// buscar tudo de novo no servidor — evita uma ida desnecessária ao Google Agenda
+// (que só deveria acontecer quando a pessoa clica em "Sincronizar Agenda" de propósito).
+function atualizarTarefaNaAgendaLocal(t){
+  if(!t.vencimento || !agendaMesAtual) return;
+  const mesDaTarefa = dataLocalDaTarefa(t.vencimento).slice(0,7);
+  const idx = agendaTarefas.findIndex(x=>x.id===t.id);
+  if(mesDaTarefa !== agendaMesAtual){
+    if(idx>-1) agendaTarefas.splice(idx,1); // mudou pra fora do mês em tela — some da visão atual
+    return;
+  }
+  const card = t.leadId ? board.cards.find(c=>c.id===t.leadId) : null;
+  const comNome = { ...t, clienteNome: card ? card.cliente : null };
+  if(idx>-1) agendaTarefas[idx] = comNome;
+  else agendaTarefas.push(comNome);
+}
+function removerTarefaDaAgendaLocal(id){
+  agendaTarefas = agendaTarefas.filter(x=>x.id!==id);
 }
 function itensDoDiaAgenda(diaISO){
   const tarefasDoDia = agendaTarefas.filter(t=> dataLocalDaTarefa(t.vencimento)===diaISO);
@@ -2374,6 +2570,30 @@ async function salvarMetaVendas(){
   editandoMetaVendas = false;
   renderApp();
 }
+async function loadMetaVendasEquipe(){
+  try{
+    const data = await apiRequest('GET', `/equipe/meta-vendas/${currentMonthKey()}`);
+    metaVendasEquipeValor = data.valorMeta || 0;
+    metaVendasEquipeVendido = data.vendidoNoMes || 0;
+  }catch(e){
+    metaVendasEquipeValor = 0;
+    metaVendasEquipeVendido = 0;
+  }
+  metaVendasEquipeCarregada = true;
+  renderApp();
+}
+async function salvarMetaVendasEquipe(){
+  const input = document.getElementById('meta-vendas-equipe-input');
+  const valor = input ? (parseFloat(input.value) || 0) : 0;
+  try{
+    await apiRequest('PUT', `/equipe/meta-vendas/${currentMonthKey()}`, { valorMeta: valor });
+    metaVendasEquipeValor = valor;
+  }catch(e){
+    errorMsg = 'Não foi possível salvar a meta da equipe.';
+  }
+  editandoMetaVendasEquipe = false;
+  renderApp();
+}
 function dashMetrics(){
   const cards = cardsInPeriod();
   let emNegociacaoValor=0, emNegociacaoCount=0, ganhoValor=0, ganhoCount=0, perdidoCount=0;
@@ -2529,11 +2749,7 @@ function goToPage(page){
   sidebarOpen = false;
   renderApp();
   if(page === 'tarefas'){
-    loadAgendaMes(agendaMesAtual); // busca de novo toda vez, pra sempre trazer eventos criados direto no Google Agenda
-    if(calendarConnected && !calendarSyncedOnce){
-      calendarSyncedOnce = true;
-      syncCalendarNow();
-    }
+    if(!agendaLoaded) loadAgendaMes(agendaMesAtual); // só busca do zero — depois disso, a tela se mantém atualizada sozinha com as próprias ações, e o Google só é consultado de novo no botão "Sincronizar Agenda"
   }
   if(page === 'configuracoes'){
     senhaMsg = null; senhaAtualVal = ''; senhaNovaVal = '';
@@ -2573,13 +2789,13 @@ async function moveCard(cardId, columnId){
   if(!card || card.columnId===columnId) return;
   const anterior = card.columnId;
   card.columnId = columnId; // otimista
-  renderApp();
+  renderAppPreservandoScroll();
   try{
     await apiRequest('PUT', `/cards/${cardId}/move`, { columnId });
   }catch(e){
     card.columnId = anterior;
     errorMsg = 'Não foi possível mover o cliente. Tente novamente.';
-    renderApp();
+    renderAppPreservandoScroll();
   }
 }
 
@@ -2747,11 +2963,14 @@ async function reorderColumns(draggedId, targetId){
 
 async function addColumn(){
   const nome = newColNameVal.trim();
+  const tipoEl = document.getElementById('new-col-tipo');
+  const tipo = tipoEl ? tipoEl.value : 'aberto';
   addingCol = false;
   newColNameVal = '';
+  newColTipoVal = 'aberto';
   if(!nome || !funilAtualId){ renderApp(); return; }
   try{
-    const novaCol = await apiRequest('POST', '/columns', { nome, tipo:'aberto', funilId: funilAtualId });
+    const novaCol = await apiRequest('POST', '/columns', { nome, tipo, funilId: funilAtualId });
     board.columns.push(novaCol);
     renderApp();
     abrirPickerLeadsParaColuna(novaCol.id);
@@ -2794,13 +3013,14 @@ async function saveTaskFromModal(){
     if(__isNew){
       const nova = await apiRequest('POST', '/tasks', dados);
       tasks.push(nova);
+      atualizarTarefaNaAgendaLocal(nova);
     } else {
       const atualizada = await apiRequest('PUT', `/tasks/${id}`, dados);
       const idx = tasks.findIndex(t=>t.id===id);
       if(idx>-1) tasks[idx] = atualizada;
+      atualizarTarefaNaAgendaLocal(atualizada);
     }
     closeTaskModal();
-    if(currentPage==='tarefas') loadAgendaMes(agendaMesAtual);
   }catch(e){
     errorMsg = 'Não foi possível salvar a tarefa.';
   }
@@ -2811,12 +3031,13 @@ async function deleteTaskById(id){
   const idx = tasks.findIndex(t=>t.id===id);
   if(idx===-1) return;
   const [removida] = tasks.splice(idx,1);
+  removerTarefaDaAgendaLocal(id);
   renderApp();
   try{
     await apiRequest('DELETE', `/tasks/${id}`);
-    if(currentPage==='tarefas') loadAgendaMes(agendaMesAtual);
   }catch(e){
     tasks.splice(idx,0,removida);
+    atualizarTarefaNaAgendaLocal(removida);
     errorMsg = 'Não foi possível excluir a tarefa.';
     renderApp();
   }
@@ -3236,7 +3457,7 @@ async function gerarInsightsIA(){
   insightsCarregando = true;
   renderApp();
   try{
-    const data = await apiRequest('POST', '/ai/insights');
+    const data = await apiRequest('POST', '/ai/insights', { funilId: funilAtualId });
     aiInsights = data.insights || [];
   }catch(e){
     errorMsg = e.message || 'Não foi possível gerar os insights.';
@@ -3319,6 +3540,25 @@ async function sugerirTarefaIA(){
 }
 
 /* ---------- render: shell (barra lateral + página atual) ---------- */
+// Redesenha a página igual renderApp(), mas guarda e restaura a posição de rolagem
+// antes/depois — usado em ações do Pipeline (mover card) que não deveriam "resetar"
+// a visão de quem já rolou a tela pra ver um cliente lá embaixo.
+function renderAppPreservandoScroll(){
+  const mainEl = document.querySelector('main.pipeline-main');
+  const scrollHorizontal = mainEl ? mainEl.scrollLeft : null;
+  const scrollsColunas = {};
+  document.querySelectorAll('.cards[data-col-id]').forEach(el=>{
+    scrollsColunas[el.dataset.colId] = el.scrollTop;
+  });
+
+  renderApp();
+
+  const mainEl2 = document.querySelector('main.pipeline-main');
+  if(mainEl2 && scrollHorizontal!==null) mainEl2.scrollLeft = scrollHorizontal;
+  document.querySelectorAll('.cards[data-col-id]').forEach(el=>{
+    if(scrollsColunas[el.dataset.colId]!==undefined) el.scrollTop = scrollsColunas[el.dataset.colId];
+  });
+}
 function renderApp(){
   const app = document.getElementById('app');
   if(!loaded){ app.innerHTML = '<div class="loading">Carregando painel…</div>'; return; }
@@ -3562,20 +3802,39 @@ function renderDashboardPage(){
       </div>
     </div>
 
-    <div class="dash-panel" style="margin-bottom:20px;">
-      <div class="dash-panel-title">
-        Meta de vendas do mês
-        ${!editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : ''}
-      </div>
-      ${!metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
-        <div class="field-row" style="align-items:flex-end;">
-          <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
-          <button class="btn-primary" id="meta-vendas-salvar" style="margin-bottom:14px;">Salvar</button>
+    <div class="dash-grid" style="margin-bottom:20px;">
+      <div class="dash-panel">
+        <div class="dash-panel-title">
+          Meta de vendas do mês
+          ${!editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : ''}
         </div>
-      ` : (metaVendasValor > 0 ? `
-        <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${Math.min(100, (vendidoNoMesAtual()/metaVendasValor*100))}%"></div></div>
-        <p class="settings-page-note">${fmtBRL(vendidoNoMesAtual())} de ${fmtBRL(metaVendasValor)} — ${Math.round(Math.min(999,vendidoNoMesAtual()/metaVendasValor*100))}%</p>
-      ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`))}
+        ${!metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
+          <div class="field-row" style="align-items:flex-end;">
+            <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
+            <button class="btn-primary" id="meta-vendas-salvar" style="margin-bottom:14px;">Salvar</button>
+          </div>
+        ` : (metaVendasValor > 0 ? `
+          <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${Math.min(100, (vendidoNoMesAtual()/metaVendasValor*100))}%"></div></div>
+          <p class="settings-page-note">${fmtBRL(vendidoNoMesAtual())} de ${fmtBRL(metaVendasValor)} — ${Math.round(Math.min(999,vendidoNoMesAtual()/metaVendasValor*100))}%</p>
+        ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`))}
+      </div>
+      ${equipe ? `
+        <div class="dash-panel">
+          <div class="dash-panel-title">
+            Meta de vendas da equipe
+            ${(equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : ''}
+          </div>
+          ${!metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
+            <div class="field-row" style="align-items:flex-end;">
+              <div class="field"><label>Meta da equipe no mês (R$)</label><input type="number" id="meta-vendas-equipe-input" value="${metaVendasEquipeValor||0}" min="0" step="0.01" /></div>
+              <button class="btn-primary" id="meta-vendas-equipe-salvar" style="margin-bottom:14px;">Salvar</button>
+            </div>
+          ` : `
+            <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${metaVendasEquipeValor ? Math.min(100, (metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%"></div></div>
+            <p class="settings-page-note">${fmtBRL(metaVendasEquipeVendido)} de ${fmtBRL(metaVendasEquipeValor)} — ${metaVendasEquipeValor ? Math.round(Math.min(999,metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%</p>
+          `)}
+        </div>
+      ` : ''}
     </div>
 
     <div class="dash-grid">
@@ -3613,17 +3872,6 @@ function renderDashboardPage(){
           </div>
         `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>'}
       </div>
-    </div>
-
-    <div class="dash-panel">
-      <div class="dash-panel-title-row">
-        <div class="dash-panel-title">${ICON_SPARKLE} Insights da IA</div>
-        <button class="btn-outline" data-action="gerar-insights" ${insightsCarregando?'disabled':''}>${insightsCarregando?'Gerando…':'Gerar'}</button>
-      </div>
-      ${aiInsights.length
-        ? `<ul class="ai-insights-list">${aiInsights.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`
-        : `<p class="dash-empty">Clique em "Gerar" para receber alertas sobre o seu funil.</p>`
-      }
     </div>
   `;
 }
@@ -3700,6 +3948,22 @@ function renderPipelinePage(){
       </div>
     </div>
 
+    <div class="pipeline-insights-bar">
+      <button class="pipeline-insights-toggle" data-action="toggle-insights-pipeline">
+        <span>${ICON_SPARKLE} Insights da IA sobre esse funil</span>
+        <span class="auditoria-toggle-seta ${insightsPipelineExpandido?'aberta':''}">▾</span>
+      </button>
+      ${insightsPipelineExpandido ? `
+        <div class="pipeline-insights-conteudo">
+          <button class="btn-outline" data-action="gerar-insights" ${insightsCarregando?'disabled':''}>${insightsCarregando?'Gerando…':'Gerar'}</button>
+          ${aiInsights.length
+            ? `<ul class="ai-insights-list">${aiInsights.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`
+            : `<p class="dash-empty">Clique em "Gerar" para receber alertas sobre esse funil.</p>`
+          }
+        </div>
+      ` : ''}
+    </div>
+
     <main class="pipeline-main">
       <div class="board">
         ${columnsDoFunil.map(col => renderColumn(col)).join('')}
@@ -3707,6 +3971,9 @@ function renderPipelinePage(){
           ${addingCol ? `
             <div class="add-col-form">
               <input type="text" id="new-col-input" placeholder="Nome da coluna" value="${esc(newColNameVal)}" />
+              <select id="new-col-tipo" class="add-col-tipo-select">
+                ${Object.entries(TIPOS).map(([key,t])=>`<option value="${key}" ${newColTipoVal===key?'selected':''}>${t.label}</option>`).join('')}
+              </select>
               <div class="add-col-actions">
                 <button class="btn-primary" data-action="confirm-add-col">Adicionar</button>
                 <button class="btn-ghost" data-action="cancel-add-col">Cancelar</button>
@@ -3767,7 +4034,7 @@ function renderColumn(col){
         ` : ''}
       </div>
 
-      <div class="cards">
+      <div class="cards" data-col-id="${col.id}">
         ${cards.length===0 ? '<p class="empty-col">Nenhum cliente aqui ainda</p>' : cards.map(card=>renderCard(card)).join('')}
       </div>
     </div>
@@ -3879,8 +4146,6 @@ function ativarArrasteHorizontal(){
 function renderCard(card){
   const temp = TEMPS[card.temperatura] || TEMPS.frio;
   const showMonth = filterMonth === null && card.mes;
-  const moveMenuOpen = openMoveMenuCardId === card.id;
-  const colunasDoMesmoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
   return `
     <div class="card" draggable="true" data-action="drag-card" data-card-id="${card.id}">
       <div class="card-drag-handle" title="Arraste para mover">
@@ -3892,16 +4157,6 @@ function renderCard(card){
       </div>
       <div class="card-move-wrap">
         <button class="card-move-btn" data-action="toggle-move-menu" data-card-id="${card.id}" title="Mover pra outra coluna">⇄</button>
-        ${moveMenuOpen ? `
-          <div class="col-menu card-move-menu">
-            <div class="col-menu-title">Mover para</div>
-            ${colunasDoMesmoFunil.map(c=>`
-              <button class="col-menu-item" data-action="mover-para-coluna" data-card-id="${card.id}" data-col-id="${c.id}" ${c.id===card.columnId?'disabled':''}>
-                ${esc(c.nome)} ${c.id===card.columnId?'✓':''}
-              </button>
-            `).join('')}
-          </div>
-        ` : ''}
       </div>
       <div class="card-main">
         <div class="card-perf"></div>
@@ -4016,6 +4271,18 @@ function closeAgendaDiaModal(){
   const root = document.getElementById('modal-root');
   if(root) root.innerHTML = '';
 }
+// Redesenha o modal do dia preservando a posição de rolagem da linha do tempo —
+// usado depois de ações que não deveriam "pular" a visão de volta pro topo
+// (colar, copiar, marcar como concluída).
+function renderAgendaDiaModalPreservandoScroll(){
+  const timelineEl = document.getElementById('agenda-dia-timeline');
+  const scrollAnterior = timelineEl ? timelineEl.scrollTop : null;
+  renderAgendaDiaModal();
+  if(scrollAnterior!==null){
+    const timelineEl2 = document.getElementById('agenda-dia-timeline');
+    if(timelineEl2) timelineEl2.scrollTop = scrollAnterior;
+  }
+}
 function renderAgendaDiaModal(){
   const root = document.getElementById('modal-root');
   if(!agendaDiaSelecionado){ root.innerHTML=''; return; }
@@ -4043,7 +4310,7 @@ function renderAgendaDiaModal(){
 
   function renderTarefaMini(t){
     return `
-      <div class="agenda-dia-item">
+      <div class="agenda-dia-item" data-copiar-tarefa="${t.id}">
         <span class="check-circle ${t.concluida?'checked':''}" data-task-toggle="${t.id}">${t.concluida?ICON_CHECK:''}</span>
         <div style="flex:1;">
           <div class="agenda-dia-item-titulo ${t.concluida?'concluida':''}">${esc(t.titulo)}</div>
@@ -4054,7 +4321,7 @@ function renderAgendaDiaModal(){
     `;
   }
   function renderEventoMini(e){
-    return `<div class="agenda-hora-evento">📅 ${esc(e.titulo)}</div>`;
+    return `<div class="agenda-hora-evento" data-copiar-evento="${e.id}" data-editar-evento="${e.id}">📅 ${esc(e.titulo)}${e.clienteNome ? ` <span style="opacity:.7;">· 👤 ${esc(e.clienteNome)}</span>` : ''}</div>`;
   }
 
   const horaAtual = new Date().getHours();
@@ -4067,35 +4334,49 @@ function renderAgendaDiaModal(){
           <button id="agenda-dia-close">✕</button>
         </div>
         <div class="modal-body">
+          ${tarefaCopiada ? `
+            <div class="agenda-clipboard-hint">
+              <span>📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — ${modoSelecaoMultipla ? `selecione os horários e clique em "Colar" (${horariosSelecionados.size} marcado${horariosSelecionados.size===1?'':'s'})` : 'clique num horário vazio pra colar aqui'}</span>
+              <button class="btn-outline" data-action="toggle-selecao-multipla">${modoSelecaoMultipla ? 'Cancelar seleção' : '☑ Selecionar vários'}</button>
+              <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
+            </div>
+          ` : ''}
           ${(tarefasSemHora.length || eventosSemHora.length) ? `
             <div class="settings-page-subtitle">Sem horário definido</div>
             ${eventosSemHora.map(e=>`
-              <div class="agenda-dia-item">
+              <div class="agenda-dia-item" data-copiar-evento="${e.id}" data-editar-evento="${e.id}">
                 <span class="agenda-item-dot agenda-item-evento"></span>
-                <div class="agenda-dia-item-titulo">${esc(e.titulo)}</div>
+                <div class="agenda-dia-item-titulo" style="flex:1;">${esc(e.titulo)}</div>
               </div>
             `).join('')}
             ${tarefasSemHora.map(renderTarefaMini).join('')}
             <div class="settings-sep-line"></div>
           ` : ''}
           <div class="agenda-dia-timeline" id="agenda-dia-timeline">
-            ${porHora.map((conteudo, h)=>`
-              <div class="agenda-hora-row ${h===horaAtual?'agenda-hora-atual':''}" id="agenda-hora-${h}" data-action="nova-tarefa-nesta-hora" data-hora="${String(h).padStart(2,'0')}:00">
-                <span class="agenda-hora-label">${String(h).padStart(2,'0')}:00</span>
+            ${porHora.map((conteudo, h)=>{
+              const horaStr = `${String(h).padStart(2,'0')}:00`;
+              const selecionada = horariosSelecionados.has(horaStr);
+              return `
+              <div class="agenda-hora-row ${h===horaAtual?'agenda-hora-atual':''} ${tarefaCopiada?'agenda-hora-colavel':''} ${selecionada?'agenda-hora-selecionada':''}" id="agenda-hora-${h}" data-action="nova-tarefa-nesta-hora" data-hora="${horaStr}">
+                <span class="agenda-hora-label">${horaStr}</span>
                 <div class="agenda-hora-conteudo">
                   ${conteudo.eventos.map(renderEventoMini).join('')}
                   ${conteudo.tarefas.map(t=>`
-                    <div class="agenda-hora-tarefa ${t.concluida?'concluida':''}" data-task-edit-hora="${t.id}">✓ ${esc(t.titulo)}</div>
+                    <span class="agenda-hora-tarefa ${t.concluida?'concluida':''}" data-task-edit-hora="${t.id}" data-copiar-tarefa="${t.id}">✓ ${esc(t.titulo)}</span>
                   `).join('')}
+                  ${tarefaCopiada ? `<span class="agenda-hora-colar-hint">${modoSelecaoMultipla ? (selecionada?'✓ Selecionado':'+ Selecionar') : '+ Colar aqui'}</span>` : ''}
                 </div>
               </div>
-            `).join('')}
+            `;}).join('')}
           </div>
         </div>
         <div class="modal-foot">
-          <span></span>
+          ${(tarefasDoDia.length || eventosDoDia.length) ? `<button class="delete-link" id="agenda-dia-excluir-tudo">🗑 Excluir tudo desse dia</button>` : '<span></span>'}
           <div class="modal-foot-actions">
-            <button class="btn-save" id="agenda-dia-nova-tarefa">+ Nova tarefa nesse dia</button>
+            ${modoSelecaoMultipla
+              ? `<button class="btn-save" id="agenda-dia-colar-selecionados" ${horariosSelecionados.size===0?'disabled':''}>📥 Colar em ${horariosSelecionados.size} horário${horariosSelecionados.size===1?'':'s'}</button>`
+              : `<button class="btn-save" id="agenda-dia-nova-tarefa">${tarefaCopiada ? '📋 Colar aqui' : '+ Nova tarefa nesse dia'}</button>`
+            }
           </div>
         </div>
       </div>
@@ -4104,13 +4385,35 @@ function renderAgendaDiaModal(){
 
   document.getElementById('agenda-dia-close').addEventListener('click', closeAgendaDiaModal);
   document.getElementById('agenda-dia-overlay').addEventListener('click', (e)=>{ if(e.target.id==='agenda-dia-overlay') closeAgendaDiaModal(); });
-  document.getElementById('agenda-dia-nova-tarefa').addEventListener('click', ()=>{
+  const excluirTudoBtn = document.getElementById('agenda-dia-excluir-tudo');
+  if(excluirTudoBtn) excluirTudoBtn.addEventListener('click', ()=> excluirTudoDoDia(diaISO, tarefasDoDia, eventosDoDia));
+  const novaTarefaBtn = document.getElementById('agenda-dia-nova-tarefa');
+  if(novaTarefaBtn) novaTarefaBtn.addEventListener('click', ()=>{
+    if(tarefaCopiada){ colarTarefaEm(diaISO); return; }
     closeAgendaDiaModal();
     openNewTask(diaISO);
   });
+  const toggleSelecaoBtn = root.querySelector('[data-action="toggle-selecao-multipla"]');
+  if(toggleSelecaoBtn) toggleSelecaoBtn.addEventListener('click', ()=>{
+    modoSelecaoMultipla = !modoSelecaoMultipla;
+    horariosSelecionados.clear();
+    renderAgendaDiaModal();
+  });
+  const colarSelecionadosBtn = document.getElementById('agenda-dia-colar-selecionados');
+  if(colarSelecionadosBtn) colarSelecionadosBtn.addEventListener('click', colarEmHorariosSelecionados);
   root.querySelectorAll('[data-action="nova-tarefa-nesta-hora"]').forEach(row=>{
     row.addEventListener('click', ()=>{
       const hora = row.dataset.hora;
+      if(modoSelecaoMultipla){
+        if(horariosSelecionados.has(hora)) horariosSelecionados.delete(hora);
+        else horariosSelecionados.add(hora);
+        renderAgendaDiaModalPreservandoScroll();
+        return;
+      }
+      if(tarefaCopiada){
+        colarTarefaEm(diaISO, hora);
+        return;
+      }
       closeAgendaDiaModal();
       openNewTask(diaISO, hora);
     });
@@ -4118,7 +4421,6 @@ function renderAgendaDiaModal(){
   root.querySelectorAll('[data-task-edit-hora]').forEach(el=>{
     el.addEventListener('click', (e)=>{
       e.stopPropagation(); // não deixa o clique "vazar" pra linha da hora (que abriria nova tarefa)
-      closeAgendaDiaModal();
       openEditTask(el.dataset.taskEditHora);
     });
   });
@@ -4126,15 +4428,24 @@ function renderAgendaDiaModal(){
     el.addEventListener('click', async (e)=>{
       e.stopPropagation();
       await toggleTaskConcluida(el.dataset.taskToggle);
-      renderAgendaDiaModal();
+      renderAgendaDiaModalPreservandoScroll();
     });
   });
   root.querySelectorAll('[data-task-edit]').forEach(el=>{
     el.addEventListener('click', ()=>{
-      closeAgendaDiaModal();
       openEditTask(el.dataset.taskEdit);
     });
   });
+  ligarGestoDeCopiar(root.querySelectorAll('[data-copiar-tarefa]'), (el)=> copiarTarefa(el.dataset.copiarTarefa, el));
+  ligarGestoDeCopiar(root.querySelectorAll('[data-copiar-evento]'), (el)=> copiarEvento(el.dataset.copiarEvento, el));
+  root.querySelectorAll('[data-editar-evento]').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation(); // não deixa o clique vazar pra linha da hora (que abriria nova tarefa em branco)
+      openEditEventoGoogle(el.dataset.editarEvento);
+    });
+  });
+  const cancelarCopiaBtn = root.querySelector('[data-action="cancelar-tarefa-copiada"]');
+  if(cancelarCopiaBtn) cancelarCopiaBtn.addEventListener('click', cancelarTarefaCopiada);
 
   // Rola a linha do tempo até perto da hora atual (ou a 1ª hora com algo marcado, se for antes)
   const primeiraComItem = porHora.findIndex(c=>c.tarefas.length||c.eventos.length);
@@ -4170,6 +4481,13 @@ function renderTarefasPage(){
         <button class="btn-primary" data-action="open-new-task">+ Nova tarefa</button>
       </div>
     </div>
+
+    ${tarefaCopiada ? `
+      <div class="agenda-clipboard-hint" style="margin-bottom:16px;">
+        📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — abra qualquer dia e clique num horário vazio pra colar
+        <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
+      </div>
+    ` : ''}
 
     <div class="month-step-nav" style="margin-bottom:16px;">
       <button class="icon-btn" data-action="agenda-mes" data-delta="-1" title="Mês anterior">‹</button>
@@ -4873,10 +5191,16 @@ function bindAppEvents(){
   });
   const gerarInsightsBtn = app.querySelector('[data-action="gerar-insights"]');
   if(gerarInsightsBtn) gerarInsightsBtn.addEventListener('click', gerarInsightsIA);
+  const toggleInsightsPipelineBtn = app.querySelector('[data-action="toggle-insights-pipeline"]');
+  if(toggleInsightsPipelineBtn) toggleInsightsPipelineBtn.addEventListener('click', ()=>{ insightsPipelineExpandido = !insightsPipelineExpandido; renderApp(); });
   const editarMetaBtn = app.querySelector('[data-action="editar-meta-vendas"]');
   if(editarMetaBtn) editarMetaBtn.addEventListener('click', ()=>{ editandoMetaVendas = true; renderApp(); });
   const salvarMetaBtn = document.getElementById('meta-vendas-salvar');
   if(salvarMetaBtn) salvarMetaBtn.addEventListener('click', salvarMetaVendas);
+  const editarMetaEquipeBtn = app.querySelector('[data-action="editar-meta-vendas-equipe"]');
+  if(editarMetaEquipeBtn) editarMetaEquipeBtn.addEventListener('click', ()=>{ editandoMetaVendasEquipe = true; renderApp(); });
+  const salvarMetaEquipeBtn = document.getElementById('meta-vendas-equipe-salvar');
+  if(salvarMetaEquipeBtn) salvarMetaEquipeBtn.addEventListener('click', salvarMetaVendasEquipe);
 
   /* -- tarefas (usado no Dashboard e na página Tarefas) -- */
   app.querySelectorAll('[data-action="toggle-task"]').forEach(el=>{
@@ -4892,7 +5216,7 @@ function bindAppEvents(){
       const id = btn.dataset.taskId;
       showConfirm({
         message: 'Excluir esta tarefa? Essa ação não pode ser desfeita.',
-        onConfirm: ()=>{ deleteTaskById(id); closeConfirm(); },
+        onConfirm: ()=>{ deleteTaskById(id); closeConfirm(); closeTaskModal(); },
       });
     });
   });
@@ -4903,13 +5227,40 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="agenda-mes"]').forEach(btn=>{
     btn.addEventListener('click', ()=> mudarMesAgenda(parseInt(btn.dataset.delta,10)));
   });
+  const cancelarCopiaPrincipalBtn = app.querySelector('[data-action="cancelar-tarefa-copiada"]');
+  if(cancelarCopiaPrincipalBtn) cancelarCopiaPrincipalBtn.addEventListener('click', cancelarTarefaCopiada);
   const agendaHojeBtn = app.querySelector('[data-action="agenda-hoje"]');
   if(agendaHojeBtn) agendaHojeBtn.addEventListener('click', ()=>{
     agendaMesAtual = currentMonthKey();
     loadAgendaMes(agendaMesAtual);
   });
   app.querySelectorAll('[data-action="abrir-dia-agenda"]').forEach(cel=>{
-    cel.addEventListener('click', ()=>{ agendaDiaSelecionado = cel.dataset.dia; renderAgendaDiaModal(); });
+    cel.addEventListener('click', ()=>{
+      if(longPressDisparou){ longPressDisparou = false; return; } // ignora o clique fantasma que o toque dispara depois de segurar
+      const diaISO = cel.dataset.dia;
+      if(diaAgendaCopiado && diaISO !== diaAgendaCopiado.origemISO){
+        colarDiaInteiroEm(diaISO, cel);
+        if(navigator.vibrate) navigator.vibrate(15);
+        return;
+      }
+      agendaDiaSelecionado = diaISO; renderAgendaDiaModal();
+    });
+    cel.addEventListener('contextmenu', (e)=>{
+      e.preventDefault();
+      copiarDiaInteiro(cel.dataset.dia, cel);
+    });
+    cel.addEventListener('touchstart', (e)=>{
+      clearTimeout(longPressTimer);
+      longPressTimer = setTimeout(()=>{
+        longPressDisparou = true;
+        cel.classList.remove('agenda-cell-pressionando');
+        copiarDiaInteiro(cel.dataset.dia, cel);
+      }, 550);
+      cel.classList.add('agenda-cell-pressionando');
+    }, { passive:true });
+    cel.addEventListener('touchend', ()=>{ clearTimeout(longPressTimer); cel.classList.remove('agenda-cell-pressionando'); });
+    cel.addEventListener('touchmove', ()=>{ clearTimeout(longPressTimer); cel.classList.remove('agenda-cell-pressionando'); }); // dedo se moveu = rolando a tela, não é aperta-e-segura
+    cel.addEventListener('touchcancel', ()=>{ clearTimeout(longPressTimer); cel.classList.remove('agenda-cell-pressionando'); });
   });
 
   /* -- Disparos -- */
@@ -5348,7 +5699,11 @@ function bindAppEvents(){
 
   /* -- Pipeline: funis -- */
   app.querySelectorAll('[data-action="set-funil"]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ funilAtualId = btn.dataset.funilId; renderApp(); });
+    btn.addEventListener('click', ()=>{
+      funilAtualId = btn.dataset.funilId;
+      aiInsights = []; // insights são específicos do funil — limpa pra não mostrar dado desatualizado de outro
+      renderApp();
+    });
   });
   const novoFunilBtn = app.querySelector('[data-action="open-new-funil"]');
   if(novoFunilBtn) novoFunilBtn.addEventListener('click', criarNovoFunil);
@@ -5427,15 +5782,7 @@ function bindAppEvents(){
     btn.addEventListener('click', (e)=>{
       e.stopPropagation();
       openMoveMenuCardId = (openMoveMenuCardId===btn.dataset.cardId) ? null : btn.dataset.cardId;
-      renderApp();
-    });
-  });
-  app.querySelectorAll('[data-action="mover-para-coluna"]').forEach(btn=>{
-    btn.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      if(btn.disabled) return;
-      openMoveMenuCardId = null;
-      moveCard(btn.dataset.cardId, btn.dataset.colId);
+      renderFloatingMoveMenu(); // só o menu flutuante — não precisa redesenhar a página toda (isso resetava a rolagem)
     });
   });
   app.querySelectorAll('[data-action="set-col-tipo"]').forEach(btn=>{
@@ -5522,13 +5869,55 @@ function bindAppEvents(){
   });
 
   document.addEventListener('click', closeMenusOnOutsideClick);
+  renderFloatingMoveMenu();
+}
+// Renderiza o menu "Mover para" fora do card (que tem overflow:hidden e cortava as
+// opções de baixo) — usa uma raiz própria, colada no fim do <body>, posicionada via
+// JS com as coordenadas reais do botão que foi clicado.
+function renderFloatingMoveMenu(){
+  let root = document.getElementById('floating-menu-root');
+  if(!root){
+    root = document.createElement('div');
+    root.id = 'floating-menu-root';
+    document.body.appendChild(root);
+  }
+  if(!openMoveMenuCardId){ root.innerHTML = ''; return; }
+  const btn = document.querySelector(`[data-action="toggle-move-menu"][data-card-id="${openMoveMenuCardId}"]`);
+  const card = board.cards.find(c=>c.id===openMoveMenuCardId);
+  if(!btn || !card){ root.innerHTML = ''; openMoveMenuCardId = null; return; }
+
+  const colunasDoMesmoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
+  const rect = btn.getBoundingClientRect();
+  const alturaEstimada = Math.min(260, colunasDoMesmoFunil.length * 40 + 40);
+  const cabeDeBaixo = rect.bottom + alturaEstimada < window.innerHeight;
+  const top = cabeDeBaixo ? rect.bottom + 4 : rect.top - alturaEstimada - 4;
+  const left = Math.min(rect.left, window.innerWidth - 200); // não deixa vazar pela direita da tela
+
+  root.innerHTML = `
+    <div class="col-menu card-move-menu" style="position:fixed; top:${Math.max(4,top)}px; left:${Math.max(4,left)}px;">
+      <div class="col-menu-title">Mover para</div>
+      ${colunasDoMesmoFunil.map(c=>`
+        <button class="col-menu-item" data-action="mover-para-coluna" data-card-id="${card.id}" data-col-id="${c.id}" ${c.id===card.columnId?'disabled':''}>
+          ${esc(c.nome)} ${c.id===card.columnId?'✓':''}
+        </button>
+      `).join('')}
+    </div>
+  `;
+  root.querySelectorAll('[data-action="mover-para-coluna"]').forEach(b=>{
+    b.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(b.disabled) return;
+      openMoveMenuCardId = null;
+      moveCard(b.dataset.cardId, b.dataset.colId);
+    });
+  });
 }
 function closeMenusOnOutsideClick(e){
   if(openMenuColId && !e.target.closest('.col-menu') && !e.target.closest('[data-action="toggle-col-menu"]')){
     openMenuColId = null; renderApp();
   }
   if(openMoveMenuCardId && !e.target.closest('.card-move-menu') && !e.target.closest('[data-action="toggle-move-menu"]')){
-    openMoveMenuCardId = null; renderApp();
+    openMoveMenuCardId = null; renderFloatingMoveMenu();
   }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
@@ -5843,7 +6232,11 @@ function openEditTask(id){
   taskModalForm = { ...t, __isNew:false, vencimento: dataStr, hora, leadId: t.leadId || '' };
   renderTaskModal();
 }
-function closeTaskModal(){ taskModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+function closeTaskModal(){
+  taskModalForm = null;
+  if(agendaDiaSelecionado){ renderAgendaDiaModal(); return; }
+  document.getElementById('modal-root').innerHTML='';
+}
 
 function abrirAlterarNomeModal(){
   nomeNovoVal = (currentUser && currentUser.nome) || '';
@@ -5944,6 +6337,158 @@ function renderAlterarSenhaModal(){
   document.getElementById('s-senha-salvar').addEventListener('click', salvarSenha);
 }
 
+// Abre a edição de um evento do Google Agenda — diferente de editar uma tarefa,
+// isso muda o evento de verdade, direto na fonte (no seu Google Agenda).
+function excluirTudoDoDia(diaISO, tarefasDoDia, eventosDoDia){
+  const total = tarefasDoDia.length + eventosDoDia.length;
+  if(!total) return;
+  const temEventos = eventosDoDia.length > 0;
+  showConfirm({
+    message: `Excluir ${total} item${total===1?'':'s'} desse dia?${temEventos ? ' Isso inclui excluir evento(s) direto do seu Google Agenda de verdade, não só daqui.' : ''} Essa ação não pode ser desfeita.`,
+    onConfirm: async ()=>{
+      closeConfirm();
+      closeAgendaDiaModal();
+      for(const t of tarefasDoDia){
+        try{
+          await apiRequest('DELETE', `/tasks/${t.id}`);
+          const idx = tasks.findIndex(x=>x.id===t.id);
+          if(idx>-1) tasks.splice(idx,1);
+        }catch(e){ /* segue tentando os outros mesmo se um falhar */ }
+      }
+      agendaTarefas = agendaTarefas.filter(x => !tarefasDoDia.some(t=>t.id===x.id));
+      for(const e of eventosDoDia){
+        try{
+          await apiRequest('DELETE', `/calendar/eventos/${e.id}`);
+        }catch(err){ /* segue tentando os outros mesmo se um falhar */ }
+      }
+      agendaEventosGoogle = agendaEventosGoogle.filter(x => !eventosDoDia.some(e=>e.id===x.id));
+      renderApp();
+    },
+  });
+}
+function openEditEventoGoogle(eventId){
+  const e = agendaEventosGoogle.find(x=>x.id===eventId);
+  if(!e) return;
+  let data = '', hora = '';
+  if(e.inicio){
+    if(e.diaInteiro){
+      data = e.inicio.slice(0,10);
+    } else {
+      const d = new Date(e.inicio);
+      data = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      hora = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+  }
+  eventoGoogleModalForm = { eventId, titulo: e.titulo, data, hora, descricao: e.descricao||'', prioridade: e.prioridade||'media', leadId: e.leadId||'' };
+  renderEventoGoogleModal();
+}
+function closeEventoGoogleModal(){ eventoGoogleModalForm = null; document.getElementById('modal-root').innerHTML=''; }
+async function salvarEventoGoogle(){
+  const f = eventoGoogleModalForm;
+  if(!f || !f.titulo.trim()) return;
+  try{
+    await apiRequest('PUT', `/calendar/eventos/${f.eventId}`, { titulo: f.titulo, data: f.data, hora: f.hora || null, descricao: f.descricao, prioridade: f.prioridade, leadId: f.leadId || null });
+    const idx = agendaEventosGoogle.findIndex(x=>x.id===f.eventId);
+    if(idx>-1){
+      const novoInicio = f.hora ? new Date(`${f.data}T${f.hora}`).toISOString() : f.data;
+      const card = f.leadId ? board.cards.find(c=>c.id===f.leadId) : null;
+      agendaEventosGoogle[idx] = { ...agendaEventosGoogle[idx], titulo:f.titulo, inicio:novoInicio, diaInteiro: !f.hora, descricao:f.descricao, prioridade:f.prioridade, leadId:f.leadId||null, clienteNome: card ? card.cliente : null };
+    }
+    closeEventoGoogleModal();
+    renderApp();
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível salvar o evento no Google Agenda.';
+    renderApp();
+  }
+}
+function excluirEventoGoogle(){
+  const f = eventoGoogleModalForm;
+  if(!f) return;
+  showConfirm({
+    message: 'Excluir este evento do Google Agenda? Ele será removido de verdade, na sua conta do Google — não só daqui.',
+    onConfirm: async ()=>{
+      closeConfirm();
+      try{
+        await apiRequest('DELETE', `/calendar/eventos/${f.eventId}`);
+        agendaEventosGoogle = agendaEventosGoogle.filter(x=>x.id!==f.eventId);
+        closeEventoGoogleModal();
+        renderApp();
+      }catch(e){
+        errorMsg = e.message || 'Não foi possível excluir o evento.';
+        renderApp();
+      }
+    },
+  });
+}
+function renderEventoGoogleModal(){
+  const root = document.getElementById('modal-root');
+  if(!eventoGoogleModalForm){ root.innerHTML=''; return; }
+  const f = eventoGoogleModalForm;
+
+  root.innerHTML = `
+    <div class="overlay" id="evento-google-modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>📅 Editar evento do Google Agenda</h3>
+          <button id="evento-google-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Título</label>
+            <input type="text" id="eg-titulo" value="${esc(f.titulo)}" placeholder="Ex: Ligar para cliente" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Data</label>
+              <input type="date" id="eg-data" value="${f.data}" />
+            </div>
+            <div class="field">
+              <label>Hora (opcional)</label>
+              <input type="time" id="eg-hora" value="${f.hora}" />
+            </div>
+            <div class="field">
+              <label>Prioridade</label>
+              <select id="eg-prioridade">
+                ${Object.entries(PRIORIDADES).map(([key,p])=>`<option value="${key}" ${f.prioridade===key?'selected':''}>${p.label}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Lead relacionado</label>
+            <select id="eg-lead">
+              <option value="">Sem lead</option>
+              ${board.cards.map(c=>`<option value="${c.id}" ${f.leadId===c.id?'selected':''}>${esc(c.cliente) || 'Sem nome'}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Descrição</label>
+            <textarea id="eg-descricao" rows="3" placeholder="Detalhes do evento...">${esc(f.descricao||'')}</textarea>
+          </div>
+          <p class="settings-page-note">Título, data, hora e descrição mudam o evento de verdade, direto no seu Google Agenda. Prioridade e lead relacionado são exclusivos daqui do CRM — o Google não tem esses campos, então ficam guardados só aqui, amarrados a esse evento.</p>
+        </div>
+        <div class="modal-foot">
+          <button class="delete-link" id="eg-delete">🗑 Excluir</button>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="eg-cancel">Cancelar</button>
+            <button class="btn-save" id="eg-save">Salvar evento</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('evento-google-modal-close').addEventListener('click', closeEventoGoogleModal);
+  document.getElementById('eg-cancel').addEventListener('click', closeEventoGoogleModal);
+  document.getElementById('evento-google-modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='evento-google-modal-overlay') closeEventoGoogleModal(); });
+  document.getElementById('eg-titulo').addEventListener('input', (e)=> eventoGoogleModalForm.titulo = e.target.value);
+  document.getElementById('eg-data').addEventListener('change', (e)=> eventoGoogleModalForm.data = e.target.value);
+  document.getElementById('eg-hora').addEventListener('change', (e)=> eventoGoogleModalForm.hora = e.target.value);
+  document.getElementById('eg-prioridade').addEventListener('change', (e)=> eventoGoogleModalForm.prioridade = e.target.value);
+  document.getElementById('eg-lead').addEventListener('change', (e)=> eventoGoogleModalForm.leadId = e.target.value);
+  document.getElementById('eg-descricao').addEventListener('input', (e)=> eventoGoogleModalForm.descricao = e.target.value);
+  document.getElementById('eg-save').addEventListener('click', salvarEventoGoogle);
+  document.getElementById('eg-delete').addEventListener('click', excluirEventoGoogle);
+}
 function renderTaskModal(){
   const root = document.getElementById('modal-root');
   if(!taskModalForm){ root.innerHTML=''; return; }
@@ -7374,7 +7919,7 @@ function showConfirm({ message, onConfirm }){
   confirmState = { message, onConfirm };
   const root = document.getElementById('confirm-root');
   root.innerHTML = `
-    <div class="overlay" id="confirm-overlay" style="z-index:50">
+    <div class="overlay" id="confirm-overlay" style="z-index:90">
       <div class="confirm-box">
         <p>${esc(message)}</p>
         <div class="confirm-actions">
@@ -7406,6 +7951,7 @@ if(getToken()){
   loadCamposPersonalizados();
   loadPossiveisLeads();
   loadMetaVendas();
+  loadMetaVendasEquipe();
   loadConversas();
   loadEquipe();
   loadAutomacoes();

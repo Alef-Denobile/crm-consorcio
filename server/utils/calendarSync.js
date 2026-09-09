@@ -101,6 +101,7 @@ async function listarEventosPrimario(user, timeMin, timeMax) {
     .map((ev) => ({
       id: ev.id,
       titulo: ev.summary || '(sem título)',
+      descricao: ev.description || '',
       inicio: (ev.start && (ev.start.dateTime || ev.start.date)) || null,
       diaInteiro: !!(ev.start && ev.start.date && !ev.start.dateTime),
     }));
