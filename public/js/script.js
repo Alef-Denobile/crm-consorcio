@@ -346,6 +346,8 @@ let sidebarOpen = false;
 let insightsCarregando = false;
 let insightsPipelineExpandido = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
+let escolhaTipoPessoaColId = null; // coluna escolhida ao criar lead novo, enquanto a telinha de física/jurídica está aberta
+let tipoPessoaDropdownAberto = false; // dropdown de física/jurídica, dentro do modal do lead
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
 let eventoGoogleModalForm = null; // { eventId, titulo, data, hora } — edita o evento direto na fonte, no Google
 let confirmState = null;         // { message, onConfirm }
@@ -3044,8 +3046,10 @@ async function addColumn(){
 }
 
 async function saveCardFromModal(){
-  if(!modalForm.cliente.trim()) return;
-  const { __isNew, id, ...dados } = modalForm;
+  const nomeFinal = (modalForm.tipoPessoa==='juridica' ? modalForm.clienteJuridica : modalForm.clienteFisica) || '';
+  if(!nomeFinal.trim()) return;
+  const { __isNew, id, clienteFisica, clienteJuridica, ...dados } = modalForm;
+  dados.cliente = nomeFinal.trim();
   try{
     if(__isNew){
       const novoCard = await apiRequest('POST', '/cards', dados);
@@ -5998,13 +6002,45 @@ function closeMenusOnOutsideClick(e){
 /* ---------- modal do cliente ---------- */
 function openNewCard(columnId){
   const colId = columnId || ((board.columns.find(c=>c.tipo==='aberto') || board.columns[0] || {}).id);
+  escolhaTipoPessoaColId = colId;
+  renderEscolhaTipoPessoaModal();
+}
+function fecharEscolhaTipoPessoa(){
+  escolhaTipoPessoaColId = null;
+  document.getElementById('modal-root').innerHTML = '';
+}
+function renderEscolhaTipoPessoaModal(){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="overlay" id="escolha-tipo-overlay">
+      <div class="modal" style="max-width:380px;">
+        <div class="modal-head">
+          <h3>Novo lead</h3>
+          <button id="escolha-tipo-close">✕</button>
+        </div>
+        <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
+          <button type="button" class="tipo-pessoa-escolha-btn" data-tipo="fisica">👤 Pessoa física</button>
+          <button type="button" class="tipo-pessoa-escolha-btn" data-tipo="juridica">🏢 Pessoa jurídica</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('escolha-tipo-close').addEventListener('click', fecharEscolhaTipoPessoa);
+  document.getElementById('escolha-tipo-overlay').addEventListener('click', (e)=>{ if(e.target.id==='escolha-tipo-overlay') fecharEscolhaTipoPessoa(); });
+  root.querySelectorAll('.tipo-pessoa-escolha-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirNovoCardComTipo(escolhaTipoPessoaColId, btn.dataset.tipo));
+  });
+}
+function abrirNovoCardComTipo(columnId, tipoPessoa){
   modalForm = {
-    __isNew: true, id:null, columnId: colId,
+    __isNew: true, id:null, columnId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
     mes: filterMonth || currentMonthKey(),
     etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
-    tipoPessoa: 'fisica', cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
+    tipoPessoa, clienteFisica:'', clienteJuridica:'',
+    cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
   };
+  tipoPessoaDropdownAberto = false;
   renderModal();
 }
 async function toggleArquivarCard(){
@@ -6030,7 +6066,12 @@ async function toggleArquivarCard(){
 function openEditCard(id){
   const card = board.cards.find(c=>c.id===id);
   if(!card) return;
-  modalForm = { ...card, __isNew:false };
+  modalForm = {
+    ...card, __isNew:false,
+    clienteFisica: card.tipoPessoa==='juridica' ? '' : (card.cliente||''),
+    clienteJuridica: card.tipoPessoa==='juridica' ? (card.cliente||'') : '',
+  };
+  tipoPessoaDropdownAberto = false;
   notifOpen = false;
   anexosCarregados = false;
   anexosDoCard = [];
@@ -6054,15 +6095,20 @@ function renderModal(){
         </div>
         <div class="modal-body">
           <div class="field">
-            <label>Tipo de cliente</label>
-            <div class="temp-toggle" id="f-tipo-pessoa-toggle">
-              <div class="temp-btn ${(f.tipoPessoa||'fisica')==='fisica' ? 'active-fisica' : ''}" data-tipo-pessoa="fisica">👤 Pessoa física</div>
-              <div class="temp-btn ${f.tipoPessoa==='juridica' ? 'active-juridica' : ''}" data-tipo-pessoa="juridica">🏢 Pessoa jurídica</div>
-            </div>
+            <button type="button" class="tipo-pessoa-select-btn" id="f-tipo-pessoa-select">
+              <span>${f.tipoPessoa==='juridica' ? '🏢 Pessoa jurídica' : '👤 Pessoa física'}</span>
+              <span class="tipo-pessoa-select-seta ${tipoPessoaDropdownAberto?'aberta':''}">▾</span>
+            </button>
+            ${tipoPessoaDropdownAberto ? `
+              <div class="tipo-pessoa-dropdown">
+                <button type="button" class="tipo-pessoa-dropdown-item" data-tipo-pessoa="fisica">👤 Pessoa física ${f.tipoPessoa!=='juridica'?'✓':''}</button>
+                <button type="button" class="tipo-pessoa-dropdown-item" data-tipo-pessoa="juridica">🏢 Pessoa jurídica ${f.tipoPessoa==='juridica'?'✓':''}</button>
+              </div>
+            ` : ''}
           </div>
           <div class="field">
             <label>${f.tipoPessoa==='juridica' ? 'Nome fantasia' : 'Nome do cliente'}</label>
-            <input type="text" id="f-cliente" value="${esc(f.cliente)}" placeholder="${f.tipoPessoa==='juridica' ? 'Ex: Padaria do João' : 'Ex: Ana Souza'}" />
+            <input type="text" id="f-cliente" value="${esc(f.tipoPessoa==='juridica' ? (f.clienteJuridica||'') : (f.clienteFisica||''))}" placeholder="${f.tipoPessoa==='juridica' ? 'Ex: Padaria do João' : 'Ex: Ana Souza'}" />
           </div>
           ${f.tipoPessoa==='juridica' ? `
             <div class="field-row">
@@ -6203,7 +6249,10 @@ function renderModal(){
   document.getElementById('f-cancel').addEventListener('click', closeModal);
   document.getElementById('modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='modal-overlay') closeModal(); });
 
-  document.getElementById('f-cliente').addEventListener('input', (e)=> modalForm.cliente = e.target.value);
+  document.getElementById('f-cliente').addEventListener('input', (e)=>{
+    if(modalForm.tipoPessoa==='juridica') modalForm.clienteJuridica = e.target.value;
+    else modalForm.clienteFisica = e.target.value;
+  });
   const telefoneInput = document.getElementById('f-telefone');
   const waModalBtn = document.getElementById('f-whatsapp');
   telefoneInput.addEventListener('input', (e)=>{
@@ -6296,9 +6345,14 @@ function renderModal(){
     });
   });
 
-  document.querySelectorAll('#f-tipo-pessoa-toggle .temp-btn').forEach(btn=>{
+  document.getElementById('f-tipo-pessoa-select').addEventListener('click', ()=>{
+    tipoPessoaDropdownAberto = !tipoPessoaDropdownAberto;
+    renderModal();
+  });
+  document.querySelectorAll('.tipo-pessoa-dropdown-item').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       modalForm.tipoPessoa = btn.dataset.tipoPessoa;
+      tipoPessoaDropdownAberto = false;
       renderModal(); // precisa redesenhar pra mostrar/esconder os campos de empresa
     });
   });
