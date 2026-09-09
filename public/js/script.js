@@ -4224,7 +4224,7 @@ function renderCard(card){
         <div class="card-perf"></div>
         <div class="card-body" data-action="open-edit-card" data-card-id="${card.id}">
           <div class="card-top">
-            <span class="card-name">${esc(card.cliente) || 'Sem nome'}</span>
+            <span class="card-name">${card.tipoPessoa==='juridica' ? '🏢 ' : ''}${esc(card.cliente) || 'Sem nome'}</span>
             <span class="temp-badge" style="color:${temp.color};background:${temp.bg}">${temp.emoji} ${temp.label}</span>
           </div>
           <div class="card-value-row">
@@ -4309,7 +4309,7 @@ function renderLeadsPage(){
             return `
               <tr class="${marcado?'lead-row-selecionada':''}">
                 <td><span class="check-circle ${marcado?'checked':''}" data-action="leads-select-um" data-card-id="${c.id}">${marcado?ICON_CHECK:''}</span></td>
-                <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${esc(c.cliente) || 'Sem nome'}</td>
+                <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${c.tipoPessoa==='juridica' ? '🏢 ' : ''}${esc(c.cliente) || 'Sem nome'}</td>
                 <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${c.telefone ? esc(c.telefone) : '—'}</td>
                 <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}"><span class="badge" style="color:${tipo.color};background:${tipo.bg};${tipo.strike?'text-decoration:line-through;':''}">${col ? esc(col.nome) : '—'}</span></td>
                 <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${fmtBRL(c.valor)}</td>
@@ -6003,6 +6003,7 @@ function openNewCard(columnId){
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
     mes: filterMonth || currentMonthKey(),
     etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
+    tipoPessoa: 'fisica', cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
   };
   renderModal();
 }
@@ -6053,9 +6054,46 @@ function renderModal(){
         </div>
         <div class="modal-body">
           <div class="field">
-            <label>Nome do cliente</label>
-            <input type="text" id="f-cliente" value="${esc(f.cliente)}" placeholder="Ex: Ana Souza" />
+            <label>Tipo de cliente</label>
+            <div class="temp-toggle" id="f-tipo-pessoa-toggle">
+              <div class="temp-btn ${(f.tipoPessoa||'fisica')==='fisica' ? 'active-fisica' : ''}" data-tipo-pessoa="fisica">👤 Pessoa física</div>
+              <div class="temp-btn ${f.tipoPessoa==='juridica' ? 'active-juridica' : ''}" data-tipo-pessoa="juridica">🏢 Pessoa jurídica</div>
+            </div>
           </div>
+          <div class="field">
+            <label>${f.tipoPessoa==='juridica' ? 'Nome fantasia' : 'Nome do cliente'}</label>
+            <input type="text" id="f-cliente" value="${esc(f.cliente)}" placeholder="${f.tipoPessoa==='juridica' ? 'Ex: Padaria do João' : 'Ex: Ana Souza'}" />
+          </div>
+          ${f.tipoPessoa==='juridica' ? `
+            <div class="field-row">
+              <div class="field">
+                <label>CNPJ</label>
+                <input type="text" id="f-cnpj" value="${esc(f.cnpj||'')}" placeholder="00.000.000/0000-00" />
+              </div>
+              <div class="field">
+                <label>Inscrição estadual (opcional)</label>
+                <input type="text" id="f-inscricao-estadual" value="${esc(f.inscricaoEstadual||'')}" placeholder="Isento ou número" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Razão social</label>
+              <input type="text" id="f-razao-social" value="${esc(f.razaoSocial||'')}" placeholder="Ex: Padaria do João Ltda" />
+            </div>
+            <div class="field">
+              <label>Ramo de atividade</label>
+              <input type="text" id="f-ramo-atividade" value="${esc(f.ramoAtividade||'')}" placeholder="Ex: Alimentação, Transporte, Varejo..." />
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Contato responsável</label>
+                <input type="text" id="f-contato-nome" value="${esc(f.contatoNome||'')}" placeholder="Quem você fala na empresa" />
+              </div>
+              <div class="field">
+                <label>Cargo do contato</label>
+                <input type="text" id="f-contato-cargo" value="${esc(f.contatoCargo||'')}" placeholder="Ex: Sócio, Financeiro..." />
+              </div>
+            </div>
+          ` : ''}
           <div class="field-row">
             <div class="field">
               <label>Valor de crédito</label>
@@ -6257,6 +6295,25 @@ function renderModal(){
       });
     });
   });
+
+  document.querySelectorAll('#f-tipo-pessoa-toggle .temp-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      modalForm.tipoPessoa = btn.dataset.tipoPessoa;
+      renderModal(); // precisa redesenhar pra mostrar/esconder os campos de empresa
+    });
+  });
+  const cnpjInput = document.getElementById('f-cnpj');
+  if(cnpjInput) cnpjInput.addEventListener('input', (e)=> modalForm.cnpj = e.target.value);
+  const razaoSocialInput = document.getElementById('f-razao-social');
+  if(razaoSocialInput) razaoSocialInput.addEventListener('input', (e)=> modalForm.razaoSocial = e.target.value);
+  const inscricaoEstadualInput = document.getElementById('f-inscricao-estadual');
+  if(inscricaoEstadualInput) inscricaoEstadualInput.addEventListener('input', (e)=> modalForm.inscricaoEstadual = e.target.value);
+  const ramoAtividadeInput = document.getElementById('f-ramo-atividade');
+  if(ramoAtividadeInput) ramoAtividadeInput.addEventListener('input', (e)=> modalForm.ramoAtividade = e.target.value);
+  const contatoNomeInput = document.getElementById('f-contato-nome');
+  if(contatoNomeInput) contatoNomeInput.addEventListener('input', (e)=> modalForm.contatoNome = e.target.value);
+  const contatoCargoInput = document.getElementById('f-contato-cargo');
+  if(contatoCargoInput) contatoCargoInput.addEventListener('input', (e)=> modalForm.contatoCargo = e.target.value);
 
   document.getElementById('f-save').addEventListener('click', saveCardFromModal);
   if(!f.__isNew){
