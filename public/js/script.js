@@ -174,8 +174,11 @@ let agendaTarefas = [];
 let agendaEventosGoogle = [];
 let agendaDiaSelecionado = null;
 let tarefaCopiada = null; // { titulo, prioridade, leadId, descricao } — sem data/hora, que são escolhidas ao colar
+<<<<<<< HEAD
 let modoSelecaoMultipla = false;
 let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar de uma vez, no modo de seleção múltipla
+=======
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
 let diaAgendaCopiado = null; // { origemISO, tarefas:[{titulo,prioridade,leadId,descricao,hora}] } — cópia do dia inteiro
 let longPressTimer = null;
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
@@ -490,17 +493,29 @@ function copiarTarefa(taskId, elemento){
   if(navigator.vibrate) navigator.vibrate(15);
   if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
   renderApp();
+<<<<<<< HEAD
   if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
+=======
+  if(agendaDiaSelecionado) renderAgendaDiaModal();
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
 }
 function copiarEvento(eventoId, elemento){
   const e = agendaEventosGoogle.find(x=>x.id===eventoId);
   if(!e) return;
+<<<<<<< HEAD
   const hora = horaLocalDoEventoOuNull(e);
+=======
+  const hora = (e.diaInteiro || !e.inicio) ? null : `${String(new Date(e.inicio).getHours()).padStart(2,'0')}:${String(new Date(e.inicio).getMinutes()).padStart(2,'0')}`;
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
   tarefaCopiada = { titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'', hora };
   if(navigator.vibrate) navigator.vibrate(15);
   if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
   renderApp();
+<<<<<<< HEAD
   if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
+=======
+  if(agendaDiaSelecionado) renderAgendaDiaModal();
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
 }
 
 // Extrai a hora local (HH:MM) de uma tarefa, ou null se ela não tiver horário definido —
@@ -510,6 +525,7 @@ function horaLocalDaTarefaOuNull(vencimentoIso){
   if(isNaN(d.getTime()) || (d.getUTCHours()===0 && d.getUTCMinutes()===0)) return null;
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
+<<<<<<< HEAD
 // Mesma ideia, mas pra evento do Google — que já vem com a flag diaInteiro explícita,
 // em vez de precisar inferir pela meia-noite UTC como a tarefa.
 function horaLocalDoEventoOuNull(evento){
@@ -518,6 +534,8 @@ function horaLocalDoEventoOuNull(evento){
   if(isNaN(d.getTime())) return null;
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
+=======
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
 // Mostra um aviso rápido (1s, some sozinho) colado em cima de um elemento —
 // usado pra confirmar "copiado!" sem precisar de uma mensagem fixa na tela.
 function mostrarPopupRapido(elemento, texto){
@@ -571,7 +589,11 @@ function copiarDiaInteiro(diaISO, elemento){
     })),
     ...eventosDoDia.map(e=>({
       titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'',
+<<<<<<< HEAD
       hora: horaLocalDoEventoOuNull(e),
+=======
+      hora: (e.diaInteiro || !e.inicio) ? null : `${String(new Date(e.inicio).getHours()).padStart(2,'0')}:${String(new Date(e.inicio).getMinutes()).padStart(2,'0')}`,
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
     })),
   ];
   if(!itens.length) return;
@@ -580,6 +602,13 @@ function copiarDiaInteiro(diaISO, elemento){
   if(elemento) mostrarPopupRapido(elemento, `📋 ${itens.length} copiado${itens.length===1?'':'s'}`);
   renderApp();
 }
+<<<<<<< HEAD
+=======
+function cancelarDiaCopiado(){
+  diaAgendaCopiado = null;
+  renderApp();
+}
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
 async function colarDiaInteiroEm(diaISO, elemento){
   if(!diaAgendaCopiado || diaISO===diaAgendaCopiado.origemISO) return;
   const qtd = diaAgendaCopiado.tarefas.length;
@@ -604,10 +633,15 @@ async function colarDiaInteiroEm(diaISO, elemento){
 }
 function cancelarTarefaCopiada(){
   tarefaCopiada = null;
+<<<<<<< HEAD
   modoSelecaoMultipla = false;
   horariosSelecionados.clear();
   renderApp();
   if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
+=======
+  renderApp();
+  if(agendaDiaSelecionado) renderAgendaDiaModal();
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
 }
 async function colarTarefaEm(diaISO, hora){
   if(!tarefaCopiada) return;
@@ -627,6 +661,7 @@ async function colarTarefaEm(diaISO, hora){
     errorMsg = 'Não foi possível colar a tarefa.';
     renderApp();
   }
+<<<<<<< HEAD
   if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
 }
 async function colarEmHorariosSelecionados(){
@@ -649,6 +684,8 @@ async function colarEmHorariosSelecionados(){
   modoSelecaoMultipla = false;
   horariosSelecionados.clear();
   renderApp();
+=======
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
   if(agendaDiaSelecionado) renderAgendaDiaModal();
 }
 async function loadAgendaMes(mesKey){
@@ -4336,8 +4373,12 @@ function renderAgendaDiaModal(){
         <div class="modal-body">
           ${tarefaCopiada ? `
             <div class="agenda-clipboard-hint">
+<<<<<<< HEAD
               <span>📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — ${modoSelecaoMultipla ? `selecione os horários e clique em "Colar" (${horariosSelecionados.size} marcado${horariosSelecionados.size===1?'':'s'})` : 'clique num horário vazio pra colar aqui'}</span>
               <button class="btn-outline" data-action="toggle-selecao-multipla">${modoSelecaoMultipla ? 'Cancelar seleção' : '☑ Selecionar vários'}</button>
+=======
+              📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — clique num horário vazio pra colar aqui
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
               <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
             </div>
           ` : ''}
@@ -4353,18 +4394,28 @@ function renderAgendaDiaModal(){
             <div class="settings-sep-line"></div>
           ` : ''}
           <div class="agenda-dia-timeline" id="agenda-dia-timeline">
+<<<<<<< HEAD
             ${porHora.map((conteudo, h)=>{
               const horaStr = `${String(h).padStart(2,'0')}:00`;
               const selecionada = horariosSelecionados.has(horaStr);
               return `
               <div class="agenda-hora-row ${h===horaAtual?'agenda-hora-atual':''} ${tarefaCopiada?'agenda-hora-colavel':''} ${selecionada?'agenda-hora-selecionada':''}" id="agenda-hora-${h}" data-action="nova-tarefa-nesta-hora" data-hora="${horaStr}">
                 <span class="agenda-hora-label">${horaStr}</span>
+=======
+            ${porHora.map((conteudo, h)=>`
+              <div class="agenda-hora-row ${h===horaAtual?'agenda-hora-atual':''} ${tarefaCopiada?'agenda-hora-colavel':''}" id="agenda-hora-${h}" data-action="nova-tarefa-nesta-hora" data-hora="${String(h).padStart(2,'0')}:00">
+                <span class="agenda-hora-label">${String(h).padStart(2,'0')}:00</span>
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
                 <div class="agenda-hora-conteudo">
                   ${conteudo.eventos.map(renderEventoMini).join('')}
                   ${conteudo.tarefas.map(t=>`
                     <span class="agenda-hora-tarefa ${t.concluida?'concluida':''}" data-task-edit-hora="${t.id}" data-copiar-tarefa="${t.id}">✓ ${esc(t.titulo)}</span>
                   `).join('')}
+<<<<<<< HEAD
                   ${tarefaCopiada ? `<span class="agenda-hora-colar-hint">${modoSelecaoMultipla ? (selecionada?'✓ Selecionado':'+ Selecionar') : '+ Colar aqui'}</span>` : ''}
+=======
+                  ${tarefaCopiada ? `<span class="agenda-hora-colar-hint">+ Colar aqui</span>` : ''}
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
                 </div>
               </div>
             `;}).join('')}
@@ -4373,10 +4424,14 @@ function renderAgendaDiaModal(){
         <div class="modal-foot">
           ${(tarefasDoDia.length || eventosDoDia.length) ? `<button class="delete-link" id="agenda-dia-excluir-tudo">🗑 Excluir tudo desse dia</button>` : '<span></span>'}
           <div class="modal-foot-actions">
+<<<<<<< HEAD
             ${modoSelecaoMultipla
               ? `<button class="btn-save" id="agenda-dia-colar-selecionados" ${horariosSelecionados.size===0?'disabled':''}>📥 Colar em ${horariosSelecionados.size} horário${horariosSelecionados.size===1?'':'s'}</button>`
               : `<button class="btn-save" id="agenda-dia-nova-tarefa">${tarefaCopiada ? '📋 Colar aqui' : '+ Nova tarefa nesse dia'}</button>`
             }
+=======
+            <button class="btn-save" id="agenda-dia-nova-tarefa">${tarefaCopiada ? '📋 Colar aqui' : '+ Nova tarefa nesse dia'}</button>
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
           </div>
         </div>
       </div>
@@ -4387,8 +4442,12 @@ function renderAgendaDiaModal(){
   document.getElementById('agenda-dia-overlay').addEventListener('click', (e)=>{ if(e.target.id==='agenda-dia-overlay') closeAgendaDiaModal(); });
   const excluirTudoBtn = document.getElementById('agenda-dia-excluir-tudo');
   if(excluirTudoBtn) excluirTudoBtn.addEventListener('click', ()=> excluirTudoDoDia(diaISO, tarefasDoDia, eventosDoDia));
+<<<<<<< HEAD
   const novaTarefaBtn = document.getElementById('agenda-dia-nova-tarefa');
   if(novaTarefaBtn) novaTarefaBtn.addEventListener('click', ()=>{
+=======
+  document.getElementById('agenda-dia-nova-tarefa').addEventListener('click', ()=>{
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
     if(tarefaCopiada){ colarTarefaEm(diaISO); return; }
     closeAgendaDiaModal();
     openNewTask(diaISO);
@@ -4404,12 +4463,15 @@ function renderAgendaDiaModal(){
   root.querySelectorAll('[data-action="nova-tarefa-nesta-hora"]').forEach(row=>{
     row.addEventListener('click', ()=>{
       const hora = row.dataset.hora;
+<<<<<<< HEAD
       if(modoSelecaoMultipla){
         if(horariosSelecionados.has(hora)) horariosSelecionados.delete(hora);
         else horariosSelecionados.add(hora);
         renderAgendaDiaModalPreservandoScroll();
         return;
       }
+=======
+>>>>>>> 49f6b8b05f098330501842ff1aec152d450181b2
       if(tarefaCopiada){
         colarTarefaEm(diaISO, hora);
         return;
