@@ -243,7 +243,7 @@ main.pipeline-main{ padding-bottom:4px; }
 ================================================================= */
 .app-shell{ display:flex; min-height:100vh; background:var(--bg); }
 
-.sidebar{ width:232px; flex-shrink:0; background:var(--paper); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:22px 14px; position:fixed; left:0; top:0; height:100vh; overflow-y:auto; z-index:200; transform:translateX(0); transition:transform .25s ease; }
+.sidebar{ width:232px; flex-shrink:0; background:var(--paper); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:22px 14px; position:fixed; left:0; top:0; height:100vh; overflow-y:auto; z-index:15; transform:translateX(0); transition:transform .25s ease; }
 .sidebar-brand{ display:flex; align-items:center; gap:10px; padding:4px 10px 22px; }
 .sidebar-avatar{ width:30px; height:30px; border-radius:9px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; overflow:hidden; }
 .sidebar-avatar img{ width:100%; height:100%; object-fit:cover; }
@@ -287,6 +287,7 @@ main.pipeline-main{ padding-bottom:4px; }
   .sidebar{
     transform:translateX(-100%);
     box-shadow:0 0 40px rgba(0,0,0,.3);
+    z-index:160; /* acima do sidebar-backdrop (150) só nessa visão mobile, onde a sidebar vira uma gaveta */
   }
   .app-shell.sidebar-open .sidebar{ transform:translateX(0); }
   .sidebar-backdrop{
@@ -361,18 +362,6 @@ main.pipeline-main{ padding-bottom:4px; }
 .leads-empty-row td{ text-align:center; color:var(--ink-soft); font-style:italic; padding:36px 18px; }
 .leads-row-actions{ display:flex; align-items:center; gap:8px; }
 
-/* ---------- Tarefas ---------- */
-.tasks-toolbar{ display:flex; align-items:center; gap:8px; margin-bottom:16px; font-size:13px; color:var(--ink-soft); cursor:pointer; }
-.tasks-list{ display:flex; flex-direction:column; gap:10px; }
-.task-row{ display:flex; align-items:flex-start; gap:14px; background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
-.task-row.done{ opacity:.55; }
-.task-row-body{ flex:1; min-width:0; }
-.task-row-top{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-.task-row-title{ font-size:13px; font-weight:600; color:var(--ink); }
-.task-row.done .task-row-title{ text-decoration:line-through; }
-.task-row-meta{ display:flex; align-items:center; gap:10px; margin-top:6px; font-size:11px; color:var(--ink-soft); flex-wrap:wrap; }
-.task-row-desc{ font-size:12px; color:var(--ink-soft); margin-top:6px; }
-.task-row-actions{ display:flex; align-items:center; gap:4px; flex-shrink:0; }
 .icon-btn{ border:none; background:none; color:var(--ink-soft); cursor:pointer; padding:8px; min-width:34px; min-height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; }
 .icon-btn:hover{ background:var(--hover-tint); color:var(--ink); }
 .tasks-empty{ text-align:center; color:var(--ink-soft); font-style:italic; padding:40px 0; background:var(--paper); border:1px solid var(--line); border-radius:14px; }
@@ -440,8 +429,6 @@ main.pipeline-main{ padding-bottom:4px; }
 .ai-result{ margin-top:10px; padding:12px; background:var(--col-bg); border:1px solid var(--line); border-radius:10px; font-size:12px; line-height:1.6; }
 .ai-result p{ margin:0 0 8px; }
 .ai-result-actions{ display:flex; gap:8px; flex-wrap:wrap; }
-.dash-panel-title-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
-.dash-panel-title-row .dash-panel-title{ margin:0; display:flex; align-items:center; gap:6px; }
 .ai-insights-list{ margin:0; padding-left:18px; font-size:13px; line-height:1.8; color:var(--ink); }
 
 /* ---------- conversa do WhatsApp (dentro do modal do cliente) ---------- */
@@ -703,13 +690,17 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .pipeline-insights-conteudo{ padding:0 16px 16px; }
 
 /* ---------- Agenda: copiar e colar tarefa ---------- */
-.agenda-clipboard-hint{ display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--gold-soft); border-radius:10px; font-size:13px; color:var(--ink); }
+.agenda-clipboard-hint{ display:flex; align-items:center; gap:8px; padding:10px 14px; background:var(--gold-soft); border-radius:10px; font-size:13px; color:var(--ink); flex-wrap:wrap; }
+.agenda-clipboard-hint > span:first-child{ flex:1; min-width:200px; }
 .agenda-clipboard-hint b{ font-weight:600; }
 .agenda-clipboard-hint .icon-btn{ margin-left:auto; }
 .agenda-hora-colavel{ cursor:pointer; }
 .agenda-hora-colavel:hover{ background:var(--hover-tint); }
+.agenda-hora-selecionada{ background:var(--accent) !important; }
+.agenda-hora-selecionada .agenda-hora-label, .agenda-hora-selecionada .agenda-hora-colar-hint{ color:#fff; }
 .agenda-hora-colar-hint{ display:none; font-size:11.5px; color:var(--accent); font-style:italic; }
 .agenda-hora-colavel:hover .agenda-hora-colar-hint{ display:inline; }
+.agenda-hora-selecionada .agenda-hora-colar-hint{ display:inline; }
 
 /* ---------- popup rápido de confirmação (copiar/colar), fade in/out ---------- */
 .popup-rapido{ position:fixed; transform:translate(-50%,-50%) scale(0.9); background:var(--ink); color:var(--paper); padding:6px 14px; border-radius:20px; font-size:12.5px; font-weight:600; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .2s, transform .2s; z-index:300; box-shadow:0 6px 18px rgba(0,0,0,.25); }
