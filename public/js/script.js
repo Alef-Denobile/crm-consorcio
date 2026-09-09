@@ -179,6 +179,7 @@ let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar
 let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade,leadId,descricao,hora}], modo:'copiar'|'mover' } — cópia/corte do dia inteiro
 let longPressTimer = null;
 let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
+let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de escolher quais itens do dia entram na cópia/mover
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
 let calendarConnected = false;
 let calendarSyncing = false;
@@ -597,19 +598,104 @@ function renderFloatingMenuDia(){
   `;
   const cel = document.querySelector(`[data-action="abrir-dia-agenda"][data-dia="${diaISO}"]`);
   const copiarBtn = root.querySelector('[data-action="menu-dia-copiar"]');
-  if(copiarBtn) copiarBtn.addEventListener('click', ()=>{ copiarDiaInteiro(diaISO, cel, 'copiar'); fecharMenuDia(); });
+  if(copiarBtn) copiarBtn.addEventListener('click', ()=>{ abrirChecklistDia(diaISO, 'copiar'); fecharMenuDia(); });
   const moverBtn = root.querySelector('[data-action="menu-dia-mover"]');
-  if(moverBtn) moverBtn.addEventListener('click', ()=>{ copiarDiaInteiro(diaISO, cel, 'mover'); fecharMenuDia(); });
+  if(moverBtn) moverBtn.addEventListener('click', ()=>{ abrirChecklistDia(diaISO, 'mover'); fecharMenuDia(); });
 }
-function copiarDiaInteiro(diaISO, elemento, modo){
+// Telinha de checklist — escolher exatamente quais tarefas/eventos do dia entram na
+// cópia/mover, em vez de pegar tudo automaticamente.
+function abrirChecklistDia(diaISO, modo){
+  const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  const todosIds = [...tarefasDoDia.map(t=>t.id), ...eventosDoDia.map(e=>e.id)];
+  if(!todosIds.length) return;
+  checklistDiaModal = { diaISO, modo, marcados: new Set(todosIds) }; // começa com tudo marcado — desmarca o que não quiser
+  renderChecklistDiaModal();
+}
+function fecharChecklistDia(){
+  checklistDiaModal = null;
+  document.getElementById('modal-root').innerHTML = '';
+}
+function renderChecklistDiaModal(){
+  const root = document.getElementById('modal-root');
+  if(!checklistDiaModal){ root.innerHTML = ''; return; }
+  const { diaISO, modo, marcados } = checklistDiaModal;
+  const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  const dataLabel = new Date(diaISO+'T00:00:00').toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' });
+  const itens = [
+    ...tarefasDoDia.map(t=>({ id:t.id, titulo:t.titulo, hora:horaLocalDaTarefaOuNull(t.vencimento), icone:'✓' })),
+    ...eventosDoDia.map(e=>({ id:e.id, titulo:e.titulo, hora:horaLocalDoEventoOuNull(e), icone:'📅' })),
+  ];
+
+  root.innerHTML = `
+    <div class="overlay" id="checklist-dia-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3 style="text-transform:capitalize;">${modo==='mover'?'Mover':'Copiar'} itens — ${esc(dataLabel)}</h3>
+          <button id="checklist-dia-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-btn-row" style="margin-bottom:10px;">
+            <button class="btn-outline" id="checklist-marcar-todos">Marcar todos</button>
+            <button class="btn-outline" id="checklist-desmarcar-todos">Desmarcar todos</button>
+          </div>
+          <div class="checklist-dia-lista">
+            ${itens.map(it=>`
+              <label class="checklist-dia-item">
+                <input type="checkbox" class="checklist-dia-checkbox" data-item-id="${it.id}" ${marcados.has(it.id)?'checked':''} />
+                <span class="checklist-dia-item-texto">${it.icone} ${esc(it.titulo)}</span>
+                ${it.hora ? `<span class="checklist-dia-item-hora">${it.hora}</span>` : ''}
+              </label>
+            `).join('')}
+          </div>
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="checklist-dia-cancelar">Cancelar</button>
+            <button class="btn-save" id="checklist-dia-confirmar" ${marcados.size===0?'disabled':''}>${modo==='mover'?'Mover':'Copiar'} ${marcados.size} item${marcados.size===1?'':'s'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('checklist-dia-close').addEventListener('click', fecharChecklistDia);
+  document.getElementById('checklist-dia-cancelar').addEventListener('click', fecharChecklistDia);
+  document.getElementById('checklist-dia-overlay').addEventListener('click', (e)=>{ if(e.target.id==='checklist-dia-overlay') fecharChecklistDia(); });
+  document.getElementById('checklist-marcar-todos').addEventListener('click', ()=>{
+    itens.forEach(it=> checklistDiaModal.marcados.add(it.id));
+    renderChecklistDiaModal();
+  });
+  document.getElementById('checklist-desmarcar-todos').addEventListener('click', ()=>{
+    checklistDiaModal.marcados.clear();
+    renderChecklistDiaModal();
+  });
+  root.querySelectorAll('.checklist-dia-checkbox').forEach(chk=>{
+    chk.addEventListener('change', ()=>{
+      if(chk.checked) checklistDiaModal.marcados.add(chk.dataset.itemId);
+      else checklistDiaModal.marcados.delete(chk.dataset.itemId);
+      renderChecklistDiaModal();
+    });
+  });
+  const confirmarBtn = document.getElementById('checklist-dia-confirmar');
+  if(confirmarBtn) confirmarBtn.addEventListener('click', ()=>{
+    const marcadosFinal = new Set(checklistDiaModal.marcados);
+    const cel = document.querySelector(`[data-action="abrir-dia-agenda"][data-dia="${diaISO}"]`);
+    fecharChecklistDia();
+    copiarDiaInteiro(diaISO, cel, modo, marcadosFinal);
+  });
+}
+function copiarDiaInteiro(diaISO, elemento, modo, idsIncluidos){
   modo = modo || 'copiar';
   const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  const tarefasFiltradas = idsIncluidos ? tarefasDoDia.filter(t=>idsIncluidos.has(t.id)) : tarefasDoDia;
+  const eventosFiltrados = idsIncluidos ? eventosDoDia.filter(e=>idsIncluidos.has(e.id)) : eventosDoDia;
   const itens = [
-    ...tarefasDoDia.map(t=>({
+    ...tarefasFiltradas.map(t=>({
       id: t.id, tipo: 'tarefa', titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'',
       hora: horaLocalDaTarefaOuNull(t.vencimento),
     })),
-    ...eventosDoDia.map(e=>({
+    ...eventosFiltrados.map(e=>({
       id: e.id, tipo: 'evento', titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'',
       hora: horaLocalDoEventoOuNull(e),
     })),

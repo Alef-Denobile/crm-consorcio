@@ -720,3 +720,11 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .tipo-pessoa-dropdown-item{ width:100%; text-align:left; padding:10px 14px; min-height:40px; font-size:13px; background:none; border:none; cursor:pointer; color:var(--ink); font-family:inherit; display:flex; align-items:center; justify-content:space-between; }
 .tipo-pessoa-dropdown-item:hover{ background:var(--hover-tint); }
 .tipo-pessoa-dropdown-item + .tipo-pessoa-dropdown-item{ border-top:1px solid var(--line); }
+
+/* ---------- Checklist de itens do dia (copiar/mover) ---------- */
+.checklist-dia-lista{ display:flex; flex-direction:column; gap:2px; max-height:340px; overflow-y:auto; }
+.checklist-dia-item{ display:flex; align-items:center; gap:10px; padding:9px 8px; border-radius:8px; cursor:pointer; font-size:13px; color:var(--ink); }
+.checklist-dia-item:hover{ background:var(--hover-tint); }
+.checklist-dia-checkbox{ width:18px; height:18px; flex-shrink:0; cursor:pointer; }
+.checklist-dia-item-texto{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.checklist-dia-item-hora{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); flex-shrink:0; }
