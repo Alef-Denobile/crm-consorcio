@@ -176,11 +176,7 @@ let agendaDiaSelecionado = null;
 let tarefaCopiada = null; // { titulo, prioridade, leadId, descricao } — sem data/hora, que são escolhidas ao colar
 let modoSelecaoMultipla = false;
 let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar de uma vez, no modo de seleção múltipla
-<<<<<<< HEAD
 let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade,leadId,descricao,hora}], modo:'copiar'|'mover' } — cópia/corte do dia inteiro
-=======
-let diaAgendaCopiado = null; // { origemISO, tarefas:[{titulo,prioridade,leadId,descricao,hora}] } — cópia do dia inteiro
->>>>>>> 1a239af7f8d884bb2a8879ea506e24544f83478c
 let longPressTimer = null;
 let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
@@ -612,22 +608,14 @@ function copiarDiaInteiro(diaISO, elemento, modo){
       hora: horaLocalDaTarefaOuNull(t.vencimento),
     })),
     ...eventosDoDia.map(e=>({
-<<<<<<< HEAD
       id: e.id, tipo: 'evento', titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'',
-=======
-      titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'',
->>>>>>> 1a239af7f8d884bb2a8879ea506e24544f83478c
       hora: horaLocalDoEventoOuNull(e),
     })),
   ];
   if(!itens.length) return;
   diaAgendaCopiado = { origemISO: diaISO, tarefas: itens, modo };
   if(navigator.vibrate) navigator.vibrate(15);
-<<<<<<< HEAD
   if(elemento) mostrarPopupRapido(elemento, `${modo==='mover'?'✂️':'📋'} ${itens.length} ${modo==='mover'?'marcado':'copiado'}${itens.length===1?'':'s'}`);
-=======
-  if(elemento) mostrarPopupRapido(elemento, `📋 ${itens.length} copiado${itens.length===1?'':'s'}`);
->>>>>>> 1a239af7f8d884bb2a8879ea506e24544f83478c
   renderApp();
 }
 async function colarDiaInteiroEm(diaISO, elemento){
