@@ -19,14 +19,20 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
     if (jaExiste) return; // já foi gerada antes pra esse cliente, não duplica
 
     const { parcelas, parcelas1, value, value2 } = calcComissaoPorTipo(credito, card.tipoCarta);
+    // Usa o "mês" que a pessoa definiu no lead como referência — só cai pra data de hoje
+    // se o lead não tiver esse campo preenchido (formato esperado: "YYYY-MM").
+    const mesValido = /^\d{4}-\d{2}$/.test(card.mes || '');
     const hoje = new Date();
+    const dataReferencia = mesValido
+      ? new Date(Number(card.mes.slice(0, 4)), Number(card.mes.slice(5, 7)) - 1, 1)
+      : new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     await Contrato.create({
       userId,
       cardId: card._id,
       geradoAutomaticamente: true,
       desc: card.cliente || 'Cliente',
       scope: 'Pessoal',
-      date: new Date(hoje.getFullYear(), hoje.getMonth(), 1),
+      date: dataReferencia,
       creditoValor: credito,
       tipoCarta: card.tipoCarta || 'imovel',
       parcelas,

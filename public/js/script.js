@@ -178,6 +178,7 @@ let modoSelecaoMultipla = false;
 let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar de uma vez, no modo de seleção múltipla
 let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade,leadId,descricao,hora}], modo:'copiar'|'mover' } — cópia/corte do dia inteiro
 let longPressTimer = null;
+let cardTouchDrag = null; // { cardId, startX, startY, startTime, arrastando, cardEl } — arrastar card no Pipeline por toque
 let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
 let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de escolher quais itens do dia entram na cópia/mover
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
@@ -6088,6 +6089,58 @@ function bindAppEvents(){
       cardEl.classList.add('dragging');
     });
     cardEl.addEventListener('dragend', ()=> cardEl.classList.remove('dragging'));
+
+    // Arrastar por toque — a API nativa de drag-and-drop do navegador não funciona
+    // bem em touch (tablet/celular), então aqui é tudo calculado na mão: decide se o
+    // toque é "rolar a lista" ou "segurar e mover o card" observando a distância e o
+    // tempo antes do dedo se mexer de verdade.
+    cardEl.addEventListener('touchstart', (e)=>{
+      if(e.target.closest('.card-move-wrap') || e.target.closest('[data-action="toggle-move-menu"]') || e.target.closest('.wa-btn')) return; // não conflita com os botões
+      const touch = e.touches[0];
+      cardTouchDrag = { cardId: cardEl.dataset.cardId, startX: touch.clientX, startY: touch.clientY, startTime: Date.now(), arrastando: false, cardEl };
+    }, { passive:true });
+
+    cardEl.addEventListener('touchmove', (e)=>{
+      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - cardTouchDrag.startX;
+      const dy = touch.clientY - cardTouchDrag.startY;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const decorrido = Date.now() - cardTouchDrag.startTime;
+      if(!cardTouchDrag.arrastando){
+        if(dist < 12) return; // ainda não moveu o suficiente pra decidir
+        if(decorrido < 130){ cardTouchDrag = null; return; } // moveu rápido demais — é rolagem, não arrastar
+        cardTouchDrag.arrastando = true;
+        cardEl.classList.add('card-touch-arrastando');
+        if(navigator.vibrate) navigator.vibrate(10);
+      }
+      e.preventDefault(); // já decidiu que é arrastar — impede a página de rolar junto
+      const elAlvo = document.elementFromPoint(touch.clientX, touch.clientY);
+      const colAlvo = elAlvo ? elAlvo.closest('.column') : null;
+      app.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+      if(colAlvo) colAlvo.classList.add('coluna-touch-alvo');
+    }, { passive:false });
+
+    cardEl.addEventListener('touchend', (e)=>{
+      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
+      if(cardTouchDrag.arrastando){
+        e.preventDefault(); // evita o clique fantasma que abriria o card logo depois de soltar
+        const touch = e.changedTouches[0];
+        const elAlvo = document.elementFromPoint(touch.clientX, touch.clientY);
+        const colAlvo = elAlvo ? elAlvo.closest('.column') : null;
+        cardEl.classList.remove('card-touch-arrastando');
+        app.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+        if(colAlvo && colAlvo.dataset.colId) moveCard(cardTouchDrag.cardId, colAlvo.dataset.colId);
+      }
+      cardTouchDrag = null;
+    });
+    cardEl.addEventListener('touchcancel', ()=>{
+      if(cardTouchDrag && cardTouchDrag.cardEl === cardEl){
+        cardEl.classList.remove('card-touch-arrastando');
+        app.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+      }
+      cardTouchDrag = null;
+    });
   });
   app.querySelectorAll('[data-action="drag-col-handle"]').forEach(gripEl=>{
     gripEl.addEventListener('dragstart', (e)=>{
