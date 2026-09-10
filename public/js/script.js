@@ -2850,21 +2850,32 @@ function addMonthsKey(ym, delta){
 function parcelaValue(c, idx){
   return idx < c.parcelas1 ? c.value : c.value2;
 }
+// A partir de qual índice de parcela o contrato foi cancelado (Infinity = nunca cancelado)
+function contratoIdxCancelamento(c){
+  if(!c.canceladoNoMes) return Infinity;
+  const anchor = (c.date||'').slice(0,7);
+  return monthsBetween(anchor, c.canceladoNoMes);
+}
+function parcelaAtivaNoMes(c, idx){
+  return idx >= 0 && idx < c.parcelas && idx < contratoIdxCancelamento(c);
+}
 function contratoTotal(c){
   let total = 0;
-  for(let i=0;i<c.parcelas;i++) total += parcelaValue(c,i);
+  const limite = Math.min(c.parcelas, contratoIdxCancelamento(c));
+  for(let i=0;i<limite;i++) total += parcelaValue(c,i);
   return total;
 }
 function contratoRestante(c, fromIdx){
   let total = 0;
-  for(let i=Math.max(0,fromIdx);i<c.parcelas;i++) total += parcelaValue(c,i);
+  const limite = Math.min(c.parcelas, contratoIdxCancelamento(c));
+  for(let i=Math.max(0,fromIdx);i<limite;i++) total += parcelaValue(c,i);
   return total;
 }
 function comissoesStats(){
   const rowsMes = contratos.map(c=>{
     const anchor = (c.date||'').slice(0,7);
     const idx = monthsBetween(anchor, comissoesMonth);
-    return (idx < 0 || idx >= c.parcelas) ? null : { c, idx, value: parcelaValue(c, idx) };
+    return parcelaAtivaNoMes(c, idx) ? { c, idx, value: parcelaValue(c, idx) } : null;
   }).filter(Boolean);
   const previstoMes = rowsMes.reduce((a,r)=> a+r.value, 0);
   const totalAtivo = contratos.reduce((a,c)=>{
@@ -3214,6 +3225,20 @@ async function toggleTaskConcluida(id){
     renderApp();
   }
 }
+async function toggleEventoConcluido(id){
+  const evento = agendaEventosGoogle.find(e=>e.id===id);
+  if(!evento) return;
+  evento.concluida = !evento.concluida; // otimista
+  renderApp();
+  try{
+    const atualizado = await apiRequest('PUT', `/calendar/eventos/${id}/toggle`);
+    evento.concluida = atualizado.concluida;
+  }catch(e){
+    evento.concluida = !evento.concluida;
+    errorMsg = 'Não foi possível atualizar o evento.';
+  }
+  renderApp();
+}
 
 /* ---------- mutações: comissões ---------- */
 async function saveContratoFromModal(){
@@ -3247,6 +3272,38 @@ async function deleteContratoById(id){
     errorMsg = 'Não foi possível excluir o contrato.';
     renderApp();
   }
+}
+async function cancelarContrato(id){
+  const c = contratos.find(x=>x.id===id);
+  if(!c) return;
+  const anterior = c.canceladoNoMes;
+  c.canceladoNoMes = comissoesMonth; // usa o mês que está sendo visto na página como referência
+  renderApp();
+  try{
+    const atualizado = await apiRequest('PUT', `/comissoes/${id}`, { canceladoNoMes: comissoesMonth });
+    const idx = contratos.findIndex(x=>x.id===id);
+    if(idx>-1) contratos[idx] = atualizado;
+  }catch(e){
+    c.canceladoNoMes = anterior;
+    errorMsg = 'Não foi possível cancelar o contrato.';
+  }
+  renderApp();
+}
+async function reativarContrato(id){
+  const c = contratos.find(x=>x.id===id);
+  if(!c) return;
+  const anterior = c.canceladoNoMes;
+  c.canceladoNoMes = null;
+  renderApp();
+  try{
+    const atualizado = await apiRequest('PUT', `/comissoes/${id}`, { canceladoNoMes: null });
+    const idx = contratos.findIndex(x=>x.id===id);
+    if(idx>-1) contratos[idx] = atualizado;
+  }catch(e){
+    c.canceladoNoMes = anterior;
+    errorMsg = 'Não foi possível reativar o contrato.';
+  }
+  renderApp();
 }
 
 /* ---------- 2FA (verificação em duas etapas) ---------- */
@@ -3917,7 +3974,7 @@ function renderDashboardPage(){
   const maxStage = Math.max(1, ...stages.map(s=>s.total));
   const recentes = [...cardsInPeriod()].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0)).slice(0,5);
   const tarefasSemHora = tasksLoaded ? tasks.filter(t=>!t.concluida && !horaLocalDaTarefaOuNull(t.vencimento)).map(t=>({ tipo:'tarefa', id:t.id, titulo:t.titulo, data:t.vencimento })) : [];
-  const eventosSemHoraDash = agendaLoaded ? agendaEventosGoogle.filter(e=>e.diaInteiro).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
+  const eventosSemHoraDash = agendaLoaded ? agendaEventosGoogle.filter(e=>e.diaInteiro && !e.concluida).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
   const abertas = [...tarefasSemHora, ...eventosSemHoraDash].sort((a,b)=> new Date(a.data||'2999-01-01') - new Date(b.data||'2999-01-01')).slice(0,5);
 
   return `
@@ -4021,7 +4078,7 @@ function renderDashboardPage(){
         ${abertas.length ? `<div class="recent-list">${abertas.map(t=>`
           <div class="task-mini-item">
             ${t.tipo==='evento'
-              ? `<span class="agenda-item-dot agenda-item-evento" title="Evento do Google Agenda"></span>`
+              ? `<span class="check-circle" data-action="toggle-evento" data-evento-id="${t.id}"></span>`
               : `<span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>`
             }
             <span class="task-mini-title">${esc(t.titulo)}</span>
@@ -4502,7 +4559,7 @@ function renderAgendaDiaModal(){
             <div class="settings-page-subtitle">Sem horário definido</div>
             ${eventosSemHora.map(e=>`
               <div class="agenda-dia-item" data-copiar-evento="${e.id}" data-editar-evento="${e.id}">
-                <span class="agenda-item-dot agenda-item-evento"></span>
+                <span class="check-circle ${e.concluida?'checked':''}" data-evento-toggle="${e.id}">${e.concluida?ICON_CHECK:''}</span>
                 <div class="agenda-dia-item-titulo" style="flex:1;">${esc(e.titulo)}</div>
               </div>
             `).join('')}
@@ -4585,6 +4642,13 @@ function renderAgendaDiaModal(){
     el.addEventListener('click', async (e)=>{
       e.stopPropagation();
       await toggleTaskConcluida(el.dataset.taskToggle);
+      renderAgendaDiaModalPreservandoScroll();
+    });
+  });
+  root.querySelectorAll('[data-evento-toggle]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      await toggleEventoConcluido(el.dataset.eventoToggle);
       renderAgendaDiaModalPreservandoScroll();
     });
   });
@@ -4736,16 +4800,20 @@ function renderComissoesPage(){
 function renderContratoCard(c){
   const anchor = (c.date||'').slice(0,7);
   const idx = monthsBetween(anchor, comissoesMonth);
-  const parcelaAtual = Math.min(Math.max(idx+1, 0), c.parcelas);
-  const pct = Math.max(0, Math.min(1, idx / c.parcelas));
-  const status = idx >= c.parcelas ? 'Contrato quitado' : idx < 0 ? 'Ainda não iniciado' : `Parcela ${parcelaAtual}/${c.parcelas} este mês`;
+  const idxCancelamento = contratoIdxCancelamento(c);
+  const parcelaAtual = Math.min(Math.max(idx+1, 0), c.parcelas, idxCancelamento===Infinity?c.parcelas:idxCancelamento);
+  const limiteBarra = Math.min(c.parcelas, idxCancelamento);
+  const pct = Math.max(0, Math.min(1, idx / limiteBarra));
+  const status = c.canceladoNoMes
+    ? `Cancelado a partir de ${monthLabel(c.canceladoNoMes, true)}`
+    : (idx >= c.parcelas ? 'Contrato quitado' : idx < 0 ? 'Ainda não iniciado' : `Parcela ${parcelaAtual}/${c.parcelas} este mês`);
   const escopo = ESCOPOS[c.scope] || ESCOPOS.Pessoal;
   const p2 = c.parcelas - c.parcelas1;
   const blocosHtml = p2 > 0
     ? `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div><div>🔹 ${p2} parcela${p2===1?'':'s'} de ${fmtBRL(c.value2)} cada</div>`
     : `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div>`;
   return `
-    <div class="contrato-card">
+    <div class="contrato-card ${c.canceladoNoMes?'contrato-card-cancelado':''}">
       <div class="contrato-card-head">
         <div>
           <h3 class="contrato-card-title">${esc(c.desc)}</h3>
@@ -4753,9 +4821,11 @@ function renderContratoCard(c){
             <span class="badge" style="color:${escopo.color};background:${escopo.bg}">${escopo.label}</span>
             <span>· ${c.parcelas}x parcelas · Carta de crédito: ${fmtBRL(c.creditoValor)}</span>
             ${c.geradoAutomaticamente ? `<span class="badge badge-neutral" title="Criada automaticamente quando o cliente entrou numa coluna de fechamento no Pipeline">⚡ Gerada pelo Pipeline</span>` : ''}
+            ${c.canceladoNoMes ? `<span class="badge" style="color:var(--danger);background:var(--danger-soft)">Cancelado</span>` : ''}
           </p>
         </div>
         <div class="contrato-card-actions">
+          <button class="icon-btn" data-action="${c.canceladoNoMes?'reativar-contrato':'cancelar-contrato'}" data-contrato-id="${c.id}" title="${c.canceladoNoMes?'Reativar comissão':'Marcar como cancelada'}">${c.canceladoNoMes?'↩️':'🚫'}</button>
           <button class="icon-btn" data-action="open-edit-contrato" data-contrato-id="${c.id}" title="Editar">${ICON_EDIT}</button>
           <button class="icon-btn" data-action="delete-contrato" data-contrato-id="${c.id}" title="Excluir">${ICON_TRASH}</button>
         </div>
@@ -5363,6 +5433,9 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="toggle-task"]').forEach(el=>{
     el.addEventListener('click', ()=> toggleTaskConcluida(el.dataset.taskId));
   });
+  app.querySelectorAll('[data-action="toggle-evento"]').forEach(el=>{
+    el.addEventListener('click', ()=> toggleEventoConcluido(el.dataset.eventoId));
+  });
   const openNewTaskBtn = app.querySelector('[data-action="open-new-task"]');
   if(openNewTaskBtn) openNewTaskBtn.addEventListener('click', ()=> openNewTask());
   app.querySelectorAll('[data-action="open-edit-task"]').forEach(btn=>{
@@ -5651,6 +5724,18 @@ function bindAppEvents(){
         onConfirm: ()=>{ deleteContratoById(id); closeConfirm(); },
       });
     });
+  });
+  app.querySelectorAll('[data-action="cancelar-contrato"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.contratoId;
+      showConfirm({
+        message: `Marcar esse contrato como cancelado a partir de ${monthLabel(comissoesMonth, true)}? As parcelas desse mês em diante param de contar — os meses anteriores continuam valendo.`,
+        onConfirm: ()=>{ cancelarContrato(id); closeConfirm(); },
+      });
+    });
+  });
+  app.querySelectorAll('[data-action="reativar-contrato"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> reativarContrato(btn.dataset.contratoId));
   });
 
   /* -- Configurações -- */

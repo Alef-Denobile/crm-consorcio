@@ -63,6 +63,9 @@ router.put('/:id', async (req, res) => {
     if (typeof desc === 'string') updates.desc = desc.trim();
     if (scope) updates.scope = scope === 'Empresa' ? 'Empresa' : 'Pessoal';
     if (date) updates.date = new Date(date);
+    if (Object.prototype.hasOwnProperty.call(req.body, 'canceladoNoMes')) {
+      updates.canceladoNoMes = req.body.canceladoNoMes || null;
+    }
     if (creditoValor !== undefined || tipoCarta !== undefined) {
       const contratoAtual = await Contrato.findOne({ _id: req.params.id, userId: req.userId }).select('creditoValor tipoCarta');
       if (!contratoAtual) return res.status(404).json({ error: 'Contrato não encontrado.' });

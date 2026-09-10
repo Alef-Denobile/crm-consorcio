@@ -371,6 +371,8 @@ main.pipeline-main{ padding-bottom:4px; }
 .month-step-nav span{ min-width:130px; text-align:center; }
 .contratos-list{ display:flex; flex-direction:column; gap:14px; }
 .contrato-card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px; }
+.contrato-card-cancelado{ opacity:.7; border-color:var(--danger); }
+.contrato-card-cancelado .stage-bar-fill{ background:var(--danger); }
 .contrato-card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:12px; }
 .contrato-card-title{ font-size:14px; font-weight:700; margin:0 0 4px; }
 .contrato-card-note{ font-size:12px; color:var(--ink-soft); margin:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }

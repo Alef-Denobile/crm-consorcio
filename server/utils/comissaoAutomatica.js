@@ -39,4 +39,24 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
   }
 }
 
-module.exports = { gerarComissaoAutomaticaSeGanho };
+// Quando um cliente que JÁ tinha comissão gerada (estava numa coluna "ganho") é
+// movido pra uma coluna do tipo "perdido" — cobrindo tanto "nunca fechou" quanto
+// "fechou e depois cancelou" — corta a comissão dele a partir do mês desse movimento
+// em diante. Meses anteriores (já vencidos) continuam contando normalmente.
+async function cancelarComissaoSePerdidoAposGanho(userId, card, columnId) {
+  try {
+    const coluna = await Column.findOne({ _id: columnId, userId });
+    if (!coluna || coluna.tipo !== 'perdido') return;
+
+    const contrato = await Contrato.findOne({ cardId: card._id, userId });
+    if (!contrato || contrato.canceladoNoMes) return; // sem contrato, ou já estava cancelado — não mexe
+
+    const hoje = new Date();
+    contrato.canceladoNoMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+    await contrato.save();
+  } catch (err) {
+    console.error('Erro ao cancelar comissão automaticamente:', err.message);
+  }
+}
+
+module.exports = { gerarComissaoAutomaticaSeGanho, cancelarComissaoSePerdidoAposGanho };
