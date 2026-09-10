@@ -6129,7 +6129,8 @@ function bindAppEvents(){
       if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
       if(cardTouchDrag.arrastando){
         e.preventDefault(); // evita o clique fantasma que abriria o card logo depois de soltar
-        finalizarArrastoDeCard();
+        const touch = e.changedTouches[0];
+        finalizarArrastoDeCard(touch.clientX, touch.clientY);
       }
       cardTouchDrag = null;
     });
@@ -6194,16 +6195,34 @@ function atualizarArrastoDeCard(x, y){
   if(!cardTouchDrag || !cardTouchDrag.fantasmaEl) return;
   cardTouchDrag.fantasmaEl.style.left = (x - cardTouchDrag.fantasmaEl.offsetWidth/2) + 'px';
   cardTouchDrag.fantasmaEl.style.top = (y - 24) + 'px';
-  const elAlvo = document.elementFromPoint(x, y); // o fantasma tem pointer-events:none, então isso enxerga a coluna de verdade por baixo
-  const colAlvo = elAlvo ? elAlvo.closest('.column') : null;
+  const colAlvo = encontrarColunaMaisProxima(x);
   document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
   if(colAlvo) colAlvo.classList.add('coluna-touch-alvo');
 }
-function finalizarArrastoDeCard(){
+// Acha a coluna sob o dedo — e se não achar nenhuma exatamente ali (dedo soltou bem
+// na borda entre duas colunas, ou num pixel qualquer fora delas), pega a mais próxima
+// pela posição horizontal, em vez de simplesmente desistir. É bem mais tolerante que
+// depender de acertar o pixel exato num aparelho de toque.
+function encontrarColunaMaisProxima(x){
+  const colunas = [...document.querySelectorAll('.column')];
+  if(!colunas.length) return null;
+  const dentro = colunas.find(c=>{
+    const r = c.getBoundingClientRect();
+    return x >= r.left && x <= r.right;
+  });
+  if(dentro) return dentro;
+  let maisProxima = null, menorDist = Infinity;
+  colunas.forEach(c=>{
+    const r = c.getBoundingClientRect();
+    const centro = (r.left + r.right) / 2;
+    const dist = Math.abs(x - centro);
+    if(dist < menorDist){ menorDist = dist; maisProxima = c; }
+  });
+  return maisProxima;
+}
+function finalizarArrastoDeCard(x, y){
   if(!cardTouchDrag) return;
-  const x = cardTouchDrag.ultimoX, y = cardTouchDrag.ultimoY;
-  const elAlvo = document.elementFromPoint(x, y);
-  const colAlvo = elAlvo ? elAlvo.closest('.column') : null;
+  const colAlvo = encontrarColunaMaisProxima(x);
   const cardId = cardTouchDrag.cardId;
   limparVisualDoArrasto();
   if(colAlvo && colAlvo.dataset.colId) moveCard(cardId, colAlvo.dataset.colId);
