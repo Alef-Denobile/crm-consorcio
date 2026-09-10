@@ -6107,7 +6107,7 @@ function bindAppEvents(){
       cardTouchLongPressTimer = setTimeout(()=>{
         if(!cardTouchDrag) return;
         iniciarArrastoDeCard(cardTouchDrag.ultimoX, cardTouchDrag.ultimoY);
-      }, 350);
+      }, 550);
     }, { passive:true });
 
     cardEl.addEventListener('touchmove', (e)=>{
