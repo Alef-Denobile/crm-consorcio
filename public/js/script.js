@@ -3916,7 +3916,9 @@ function renderDashboardPage(){
   const stages = stageTotals();
   const maxStage = Math.max(1, ...stages.map(s=>s.total));
   const recentes = [...cardsInPeriod()].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0)).slice(0,5);
-  const abertas = tasksLoaded ? tasks.filter(t=>!t.concluida && !horaLocalDaTarefaOuNull(t.vencimento)).sort((a,b)=> new Date(a.vencimento||'2999-01-01') - new Date(b.vencimento||'2999-01-01')).slice(0,5) : [];
+  const tarefasSemHora = tasksLoaded ? tasks.filter(t=>!t.concluida && !horaLocalDaTarefaOuNull(t.vencimento)).map(t=>({ tipo:'tarefa', id:t.id, titulo:t.titulo, data:t.vencimento })) : [];
+  const eventosSemHoraDash = agendaLoaded ? agendaEventosGoogle.filter(e=>e.diaInteiro).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
+  const abertas = [...tarefasSemHora, ...eventosSemHoraDash].sort((a,b)=> new Date(a.data||'2999-01-01') - new Date(b.data||'2999-01-01')).slice(0,5);
 
   return `
     <div class="page-head">
@@ -4018,9 +4020,12 @@ function renderDashboardPage(){
         <div class="dash-panel-title">Tarefas abertas</div>
         ${abertas.length ? `<div class="recent-list">${abertas.map(t=>`
           <div class="task-mini-item">
-            <span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>
+            ${t.tipo==='evento'
+              ? `<span class="agenda-item-dot agenda-item-evento" title="Evento do Google Agenda"></span>`
+              : `<span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>`
+            }
             <span class="task-mini-title">${esc(t.titulo)}</span>
-            ${t.vencimento ? `<span class="metric-sub">${formatDate(t.vencimento)}</span>` : ''}
+            ${t.data ? `<span class="metric-sub">${formatDate(t.data)}</span>` : ''}
           </div>
         `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>'}
       </div>
@@ -8217,6 +8222,7 @@ if(getToken()){
   loadPossiveisLeads();
   loadMetaVendas();
   loadMetaVendasEquipe();
+  if(!agendaLoaded) loadAgendaMes(agendaMesAtual); // carrega em segundo plano — o Dashboard também usa eventos do Google em "Tarefas abertas"
   loadConversas();
   loadEquipe();
   loadAutomacoes();
