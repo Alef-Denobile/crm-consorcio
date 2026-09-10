@@ -178,7 +178,8 @@ let modoSelecaoMultipla = false;
 let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar de uma vez, no modo de seleção múltipla
 let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade,leadId,descricao,hora}], modo:'copiar'|'mover' } — cópia/corte do dia inteiro
 let longPressTimer = null;
-let cardTouchDrag = null; // { cardId, startX, startY, startTime, arrastando, cardEl } — arrastar card no Pipeline por toque
+let cardTouchDrag = null; // { cardId, cardEl, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque
+let cardTouchLongPressTimer = null;
 let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
 let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de escolher quais itens do dia entram na cópia/mover
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
@@ -6091,54 +6092,50 @@ function bindAppEvents(){
     cardEl.addEventListener('dragend', ()=> cardEl.classList.remove('dragging'));
 
     // Arrastar por toque — a API nativa de drag-and-drop do navegador não funciona
-    // bem em touch (tablet/celular), então aqui é tudo calculado na mão: decide se o
-    // toque é "rolar a lista" ou "segurar e mover o card" observando a distância e o
-    // tempo antes do dedo se mexer de verdade.
+    // bem em touch (tablet/celular). A primeira versão tentava distinguir "rolar" de
+    // "arrastar" só pela distância percorrida, mas o navegador já trava a decisão de
+    // "isso é rolagem" assim que o dedo se move um pouco — tarde demais pra impedir.
+    // Por isso agora funciona igual o segurar-pra-copiar do calendário: primeiro
+    // segura parado por um instante (nada de rolagem ainda acontecendo), só DEPOIS
+    // disso o arrastar é liberado — com um cartão fantasma seguindo o dedo, pra ficar
+    // bem visível o que está sendo movido.
     cardEl.addEventListener('touchstart', (e)=>{
       if(e.target.closest('.card-move-wrap') || e.target.closest('[data-action="toggle-move-menu"]') || e.target.closest('.wa-btn')) return; // não conflita com os botões
       const touch = e.touches[0];
-      cardTouchDrag = { cardId: cardEl.dataset.cardId, startX: touch.clientX, startY: touch.clientY, startTime: Date.now(), arrastando: false, cardEl };
+      clearTimeout(cardTouchLongPressTimer);
+      cardTouchDrag = { cardId: cardEl.dataset.cardId, cardEl, arrastando:false, ultimoX:touch.clientX, ultimoY:touch.clientY };
+      cardTouchLongPressTimer = setTimeout(()=>{
+        if(!cardTouchDrag) return;
+        iniciarArrastoDeCard(cardTouchDrag.ultimoX, cardTouchDrag.ultimoY);
+      }, 350);
     }, { passive:true });
 
     cardEl.addEventListener('touchmove', (e)=>{
       if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
       const touch = e.touches[0];
-      const dx = touch.clientX - cardTouchDrag.startX;
-      const dy = touch.clientY - cardTouchDrag.startY;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      const decorrido = Date.now() - cardTouchDrag.startTime;
+      cardTouchDrag.ultimoX = touch.clientX;
+      cardTouchDrag.ultimoY = touch.clientY;
       if(!cardTouchDrag.arrastando){
-        if(dist < 12) return; // ainda não moveu o suficiente pra decidir
-        if(decorrido < 130){ cardTouchDrag = null; return; } // moveu rápido demais — é rolagem, não arrastar
-        cardTouchDrag.arrastando = true;
-        cardEl.classList.add('card-touch-arrastando');
-        if(navigator.vibrate) navigator.vibrate(10);
+        clearTimeout(cardTouchLongPressTimer); // o dedo já se moveu antes de completar o segurar — cancela e deixa rolar normal
+        cardTouchDrag = null;
+        return;
       }
-      e.preventDefault(); // já decidiu que é arrastar — impede a página de rolar junto
-      const elAlvo = document.elementFromPoint(touch.clientX, touch.clientY);
-      const colAlvo = elAlvo ? elAlvo.closest('.column') : null;
-      app.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
-      if(colAlvo) colAlvo.classList.add('coluna-touch-alvo');
+      e.preventDefault(); // já está arrastando de verdade — impede a página de rolar junto
+      atualizarArrastoDeCard(touch.clientX, touch.clientY);
     }, { passive:false });
 
     cardEl.addEventListener('touchend', (e)=>{
+      clearTimeout(cardTouchLongPressTimer);
       if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
       if(cardTouchDrag.arrastando){
         e.preventDefault(); // evita o clique fantasma que abriria o card logo depois de soltar
-        const touch = e.changedTouches[0];
-        const elAlvo = document.elementFromPoint(touch.clientX, touch.clientY);
-        const colAlvo = elAlvo ? elAlvo.closest('.column') : null;
-        cardEl.classList.remove('card-touch-arrastando');
-        app.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
-        if(colAlvo && colAlvo.dataset.colId) moveCard(cardTouchDrag.cardId, colAlvo.dataset.colId);
+        finalizarArrastoDeCard();
       }
       cardTouchDrag = null;
     });
     cardEl.addEventListener('touchcancel', ()=>{
-      if(cardTouchDrag && cardTouchDrag.cardEl === cardEl){
-        cardEl.classList.remove('card-touch-arrastando');
-        app.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
-      }
+      clearTimeout(cardTouchLongPressTimer);
+      if(cardTouchDrag && cardTouchDrag.cardEl === cardEl) cancelarArrastoDeCard();
       cardTouchDrag = null;
     });
   });
@@ -6172,6 +6169,54 @@ function bindAppEvents(){
 // Renderiza o menu "Mover para" fora do card (que tem overflow:hidden e cortava as
 // opções de baixo) — usa uma raiz própria, colada no fim do <body>, posicionada via
 // JS com as coordenadas reais do botão que foi clicado.
+// Arrastar card por toque — cria um "fantasma" fixo que segue o dedo, deixando bem
+// visível o que está sendo movido. O fantasma tem pointer-events:none de propósito,
+// senão ele mesmo apareceria como "o que está embaixo do dedo" ao consultar
+// elementFromPoint, escondendo a coluna real por trás dele.
+function iniciarArrastoDeCard(x, y){
+  if(!cardTouchDrag) return;
+  cardTouchDrag.arrastando = true;
+  const rect = cardTouchDrag.cardEl.getBoundingClientRect();
+  cardTouchDrag.cardEl.classList.add('card-touch-arrastando');
+  const fantasma = document.createElement('div');
+  fantasma.id = 'card-touch-fantasma';
+  fantasma.className = 'card-touch-fantasma';
+  fantasma.style.width = rect.width + 'px';
+  fantasma.style.left = (x - rect.width/2) + 'px';
+  fantasma.style.top = (y - 24) + 'px';
+  fantasma.innerHTML = cardTouchDrag.cardEl.querySelector('.card-body') ? cardTouchDrag.cardEl.querySelector('.card-body').innerHTML : cardTouchDrag.cardEl.innerHTML;
+  document.body.appendChild(fantasma);
+  cardTouchDrag.fantasmaEl = fantasma;
+  if(navigator.vibrate) navigator.vibrate(15);
+  atualizarArrastoDeCard(x, y);
+}
+function atualizarArrastoDeCard(x, y){
+  if(!cardTouchDrag || !cardTouchDrag.fantasmaEl) return;
+  cardTouchDrag.fantasmaEl.style.left = (x - cardTouchDrag.fantasmaEl.offsetWidth/2) + 'px';
+  cardTouchDrag.fantasmaEl.style.top = (y - 24) + 'px';
+  const elAlvo = document.elementFromPoint(x, y); // o fantasma tem pointer-events:none, então isso enxerga a coluna de verdade por baixo
+  const colAlvo = elAlvo ? elAlvo.closest('.column') : null;
+  document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+  if(colAlvo) colAlvo.classList.add('coluna-touch-alvo');
+}
+function finalizarArrastoDeCard(){
+  if(!cardTouchDrag) return;
+  const x = cardTouchDrag.ultimoX, y = cardTouchDrag.ultimoY;
+  const elAlvo = document.elementFromPoint(x, y);
+  const colAlvo = elAlvo ? elAlvo.closest('.column') : null;
+  const cardId = cardTouchDrag.cardId;
+  limparVisualDoArrasto();
+  if(colAlvo && colAlvo.dataset.colId) moveCard(cardId, colAlvo.dataset.colId);
+}
+function cancelarArrastoDeCard(){
+  limparVisualDoArrasto();
+}
+function limparVisualDoArrasto(){
+  if(!cardTouchDrag) return;
+  cardTouchDrag.cardEl.classList.remove('card-touch-arrastando');
+  if(cardTouchDrag.fantasmaEl) cardTouchDrag.fantasmaEl.remove();
+  document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+}
 function renderFloatingMoveMenu(){
   let root = document.getElementById('floating-menu-root');
   if(!root){

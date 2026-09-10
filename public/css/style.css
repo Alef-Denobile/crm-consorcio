@@ -137,10 +137,11 @@ main.pipeline-main{ padding-bottom:4px; }
 .cards{ padding:0 4px; min-height:40px; flex:1; overflow-y:auto; }
 .empty-col{ font-size:12px; font-style:italic; text-align:center; color:#ABABAB; padding:26px 0; }
 
-.card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; margin-bottom:12px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.04); transition:box-shadow .15s, transform .15s, opacity .15s; display:flex; }
+.card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; margin-bottom:12px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.04); transition:box-shadow .15s, transform .15s, opacity .15s; display:flex; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
 .card:hover{ box-shadow:0 10px 22px rgba(0,0,0,.10); transform:translateY(-2px); }
 .card.dragging{ opacity:.35; }
-.card.card-touch-arrastando{ opacity:.5; transform:scale(0.97); box-shadow:0 12px 28px rgba(0,0,0,.25); }
+.card.card-touch-arrastando{ opacity:.25; }
+.card-touch-fantasma{ position:fixed; z-index:250; pointer-events:none; background:var(--paper); border:2px solid var(--accent); border-radius:14px; padding:12px; box-shadow:0 16px 36px rgba(0,0,0,.35); transform:scale(1.03) rotate(-1deg); opacity:.96; }
 .column.coluna-touch-alvo{ background:var(--hover-tint); outline:2px solid var(--accent); outline-offset:-2px; border-radius:14px; }
 
 /* alça de arraste — área bem maior e clara pra segurar o card */
