@@ -77,7 +77,7 @@ const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" s
 const ICON_REORDER = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
 const ICON_CHECK = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
-const ICON_MOVE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="21" y1="3" x2="12" y2="12"/><polyline points="8 21 3 21 3 16"/><line x1="3" y1="21" x2="12" y2="12"/></svg>`;
+const ICON_MOVE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 7 3 11 7 15"/><line x1="3" y1="11" x2="15" y2="11"/><polyline points="17 17 21 13 17 9"/><line x1="21" y1="13" x2="9" y2="13"/></svg>`;
 const ICON_USERS = ICON_LEADS;
 const ICON_DOLLAR = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
 const ICON_TROPHY = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M17 6h2a2 2 0 0 1 0 4h-2"/><path d="M7 6H5a2 2 0 0 0 0 4h2"/></svg>`;
@@ -2949,14 +2949,50 @@ async function refreshCurrentUser(){
 }
 
 /* ---------- mutações: colunas e cards (cada uma fala com a API) ---------- */
+// Anima os cards deslizando pra nova posição em vez de "pularem" — como a página é
+// redesenhada por completo a cada ação (o jeito como o app inteiro funciona), o
+// elemento antigo é destruído e um novo nasce direto na posição final. Pra dar a
+// sensação de movimento mesmo assim, guardamos onde cada card estava ANTES de
+// redesenhar; depois, no card novo (já na posição certa), aplicamos um deslocamento
+// que o faz parecer que ainda está na posição antiga, e removemos esse deslocamento
+// com uma transição suave — o efeito visual é de o card escorregando até o lugar novo.
+function capturarPosicoes(seletor){
+  const posicoes = new Map();
+  document.querySelectorAll(seletor).forEach(el=>{
+    posicoes.set(el.dataset.cardId || el.dataset.colId, el.getBoundingClientRect());
+  });
+  return posicoes;
+}
+function animarComFlip(seletor, posicoesAntigas){
+  document.querySelectorAll(seletor).forEach(el=>{
+    const chave = el.dataset.cardId || el.dataset.colId;
+    const antiga = posicoesAntigas.get(chave);
+    if(!antiga) return; // elemento novo (não existia antes) — nasce direto no lugar, sem animação
+    const nova = el.getBoundingClientRect();
+    const dx = antiga.left - nova.left;
+    const dy = antiga.top - nova.top;
+    if(Math.abs(dx) < 1 && Math.abs(dy) < 1) return; // não mudou de lugar de verdade
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    requestAnimationFrame(()=>{
+      el.style.transition = 'transform .28s ease';
+      el.style.transform = '';
+      setTimeout(()=>{ el.style.transition = ''; }, 300); // devolve o controle pra transição normal do CSS (sombra, opacidade, margem)
+    });
+  });
+}
+function capturarPosicoesDosCards(){ return capturarPosicoes('.card[data-card-id]'); }
+function animarCardsComFlip(posicoesAntigas){ animarComFlip('.card[data-card-id]', posicoesAntigas); }
 async function moveCard(cardId, columnId, ordem){
   const card = board.cards.find(c=>c.id===cardId);
   if(!card) return;
   if(card.columnId===columnId && ordem===undefined) return; // mesma coluna e sem posição nova pra aplicar — nada a fazer
   const anterior = { columnId: card.columnId, ordem: card.ordem };
+  const posicoesAntigas = capturarPosicoesDosCards();
   card.columnId = columnId; // otimista
   if(ordem!==undefined) card.ordem = ordem;
   renderAppPreservandoScroll();
+  animarCardsComFlip(posicoesAntigas);
   try{
     const dados = { columnId };
     if(ordem!==undefined) dados.ordem = ordem;
@@ -3158,10 +3194,12 @@ async function reorderColumns(draggedId, targetId){
   const toIdx = doFunil.findIndex(c=>c.id===targetId);
   if(fromIdx===-1 || toIdx===-1) return;
   const anterior = [...board.columns];
+  const posicoesAntigas = capturarPosicoes('.column[data-col-id]');
   const [movida] = doFunil.splice(fromIdx,1);
   doFunil.splice(toIdx,0,movida);
   board.columns = [...outras, ...doFunil];
   renderApp();
+  animarComFlip('.column[data-col-id]', posicoesAntigas);
   try{
     await Promise.all(doFunil.map((col,idx)=> apiRequest('PUT', `/columns/${col.id}`, { ordem: idx })));
   }catch(e){
@@ -6208,6 +6246,7 @@ function bindAppEvents(){
     });
   });
   app.querySelectorAll('.column').forEach(colEl=>{
+    colEl.addEventListener('dragenter', (e)=> e.preventDefault());
     colEl.addEventListener('dragover', (e)=>{
       e.preventDefault();
       atualizarAutoScrollDoArrasto(e.clientX, e.clientY, colEl);
@@ -6231,6 +6270,7 @@ function bindAppEvents(){
 
   document.addEventListener('click', closeMenusOnOutsideClick);
   document.addEventListener('dragover', permitirDropForaDasColunas);
+  document.addEventListener('dragenter', permitirDropForaDasColunas);
   renderFloatingMoveMenu();
 }
 // Renderiza o menu "Mover para" fora do card (que tem overflow:hidden e cortava as
