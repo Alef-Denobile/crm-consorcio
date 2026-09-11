@@ -6114,13 +6114,20 @@ function bindAppEvents(){
     cardEl.addEventListener('touchmove', (e)=>{
       if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
       const touch = e.touches[0];
-      cardTouchDrag.ultimoX = touch.clientX;
-      cardTouchDrag.ultimoY = touch.clientY;
       if(!cardTouchDrag.arrastando){
-        clearTimeout(cardTouchLongPressTimer); // o dedo já se moveu antes de completar o segurar — cancela e deixa rolar normal
-        cardTouchDrag = null;
+        // A mão treme naturalmente mesmo tentando ficar parada — só cancela o
+        // "segurar" se o movimento for grande o suficiente pra ser claramente uma
+        // rolagem de verdade, não essa tremedeira natural do dedo.
+        const dx = touch.clientX - cardTouchDrag.ultimoX;
+        const dy = touch.clientY - cardTouchDrag.ultimoY;
+        if(Math.sqrt(dx*dx + dy*dy) > 10){
+          clearTimeout(cardTouchLongPressTimer);
+          cardTouchDrag = null;
+        }
         return;
       }
+      cardTouchDrag.ultimoX = touch.clientX;
+      cardTouchDrag.ultimoY = touch.clientY;
       e.preventDefault(); // já está arrastando de verdade — impede a página de rolar junto
       atualizarArrastoDeCard(touch.clientX, touch.clientY);
     }, { passive:false });
@@ -6233,18 +6240,19 @@ function encontrarColunaMaisProxima(x){
 // enquanto o dedo continuar perto da borda; some assim que ele se afasta.
 function atualizarAutoScrollDoArrasto(x, y, colAlvo){
   clearInterval(autoScrollDoArrastoInterval);
-  const margem = 70;
+  const margemHorizontal = 260; // cobre a largura da barra lateral — passar por cima dela já conta como "quero rolar pra lá"
+  const margemVertical = 110;
   const mainEl = document.querySelector('main.pipeline-main');
   let dxScroll = 0;
   if(mainEl){
-    if(x < margem) dxScroll = -14;
-    else if(x > window.innerWidth - margem) dxScroll = 14;
+    if(x < margemHorizontal) dxScroll = -16;
+    else if(x > window.innerWidth - margemHorizontal) dxScroll = 16;
   }
   const colunaCardsEl = colAlvo ? colAlvo.querySelector('.cards') : null;
   let dyScroll = 0;
   if(colunaCardsEl){
-    if(y < margem) dyScroll = -12;
-    else if(y > window.innerHeight - margem) dyScroll = 12;
+    if(y < margemVertical) dyScroll = -12;
+    else if(y > window.innerHeight - margemVertical) dyScroll = 12;
   }
   if(dxScroll===0 && dyScroll===0) return;
   autoScrollDoArrastoInterval = setInterval(()=>{
