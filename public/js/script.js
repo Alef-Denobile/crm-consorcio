@@ -180,10 +180,7 @@ let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade
 let longPressTimer = null;
 let cardTouchDrag = null; // { cardId, cardEl, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque
 let cardTouchLongPressTimer = null;
-<<<<<<< HEAD
 let autoScrollDoArrastoInterval = null;
-=======
->>>>>>> 8c3cfc29662451629d77fbb55bb2a6a0ec92ceef
 let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
 let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de escolher quais itens do dia entram na cópia/mover
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
@@ -6093,11 +6090,7 @@ function bindAppEvents(){
       e.dataTransfer.setData('text/x-crm-card', cardEl.dataset.cardId);
       cardEl.classList.add('dragging');
     });
-<<<<<<< HEAD
     cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); });
-=======
-    cardEl.addEventListener('dragend', ()=> cardEl.classList.remove('dragging'));
->>>>>>> 8c3cfc29662451629d77fbb55bb2a6a0ec92ceef
 
     // Arrastar por toque — a API nativa de drag-and-drop do navegador não funciona
     // bem em touch (tablet/celular). A primeira versão tentava distinguir "rolar" de
@@ -6211,10 +6204,7 @@ function atualizarArrastoDeCard(x, y){
   const colAlvo = encontrarColunaMaisProxima(x);
   document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
   if(colAlvo) colAlvo.classList.add('coluna-touch-alvo');
-<<<<<<< HEAD
   atualizarAutoScrollDoArrasto(x, y, colAlvo);
-=======
->>>>>>> 8c3cfc29662451629d77fbb55bb2a6a0ec92ceef
 }
 // Acha a coluna sob o dedo — e se não achar nenhuma exatamente ali (dedo soltou bem
 // na borda entre duas colunas, ou num pixel qualquer fora delas), pega a mais próxima
@@ -6237,7 +6227,6 @@ function encontrarColunaMaisProxima(x){
   });
   return maisProxima;
 }
-<<<<<<< HEAD
 // Rola a tela sozinha quando o dedo (arrastando um card) chega perto da borda —
 // horizontal pra passar de uma coluna pra outra que não estava visível, vertical
 // pra descer/subir dentro de uma coluna comprida. Fica repetindo a cada quadro
@@ -6263,8 +6252,6 @@ function atualizarAutoScrollDoArrasto(x, y, colAlvo){
     if(colunaCardsEl && dyScroll) colunaCardsEl.scrollTop += dyScroll;
   }, 16);
 }
-=======
->>>>>>> 8c3cfc29662451629d77fbb55bb2a6a0ec92ceef
 function finalizarArrastoDeCard(x, y){
   if(!cardTouchDrag) return;
   const colAlvo = encontrarColunaMaisProxima(x);
@@ -6277,10 +6264,7 @@ function cancelarArrastoDeCard(){
 }
 function limparVisualDoArrasto(){
   if(!cardTouchDrag) return;
-<<<<<<< HEAD
   clearInterval(autoScrollDoArrastoInterval);
-=======
->>>>>>> 8c3cfc29662451629d77fbb55bb2a6a0ec92ceef
   cardTouchDrag.cardEl.classList.remove('card-touch-arrastando');
   if(cardTouchDrag.fantasmaEl) cardTouchDrag.fantasmaEl.remove();
   document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
