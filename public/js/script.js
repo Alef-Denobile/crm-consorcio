@@ -77,6 +77,7 @@ const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" s
 const ICON_REORDER = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
 const ICON_CHECK = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
+const ICON_MOVE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="21" y1="3" x2="12" y2="12"/><polyline points="8 21 3 21 3 16"/><line x1="3" y1="21" x2="12" y2="12"/></svg>`;
 const ICON_USERS = ICON_LEADS;
 const ICON_DOLLAR = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
 const ICON_TROPHY = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M17 6h2a2 2 0 0 1 0 4h-2"/><path d="M7 6H5a2 2 0 0 0 0 4h2"/></svg>`;
@@ -2635,7 +2636,7 @@ function visibleCards(){
   }
   return cards;
 }
-function cardsOf(colId){ return visibleCards().filter(c=>c.columnId===colId); }
+function cardsOf(colId){ return visibleCards().filter(c=>c.columnId===colId).sort((a,b)=> (a.ordem||0) - (b.ordem||0)); }
 function sumByTipo(tipo){
   return visibleCards().reduce((s,c)=>{
     const col = board.columns.find(k=>k.id===c.columnId);
@@ -2948,19 +2949,64 @@ async function refreshCurrentUser(){
 }
 
 /* ---------- mutações: colunas e cards (cada uma fala com a API) ---------- */
-async function moveCard(cardId, columnId){
+async function moveCard(cardId, columnId, ordem){
   const card = board.cards.find(c=>c.id===cardId);
-  if(!card || card.columnId===columnId) return;
-  const anterior = card.columnId;
+  if(!card) return;
+  if(card.columnId===columnId && ordem===undefined) return; // mesma coluna e sem posição nova pra aplicar — nada a fazer
+  const anterior = { columnId: card.columnId, ordem: card.ordem };
   card.columnId = columnId; // otimista
+  if(ordem!==undefined) card.ordem = ordem;
   renderAppPreservandoScroll();
   try{
-    await apiRequest('PUT', `/cards/${cardId}/move`, { columnId });
+    const dados = { columnId };
+    if(ordem!==undefined) dados.ordem = ordem;
+    await apiRequest('PUT', `/cards/${cardId}/move`, dados);
   }catch(e){
-    card.columnId = anterior;
+    card.columnId = anterior.columnId;
+    card.ordem = anterior.ordem;
     errorMsg = 'Não foi possível mover o cliente. Tente novamente.';
     renderAppPreservandoScroll();
   }
+}
+// Calcula em que posição um card deve entrar dentro de uma coluna, olhando pra qual
+// altura (y) o dedo/mouse está — encontra os dois cards vizinhos naquele ponto e usa o
+// valor do meio entre as ordens deles, sem precisar reajustar a ordem de mais ninguém.
+function calcularOrdemDeInsercao(colEl, y, cardIdSendoMovido){
+  const cardEls = [...colEl.querySelectorAll('.card')].filter(el=> el.dataset.cardId !== cardIdSendoMovido);
+  if(!cardEls.length) return 1000;
+  let indiceInsercao = cardEls.length;
+  for(let i=0;i<cardEls.length;i++){
+    const rect = cardEls[i].getBoundingClientRect();
+    if(y < rect.top + rect.height/2){ indiceInsercao = i; break; }
+  }
+  const cardAntes = indiceInsercao > 0 ? board.cards.find(c=>c.id===cardEls[indiceInsercao-1].dataset.cardId) : null;
+  const cardDepois = indiceInsercao < cardEls.length ? board.cards.find(c=>c.id===cardEls[indiceInsercao].dataset.cardId) : null;
+  const ordemAntes = cardAntes ? (cardAntes.ordem||0) : null;
+  const ordemDepois = cardDepois ? (cardDepois.ordem||0) : null;
+  if(ordemAntes!=null && ordemDepois!=null) return (ordemAntes + ordemDepois) / 2;
+  if(ordemAntes!=null) return ordemAntes + 1000;
+  if(ordemDepois!=null) return ordemDepois - 1000;
+  return 1000;
+}
+// Mostra visualmente onde o card vai encaixar — abre um espaço acima do card que ficaria
+// logo depois dele (ou embaixo do último, se for pro final da lista), imitando o efeito
+// de "os cards se abrem" pedido: um sobe, o espaço aparece, o card entra ali.
+function mostrarIndicadorDeInsercao(colEl, y, cardIdSendoMovido){
+  limparIndicadorDeInsercao();
+  const cardEls = [...colEl.querySelectorAll('.card')].filter(el=> el.dataset.cardId !== cardIdSendoMovido);
+  if(!cardEls.length) return;
+  let indiceInsercao = cardEls.length;
+  for(let i=0;i<cardEls.length;i++){
+    const rect = cardEls[i].getBoundingClientRect();
+    if(y < rect.top + rect.height/2){ indiceInsercao = i; break; }
+  }
+  if(indiceInsercao < cardEls.length) cardEls[indiceInsercao].classList.add('card-indicador-antes');
+  else cardEls[cardEls.length-1].classList.add('card-indicador-depois');
+}
+function limparIndicadorDeInsercao(){
+  document.querySelectorAll('.card-indicador-antes, .card-indicador-depois').forEach(el=>{
+    el.classList.remove('card-indicador-antes', 'card-indicador-depois');
+  });
 }
 
 async function deleteCardById(id){
@@ -4373,7 +4419,7 @@ function renderCard(card){
         </svg>
       </div>
       <div class="card-move-wrap">
-        <button class="card-move-btn" data-action="toggle-move-menu" data-card-id="${card.id}" title="Mover pra outra coluna">⇄</button>
+        <button class="card-move-btn" data-action="toggle-move-menu" data-card-id="${card.id}" title="Mover pra outra coluna">${ICON_MOVE}</button>
       </div>
       <div class="card-main">
         <div class="card-perf"></div>
@@ -6090,7 +6136,7 @@ function bindAppEvents(){
       e.dataTransfer.setData('text/x-crm-card', cardEl.dataset.cardId);
       cardEl.classList.add('dragging');
     });
-    cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); });
+    cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); limparIndicadorDeInsercao(); });
 
     // Arrastar por toque — a API nativa de drag-and-drop do navegador não funciona
     // bem em touch (tablet/celular). A primeira versão tentava distinguir "rolar" de
@@ -6165,19 +6211,26 @@ function bindAppEvents(){
     colEl.addEventListener('dragover', (e)=>{
       e.preventDefault();
       atualizarAutoScrollDoArrasto(e.clientX, e.clientY, colEl);
+      const cardArrastandoEl = document.querySelector('.card.dragging');
+      if(cardArrastandoEl) mostrarIndicadorDeInsercao(colEl, e.clientY, cardArrastandoEl.dataset.cardId);
     });
     colEl.addEventListener('dragleave', ()=> clearInterval(autoScrollDoArrastoInterval));
     colEl.addEventListener('drop', (e)=>{
       e.preventDefault();
       clearInterval(autoScrollDoArrastoInterval);
+      limparIndicadorDeInsercao();
       const colId = e.dataTransfer.getData('text/x-crm-column');
       const cardId = e.dataTransfer.getData('text/x-crm-card');
       if(colId) reorderColumns(colId, colEl.dataset.colId);
-      else if(cardId) moveCard(cardId, colEl.dataset.colId);
+      else if(cardId){
+        const ordem = calcularOrdemDeInsercao(colEl, e.clientY, cardId);
+        moveCard(cardId, colEl.dataset.colId, ordem);
+      }
     });
   });
 
   document.addEventListener('click', closeMenusOnOutsideClick);
+  document.addEventListener('dragover', permitirDropForaDasColunas);
   renderFloatingMoveMenu();
 }
 // Renderiza o menu "Mover para" fora do card (que tem overflow:hidden e cortava as
@@ -6210,7 +6263,10 @@ function atualizarArrastoDeCard(x, y){
   cardTouchDrag.fantasmaEl.style.top = (y - 24) + 'px';
   const colAlvo = encontrarColunaMaisProxima(x);
   document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
-  if(colAlvo) colAlvo.classList.add('coluna-touch-alvo');
+  if(colAlvo){
+    colAlvo.classList.add('coluna-touch-alvo');
+    mostrarIndicadorDeInsercao(colAlvo, y, cardTouchDrag.cardId);
+  }
   atualizarAutoScrollDoArrasto(x, y, colAlvo);
 }
 // Acha a coluna sob o dedo — e se não achar nenhuma exatamente ali (dedo soltou bem
@@ -6238,6 +6294,18 @@ function encontrarColunaMaisProxima(x){
 // horizontal pra passar de uma coluna pra outra que não estava visível, vertical
 // pra descer/subir dentro de uma coluna comprida. Fica repetindo a cada quadro
 // enquanto o dedo continuar perto da borda; some assim que ele se afasta.
+// Sem isso, o navegador mostra o símbolo de "proibido" sempre que o mouse passa por
+// fora de uma coluna durante o arrastar (a barra lateral, por exemplo) — mesmo que a
+// intenção seja só passar por cima pra rolar até uma coluna escondida. Isso libera
+// soltar em qualquer lugar da tela, mas só quando é de fato um card/coluna nosso
+// sendo arrastado (não mexe em outros tipos de arrastar, tipo um arquivo do sistema).
+function permitirDropForaDasColunas(e){
+  const tipos = e.dataTransfer && e.dataTransfer.types;
+  if(!tipos || (!tipos.includes('text/x-crm-card') && !tipos.includes('text/x-crm-column'))) return;
+  if(e.target.closest('.column')) return; // já tratado pelo listener da própria coluna
+  e.preventDefault();
+  atualizarAutoScrollDoArrasto(e.clientX, e.clientY, null);
+}
 function atualizarAutoScrollDoArrasto(x, y, colAlvo){
   clearInterval(autoScrollDoArrastoInterval);
   const margemHorizontal = 260; // cobre a largura da barra lateral — passar por cima dela já conta como "quero rolar pra lá"
@@ -6265,7 +6333,10 @@ function finalizarArrastoDeCard(x, y){
   const colAlvo = encontrarColunaMaisProxima(x);
   const cardId = cardTouchDrag.cardId;
   limparVisualDoArrasto();
-  if(colAlvo && colAlvo.dataset.colId) moveCard(cardId, colAlvo.dataset.colId);
+  if(colAlvo && colAlvo.dataset.colId){
+    const ordem = calcularOrdemDeInsercao(colAlvo, y, cardId);
+    moveCard(cardId, colAlvo.dataset.colId, ordem);
+  }
 }
 function cancelarArrastoDeCard(){
   limparVisualDoArrasto();
@@ -6276,6 +6347,7 @@ function limparVisualDoArrasto(){
   cardTouchDrag.cardEl.classList.remove('card-touch-arrastando');
   if(cardTouchDrag.fantasmaEl) cardTouchDrag.fantasmaEl.remove();
   document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+  limparIndicadorDeInsercao();
 }
 function renderFloatingMoveMenu(){
   let root = document.getElementById('floating-menu-root');

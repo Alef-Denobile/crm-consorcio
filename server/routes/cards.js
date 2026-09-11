@@ -77,6 +77,9 @@ router.post('/', async (req, res) => {
     const coluna = await Column.findOne({ _id: dados.columnId, userId: req.userId });
     if (!coluna) return res.status(404).json({ error: 'Coluna não encontrada.' });
 
+    const ultimoCard = await Card.findOne({ columnId: dados.columnId, userId: req.userId }).sort('-ordem');
+    dados.ordem = ultimoCard ? ultimoCard.ordem + 1000 : 1000;
+
     const card = await Card.create({ ...dados, userId: req.userId });
     res.status(201).json(card.toJSON());
     executarAutomacoesDaColuna(req.userId, dados.columnId, card);
@@ -167,16 +170,23 @@ router.put('/:id/move', async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ error: 'ID inválido.' });
     }
-    const { columnId } = req.body;
+    const { columnId, ordem } = req.body;
     if (!columnId || !mongoose.isValidObjectId(columnId)) {
       return res.status(400).json({ error: 'Coluna de destino inválida.' });
     }
     const coluna = await Column.findOne({ _id: columnId, userId: req.userId });
     if (!coluna) return res.status(404).json({ error: 'Coluna não encontrada.' });
 
+    let ordemFinal = ordem;
+    if (typeof ordemFinal !== 'number') {
+      // sem posição específica (ex: usando o menu "Mover para") — vai pro fim da coluna
+      const ultimoCard = await Card.findOne({ columnId, userId: req.userId }).sort('-ordem');
+      ordemFinal = ultimoCard ? ultimoCard.ordem + 1000 : 1000;
+    }
+
     const card = await Card.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },
-      { columnId },
+      { columnId, ordem: ordemFinal },
       { new: true }
     );
     if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });

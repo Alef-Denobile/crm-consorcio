@@ -5,6 +5,7 @@ const cardSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     columnId: { type: mongoose.Schema.Types.ObjectId, ref: 'Column', required: true },
+    ordem: { type: Number, default: 0 }, // posição dentro da coluna — usa espaçamento grande (1000 em 1000) pra caber muitas reordenações no meio sem precisar reajustar tudo
     cliente: { type: String, required: true, trim: true },
     tipoPessoa: { type: String, enum: ['fisica', 'juridica'], default: 'fisica' },
     cnpj: { type: String, default: '' },

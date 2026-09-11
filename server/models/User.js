@@ -52,7 +52,7 @@ const userSchema = new mongoose.Schema(
     nome: { type: String, trim: true, default: '' },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     senhaHash: { type: String, default: null }, // null quando a conta usa só login com Google
-    googleId: { type: String, default: null, unique: true, sparse: true },
+    googleId: { type: String, unique: true, sparse: true },
     googleCalendar: { type: googleCalendarSchema, default: () => ({}) },
     whatsappBusiness: { type: whatsappBusinessSchema, default: () => ({}) },
     instagramLeads: { type: instagramLeadsSchema, default: () => ({}) },
