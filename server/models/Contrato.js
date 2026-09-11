@@ -17,6 +17,10 @@ const contratoSchema = new mongoose.Schema(
     parcelas1: { type: Number, required: true },
     value: { type: Number, required: true },
     value2: { type: Number, required: true },
+
+    // a partir desse mês (incluindo ele), o contrato para de contar comissão —
+    // usado quando o cliente cancela a carta de crédito no meio do caminho
+    canceladoNoMes: { type: String, default: null }, // formato "YYYY-MM"
   },
   {
     timestamps: true,

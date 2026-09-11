@@ -176,8 +176,13 @@ let agendaDiaSelecionado = null;
 let tarefaCopiada = null; // { titulo, prioridade, leadId, descricao } — sem data/hora, que são escolhidas ao colar
 let modoSelecaoMultipla = false;
 let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar de uma vez, no modo de seleção múltipla
-let diaAgendaCopiado = null; // { origemISO, tarefas:[{titulo,prioridade,leadId,descricao,hora}] } — cópia do dia inteiro
+let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade,leadId,descricao,hora}], modo:'copiar'|'mover' } — cópia/corte do dia inteiro
 let longPressTimer = null;
+let cardTouchDrag = null; // { cardId, cardEl, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque
+let cardTouchLongPressTimer = null;
+let autoScrollDoArrastoInterval = null;
+let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
+let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de escolher quais itens do dia entram na cópia/mover
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
 let calendarConnected = false;
 let calendarSyncing = false;
@@ -345,6 +350,8 @@ let sidebarOpen = false;
 let insightsCarregando = false;
 let insightsPipelineExpandido = false;
 let modalForm = null;            // objeto do cliente sendo editado/criado
+let escolhaTipoPessoaColId = null; // coluna escolhida ao criar lead novo, enquanto a telinha de física/jurídica está aberta
+let tipoPessoaDropdownAberto = false; // dropdown de física/jurídica, dentro do modal do lead
 let taskModalForm = null;        // objeto da tarefa sendo editada/criada
 let eventoGoogleModalForm = null; // { eventId, titulo, data, hora } — edita o evento direto na fonte, no Google
 let confirmState = null;         // { message, onConfirm }
@@ -488,7 +495,7 @@ function copiarTarefa(taskId, elemento){
   if(!t) return;
   tarefaCopiada = { titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'', hora: horaLocalDaTarefaOuNull(t.vencimento) };
   if(navigator.vibrate) navigator.vibrate(15);
-  if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
+  if(elemento) mostrarPopupRapido(elemento, 'Copiado');
   renderApp();
   if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
 }
@@ -498,7 +505,7 @@ function copiarEvento(eventoId, elemento){
   const hora = horaLocalDoEventoOuNull(e);
   tarefaCopiada = { titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'', hora };
   if(navigator.vibrate) navigator.vibrate(15);
-  if(elemento) mostrarPopupRapido(elemento, '📋 Copiado');
+  if(elemento) mostrarPopupRapido(elemento, 'Copiado');
   renderApp();
   if(agendaDiaSelecionado) renderAgendaDiaModalPreservandoScroll();
 }
@@ -562,43 +569,189 @@ function ligarGestoDeCopiar(elementos, callback){
     el.addEventListener('touchcancel', ()=> clearTimeout(longPressTimer));
   });
 }
-function copiarDiaInteiro(diaISO, elemento){
+// Menuzinho de "Copiar" ou "Mover" — abre no clique direito (computador) ou apertar e
+// segurar (toque) num dia do calendário. Usa a mesma técnica de raiz flutuante do menu
+// "Mover para" do card, pra não ficar preso em nenhum overflow escondido.
+function abrirMenuDia(diaISO, x, y){
   const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  if(!tarefasDoDia.length && !eventosDoDia.length) return; // dia vazio, nada pra copiar/mover
+  menuDiaAberto = { diaISO, x, y };
+  renderFloatingMenuDia();
+}
+function fecharMenuDia(){
+  menuDiaAberto = null;
+  renderFloatingMenuDia();
+}
+function renderFloatingMenuDia(){
+  let root = document.getElementById('menu-dia-root');
+  if(!root){
+    root = document.createElement('div');
+    root.id = 'menu-dia-root';
+    document.body.appendChild(root);
+  }
+  if(!menuDiaAberto){ root.innerHTML = ''; return; }
+  const { diaISO, x, y } = menuDiaAberto;
+  const left = Math.min(x, window.innerWidth - 180);
+  const top = Math.min(y, window.innerHeight - 100);
+  root.innerHTML = `
+    <div class="col-menu" style="position:fixed; top:${Math.max(4,top)}px; left:${Math.max(4,left)}px; min-width:170px;">
+      <button class="col-menu-item" data-action="menu-dia-copiar">Copiar</button>
+      <button class="col-menu-item" data-action="menu-dia-mover">Mover</button>
+    </div>
+  `;
+  const cel = document.querySelector(`[data-action="abrir-dia-agenda"][data-dia="${diaISO}"]`);
+  const copiarBtn = root.querySelector('[data-action="menu-dia-copiar"]');
+  if(copiarBtn) copiarBtn.addEventListener('click', ()=>{ abrirChecklistDia(diaISO, 'copiar'); fecharMenuDia(); });
+  const moverBtn = root.querySelector('[data-action="menu-dia-mover"]');
+  if(moverBtn) moverBtn.addEventListener('click', ()=>{ abrirChecklistDia(diaISO, 'mover'); fecharMenuDia(); });
+}
+// Telinha de checklist — escolher exatamente quais tarefas/eventos do dia entram na
+// cópia/mover, em vez de pegar tudo automaticamente.
+function abrirChecklistDia(diaISO, modo){
+  const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  const todosIds = [...tarefasDoDia.map(t=>t.id), ...eventosDoDia.map(e=>e.id)];
+  if(!todosIds.length) return;
+  checklistDiaModal = { diaISO, modo, marcados: new Set(todosIds) }; // começa com tudo marcado — desmarca o que não quiser
+  renderChecklistDiaModal();
+}
+function fecharChecklistDia(){
+  checklistDiaModal = null;
+  document.getElementById('modal-root').innerHTML = '';
+}
+function renderChecklistDiaModal(){
+  const root = document.getElementById('modal-root');
+  if(!checklistDiaModal){ root.innerHTML = ''; return; }
+  const { diaISO, modo, marcados } = checklistDiaModal;
+  const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  const dataLabel = new Date(diaISO+'T00:00:00').toLocaleDateString('pt-BR', { weekday:'long', day:'2-digit', month:'long' });
   const itens = [
-    ...tarefasDoDia.map(t=>({
-      titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'',
+    ...tarefasDoDia.map(t=>({ id:t.id, titulo:t.titulo, hora:horaLocalDaTarefaOuNull(t.vencimento), icone:'✓' })),
+    ...eventosDoDia.map(e=>({ id:e.id, titulo:e.titulo, hora:horaLocalDoEventoOuNull(e), icone:'📅' })),
+  ];
+
+  root.innerHTML = `
+    <div class="overlay" id="checklist-dia-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3 style="text-transform:capitalize;">${modo==='mover'?'Mover':'Copiar'} itens — ${esc(dataLabel)}</h3>
+          <button id="checklist-dia-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-btn-row" style="margin-bottom:10px;">
+            <button class="btn-outline" id="checklist-marcar-todos">Marcar todos</button>
+            <button class="btn-outline" id="checklist-desmarcar-todos">Desmarcar todos</button>
+          </div>
+          <div class="checklist-dia-lista">
+            ${itens.map(it=>`
+              <label class="checklist-dia-item">
+                <input type="checkbox" class="checklist-dia-checkbox" data-item-id="${it.id}" ${marcados.has(it.id)?'checked':''} />
+                <span class="checklist-dia-item-texto">${it.icone} ${esc(it.titulo)}</span>
+                ${it.hora ? `<span class="checklist-dia-item-hora">${it.hora}</span>` : ''}
+              </label>
+            `).join('')}
+          </div>
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="checklist-dia-cancelar">Cancelar</button>
+            <button class="btn-save" id="checklist-dia-confirmar" ${marcados.size===0?'disabled':''}>${modo==='mover'?'Mover':'Copiar'} ${marcados.size} item${marcados.size===1?'':'s'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('checklist-dia-close').addEventListener('click', fecharChecklistDia);
+  document.getElementById('checklist-dia-cancelar').addEventListener('click', fecharChecklistDia);
+  document.getElementById('checklist-dia-overlay').addEventListener('click', (e)=>{ if(e.target.id==='checklist-dia-overlay') fecharChecklistDia(); });
+  document.getElementById('checklist-marcar-todos').addEventListener('click', ()=>{
+    itens.forEach(it=> checklistDiaModal.marcados.add(it.id));
+    renderChecklistDiaModal();
+  });
+  document.getElementById('checklist-desmarcar-todos').addEventListener('click', ()=>{
+    checklistDiaModal.marcados.clear();
+    renderChecklistDiaModal();
+  });
+  root.querySelectorAll('.checklist-dia-checkbox').forEach(chk=>{
+    chk.addEventListener('change', ()=>{
+      if(chk.checked) checklistDiaModal.marcados.add(chk.dataset.itemId);
+      else checklistDiaModal.marcados.delete(chk.dataset.itemId);
+      renderChecklistDiaModal();
+    });
+  });
+  const confirmarBtn = document.getElementById('checklist-dia-confirmar');
+  if(confirmarBtn) confirmarBtn.addEventListener('click', ()=>{
+    const marcadosFinal = new Set(checklistDiaModal.marcados);
+    const cel = document.querySelector(`[data-action="abrir-dia-agenda"][data-dia="${diaISO}"]`);
+    fecharChecklistDia();
+    copiarDiaInteiro(diaISO, cel, modo, marcadosFinal);
+  });
+}
+function copiarDiaInteiro(diaISO, elemento, modo, idsIncluidos){
+  modo = modo || 'copiar';
+  const { tarefasDoDia, eventosDoDia } = itensDoDiaAgenda(diaISO);
+  const tarefasFiltradas = idsIncluidos ? tarefasDoDia.filter(t=>idsIncluidos.has(t.id)) : tarefasDoDia;
+  const eventosFiltrados = idsIncluidos ? eventosDoDia.filter(e=>idsIncluidos.has(e.id)) : eventosDoDia;
+  const itens = [
+    ...tarefasFiltradas.map(t=>({
+      id: t.id, tipo: 'tarefa', titulo: t.titulo, prioridade: t.prioridade, leadId: t.leadId||null, descricao: t.descricao||'',
       hora: horaLocalDaTarefaOuNull(t.vencimento),
     })),
-    ...eventosDoDia.map(e=>({
-      titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'',
+    ...eventosFiltrados.map(e=>({
+      id: e.id, tipo: 'evento', titulo: e.titulo, prioridade: e.prioridade||'media', leadId: e.leadId||null, descricao: e.descricao||'',
       hora: horaLocalDoEventoOuNull(e),
     })),
   ];
   if(!itens.length) return;
-  diaAgendaCopiado = { origemISO: diaISO, tarefas: itens };
+  diaAgendaCopiado = { origemISO: diaISO, tarefas: itens, modo };
   if(navigator.vibrate) navigator.vibrate(15);
-  if(elemento) mostrarPopupRapido(elemento, `📋 ${itens.length} copiado${itens.length===1?'':'s'}`);
+  if(elemento) mostrarPopupRapido(elemento, `${itens.length} ${modo==='mover'?'marcado':'copiado'}${itens.length===1?'':'s'}`);
   renderApp();
 }
 async function colarDiaInteiroEm(diaISO, elemento){
   if(!diaAgendaCopiado || diaISO===diaAgendaCopiado.origemISO) return;
   const qtd = diaAgendaCopiado.tarefas.length;
+  const modo = diaAgendaCopiado.modo || 'copiar';
   try{
     for(const t of diaAgendaCopiado.tarefas){
-      const dados = { titulo:t.titulo, prioridade:t.prioridade, leadId:t.leadId, descricao:t.descricao, vencimento: diaISO };
-      if(t.hora){
-        const combinado = new Date(`${diaISO}T${t.hora}`);
-        if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
+      if(modo==='mover'){
+        // move de verdade — atualiza a data do próprio item original, sem criar cópia nem apagar nada
+        if(t.tipo==='evento'){
+          await apiRequest('PUT', `/calendar/eventos/${t.id}`, { titulo:t.titulo, data:diaISO, hora:t.hora||null, descricao:t.descricao, prioridade:t.prioridade, leadId:t.leadId||null });
+          const idx = agendaEventosGoogle.findIndex(x=>x.id===t.id);
+          if(idx>-1){
+            const novoInicio = t.hora ? new Date(`${diaISO}T${t.hora}`).toISOString() : diaISO;
+            agendaEventosGoogle[idx] = { ...agendaEventosGoogle[idx], inicio: novoInicio, diaInteiro: !t.hora };
+          }
+        } else {
+          let vencimento = diaISO;
+          if(t.hora){
+            const combinado = new Date(`${diaISO}T${t.hora}`);
+            if(!isNaN(combinado.getTime())) vencimento = combinado.toISOString();
+          }
+          const atualizada = await apiRequest('PUT', `/tasks/${t.id}`, { titulo:t.titulo, prioridade:t.prioridade, leadId:t.leadId, descricao:t.descricao, vencimento });
+          const idxT = tasks.findIndex(x=>x.id===t.id);
+          if(idxT>-1) tasks[idxT] = atualizada;
+          atualizarTarefaNaAgendaLocal(atualizada);
+        }
+      } else {
+        // copiar — vira sempre uma tarefa nova (evento copiado também vira cópia como tarefa, não duplica o evento em si)
+        const dados = { titulo:t.titulo, prioridade:t.prioridade, leadId:t.leadId, descricao:t.descricao, vencimento: diaISO };
+        if(t.hora){
+          const combinado = new Date(`${diaISO}T${t.hora}`);
+          if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
+        }
+        const nova = await apiRequest('POST', '/tasks', dados);
+        tasks.push(nova);
+        atualizarTarefaNaAgendaLocal(nova);
       }
-      const nova = await apiRequest('POST', '/tasks', dados);
-      tasks.push(nova);
-      atualizarTarefaNaAgendaLocal(nova);
     }
-    diaAgendaCopiado = null; // colar o dia só acontece uma vez — depois de colado, a cópia se esvazia sozinha
-    if(elemento) mostrarPopupRapido(elemento, `📥 ${qtd} colado${qtd===1?'':'s'}`);
+    diaAgendaCopiado = null; // colar/mover o dia só acontece uma vez — depois disso, a "área de transferência" se esvazia sozinha
+    if(elemento) mostrarPopupRapido(elemento, `${qtd} ${modo==='mover'?'movido':'colado'}${qtd===1?'':'s'}`);
     renderApp();
   }catch(e){
-    errorMsg = 'Não foi possível colar nesse dia.';
+    errorMsg = modo==='mover' ? 'Não foi possível mover pra esse dia.' : 'Não foi possível colar nesse dia.';
     renderApp();
   }
 }
@@ -2700,21 +2853,32 @@ function addMonthsKey(ym, delta){
 function parcelaValue(c, idx){
   return idx < c.parcelas1 ? c.value : c.value2;
 }
+// A partir de qual índice de parcela o contrato foi cancelado (Infinity = nunca cancelado)
+function contratoIdxCancelamento(c){
+  if(!c.canceladoNoMes) return Infinity;
+  const anchor = (c.date||'').slice(0,7);
+  return monthsBetween(anchor, c.canceladoNoMes);
+}
+function parcelaAtivaNoMes(c, idx){
+  return idx >= 0 && idx < c.parcelas && idx < contratoIdxCancelamento(c);
+}
 function contratoTotal(c){
   let total = 0;
-  for(let i=0;i<c.parcelas;i++) total += parcelaValue(c,i);
+  const limite = Math.min(c.parcelas, contratoIdxCancelamento(c));
+  for(let i=0;i<limite;i++) total += parcelaValue(c,i);
   return total;
 }
 function contratoRestante(c, fromIdx){
   let total = 0;
-  for(let i=Math.max(0,fromIdx);i<c.parcelas;i++) total += parcelaValue(c,i);
+  const limite = Math.min(c.parcelas, contratoIdxCancelamento(c));
+  for(let i=Math.max(0,fromIdx);i<limite;i++) total += parcelaValue(c,i);
   return total;
 }
 function comissoesStats(){
   const rowsMes = contratos.map(c=>{
     const anchor = (c.date||'').slice(0,7);
     const idx = monthsBetween(anchor, comissoesMonth);
-    return (idx < 0 || idx >= c.parcelas) ? null : { c, idx, value: parcelaValue(c, idx) };
+    return parcelaAtivaNoMes(c, idx) ? { c, idx, value: parcelaValue(c, idx) } : null;
   }).filter(Boolean);
   const previstoMes = rowsMes.reduce((a,r)=> a+r.value, 0);
   const totalAtivo = contratos.reduce((a,c)=>{
@@ -2982,8 +3146,10 @@ async function addColumn(){
 }
 
 async function saveCardFromModal(){
-  if(!modalForm.cliente.trim()) return;
-  const { __isNew, id, ...dados } = modalForm;
+  const nomeFinal = (modalForm.tipoPessoa==='juridica' ? modalForm.clienteJuridica : modalForm.clienteFisica) || '';
+  if(!nomeFinal.trim()) return;
+  const { __isNew, id, clienteFisica, clienteJuridica, ...dados } = modalForm;
+  dados.cliente = nomeFinal.trim();
   try{
     if(__isNew){
       const novoCard = await apiRequest('POST', '/cards', dados);
@@ -3062,6 +3228,20 @@ async function toggleTaskConcluida(id){
     renderApp();
   }
 }
+async function toggleEventoConcluido(id){
+  const evento = agendaEventosGoogle.find(e=>e.id===id);
+  if(!evento) return;
+  evento.concluida = !evento.concluida; // otimista
+  renderApp();
+  try{
+    const atualizado = await apiRequest('PUT', `/calendar/eventos/${id}/toggle`);
+    evento.concluida = atualizado.concluida;
+  }catch(e){
+    evento.concluida = !evento.concluida;
+    errorMsg = 'Não foi possível atualizar o evento.';
+  }
+  renderApp();
+}
 
 /* ---------- mutações: comissões ---------- */
 async function saveContratoFromModal(){
@@ -3095,6 +3275,38 @@ async function deleteContratoById(id){
     errorMsg = 'Não foi possível excluir o contrato.';
     renderApp();
   }
+}
+async function cancelarContrato(id){
+  const c = contratos.find(x=>x.id===id);
+  if(!c) return;
+  const anterior = c.canceladoNoMes;
+  c.canceladoNoMes = comissoesMonth; // usa o mês que está sendo visto na página como referência
+  renderApp();
+  try{
+    const atualizado = await apiRequest('PUT', `/comissoes/${id}`, { canceladoNoMes: comissoesMonth });
+    const idx = contratos.findIndex(x=>x.id===id);
+    if(idx>-1) contratos[idx] = atualizado;
+  }catch(e){
+    c.canceladoNoMes = anterior;
+    errorMsg = 'Não foi possível cancelar o contrato.';
+  }
+  renderApp();
+}
+async function reativarContrato(id){
+  const c = contratos.find(x=>x.id===id);
+  if(!c) return;
+  const anterior = c.canceladoNoMes;
+  c.canceladoNoMes = null;
+  renderApp();
+  try{
+    const atualizado = await apiRequest('PUT', `/comissoes/${id}`, { canceladoNoMes: null });
+    const idx = contratos.findIndex(x=>x.id===id);
+    if(idx>-1) contratos[idx] = atualizado;
+  }catch(e){
+    c.canceladoNoMes = anterior;
+    errorMsg = 'Não foi possível reativar o contrato.';
+  }
+  renderApp();
 }
 
 /* ---------- 2FA (verificação em duas etapas) ---------- */
@@ -3764,7 +3976,9 @@ function renderDashboardPage(){
   const stages = stageTotals();
   const maxStage = Math.max(1, ...stages.map(s=>s.total));
   const recentes = [...cardsInPeriod()].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0)).slice(0,5);
-  const abertas = tasksLoaded ? tasks.filter(t=>!t.concluida).sort((a,b)=> new Date(a.vencimento||'2999-01-01') - new Date(b.vencimento||'2999-01-01')).slice(0,5) : [];
+  const tarefasSemHora = tasksLoaded ? tasks.filter(t=>!t.concluida && !horaLocalDaTarefaOuNull(t.vencimento)).map(t=>({ tipo:'tarefa', id:t.id, titulo:t.titulo, data:t.vencimento })) : [];
+  const eventosSemHoraDash = agendaLoaded ? agendaEventosGoogle.filter(e=>e.diaInteiro && !e.concluida).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
+  const abertas = [...tarefasSemHora, ...eventosSemHoraDash].sort((a,b)=> new Date(a.data||'2999-01-01') - new Date(b.data||'2999-01-01')).slice(0,5);
 
   return `
     <div class="page-head">
@@ -3866,9 +4080,12 @@ function renderDashboardPage(){
         <div class="dash-panel-title">Tarefas abertas</div>
         ${abertas.length ? `<div class="recent-list">${abertas.map(t=>`
           <div class="task-mini-item">
-            <span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>
+            ${t.tipo==='evento'
+              ? `<span class="check-circle" data-action="toggle-evento" data-evento-id="${t.id}"></span>`
+              : `<span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>`
+            }
             <span class="task-mini-title">${esc(t.titulo)}</span>
-            ${t.vencimento ? `<span class="metric-sub">${formatDate(t.vencimento)}</span>` : ''}
+            ${t.data ? `<span class="metric-sub">${formatDate(t.data)}</span>` : ''}
           </div>
         `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>'}
       </div>
@@ -4162,7 +4379,7 @@ function renderCard(card){
         <div class="card-perf"></div>
         <div class="card-body" data-action="open-edit-card" data-card-id="${card.id}">
           <div class="card-top">
-            <span class="card-name">${esc(card.cliente) || 'Sem nome'}</span>
+            <span class="card-name">${card.tipoPessoa==='juridica' ? '🏢 ' : ''}${esc(card.cliente) || 'Sem nome'}</span>
             <span class="temp-badge" style="color:${temp.color};background:${temp.bg}">${temp.emoji} ${temp.label}</span>
           </div>
           <div class="card-value-row">
@@ -4247,7 +4464,7 @@ function renderLeadsPage(){
             return `
               <tr class="${marcado?'lead-row-selecionada':''}">
                 <td><span class="check-circle ${marcado?'checked':''}" data-action="leads-select-um" data-card-id="${c.id}">${marcado?ICON_CHECK:''}</span></td>
-                <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${esc(c.cliente) || 'Sem nome'}</td>
+                <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${c.tipoPessoa==='juridica' ? '🏢 ' : ''}${esc(c.cliente) || 'Sem nome'}</td>
                 <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${c.telefone ? esc(c.telefone) : '—'}</td>
                 <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}"><span class="badge" style="color:${tipo.color};background:${tipo.bg};${tipo.strike?'text-decoration:line-through;':''}">${col ? esc(col.nome) : '—'}</span></td>
                 <td class="clickable" data-action="open-edit-card" data-card-id="${c.id}">${fmtBRL(c.valor)}</td>
@@ -4336,7 +4553,7 @@ function renderAgendaDiaModal(){
         <div class="modal-body">
           ${tarefaCopiada ? `
             <div class="agenda-clipboard-hint">
-              <span>📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — ${modoSelecaoMultipla ? `selecione os horários e clique em "Colar" (${horariosSelecionados.size} marcado${horariosSelecionados.size===1?'':'s'})` : 'clique num horário vazio pra colar aqui'}</span>
+              <span>Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — ${modoSelecaoMultipla ? `selecione os horários e clique em "Colar" (${horariosSelecionados.size} marcado${horariosSelecionados.size===1?'':'s'})` : 'clique num horário vazio pra colar aqui'}</span>
               <button class="btn-outline" data-action="toggle-selecao-multipla">${modoSelecaoMultipla ? 'Cancelar seleção' : '☑ Selecionar vários'}</button>
               <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
             </div>
@@ -4345,7 +4562,7 @@ function renderAgendaDiaModal(){
             <div class="settings-page-subtitle">Sem horário definido</div>
             ${eventosSemHora.map(e=>`
               <div class="agenda-dia-item" data-copiar-evento="${e.id}" data-editar-evento="${e.id}">
-                <span class="agenda-item-dot agenda-item-evento"></span>
+                <span class="check-circle ${e.concluida?'checked':''}" data-evento-toggle="${e.id}">${e.concluida?ICON_CHECK:''}</span>
                 <div class="agenda-dia-item-titulo" style="flex:1;">${esc(e.titulo)}</div>
               </div>
             `).join('')}
@@ -4375,7 +4592,7 @@ function renderAgendaDiaModal(){
           <div class="modal-foot-actions">
             ${modoSelecaoMultipla
               ? `<button class="btn-save" id="agenda-dia-colar-selecionados" ${horariosSelecionados.size===0?'disabled':''}>📥 Colar em ${horariosSelecionados.size} horário${horariosSelecionados.size===1?'':'s'}</button>`
-              : `<button class="btn-save" id="agenda-dia-nova-tarefa">${tarefaCopiada ? '📋 Colar aqui' : '+ Nova tarefa nesse dia'}</button>`
+              : `<button class="btn-save" id="agenda-dia-nova-tarefa">${tarefaCopiada ? 'Colar aqui' : '+ Nova tarefa nesse dia'}</button>`
             }
           </div>
         </div>
@@ -4428,6 +4645,13 @@ function renderAgendaDiaModal(){
     el.addEventListener('click', async (e)=>{
       e.stopPropagation();
       await toggleTaskConcluida(el.dataset.taskToggle);
+      renderAgendaDiaModalPreservandoScroll();
+    });
+  });
+  root.querySelectorAll('[data-evento-toggle]').forEach(el=>{
+    el.addEventListener('click', async (e)=>{
+      e.stopPropagation();
+      await toggleEventoConcluido(el.dataset.eventoToggle);
       renderAgendaDiaModalPreservandoScroll();
     });
   });
@@ -4484,7 +4708,7 @@ function renderTarefasPage(){
 
     ${tarefaCopiada ? `
       <div class="agenda-clipboard-hint" style="margin-bottom:16px;">
-        📋 Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — abra qualquer dia e clique num horário vazio pra colar
+        Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — abra qualquer dia e clique num horário vazio pra colar
         <button class="icon-btn" data-action="cancelar-tarefa-copiada" title="Cancelar cópia">✕</button>
       </div>
     ` : ''}
@@ -4579,16 +4803,20 @@ function renderComissoesPage(){
 function renderContratoCard(c){
   const anchor = (c.date||'').slice(0,7);
   const idx = monthsBetween(anchor, comissoesMonth);
-  const parcelaAtual = Math.min(Math.max(idx+1, 0), c.parcelas);
-  const pct = Math.max(0, Math.min(1, idx / c.parcelas));
-  const status = idx >= c.parcelas ? 'Contrato quitado' : idx < 0 ? 'Ainda não iniciado' : `Parcela ${parcelaAtual}/${c.parcelas} este mês`;
+  const idxCancelamento = contratoIdxCancelamento(c);
+  const parcelaAtual = Math.min(Math.max(idx+1, 0), c.parcelas, idxCancelamento===Infinity?c.parcelas:idxCancelamento);
+  const limiteBarra = Math.min(c.parcelas, idxCancelamento);
+  const pct = Math.max(0, Math.min(1, idx / limiteBarra));
+  const status = c.canceladoNoMes
+    ? `Cancelado a partir de ${monthLabel(c.canceladoNoMes, true)}`
+    : (idx >= c.parcelas ? 'Contrato quitado' : idx < 0 ? 'Ainda não iniciado' : `Parcela ${parcelaAtual}/${c.parcelas} este mês`);
   const escopo = ESCOPOS[c.scope] || ESCOPOS.Pessoal;
   const p2 = c.parcelas - c.parcelas1;
   const blocosHtml = p2 > 0
     ? `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div><div>🔹 ${p2} parcela${p2===1?'':'s'} de ${fmtBRL(c.value2)} cada</div>`
     : `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div>`;
   return `
-    <div class="contrato-card">
+    <div class="contrato-card ${c.canceladoNoMes?'contrato-card-cancelado':''}">
       <div class="contrato-card-head">
         <div>
           <h3 class="contrato-card-title">${esc(c.desc)}</h3>
@@ -4596,9 +4824,11 @@ function renderContratoCard(c){
             <span class="badge" style="color:${escopo.color};background:${escopo.bg}">${escopo.label}</span>
             <span>· ${c.parcelas}x parcelas · Carta de crédito: ${fmtBRL(c.creditoValor)}</span>
             ${c.geradoAutomaticamente ? `<span class="badge badge-neutral" title="Criada automaticamente quando o cliente entrou numa coluna de fechamento no Pipeline">⚡ Gerada pelo Pipeline</span>` : ''}
+            ${c.canceladoNoMes ? `<span class="badge" style="color:var(--danger);background:var(--danger-soft)">Cancelado</span>` : ''}
           </p>
         </div>
         <div class="contrato-card-actions">
+          <button class="icon-btn" data-action="${c.canceladoNoMes?'reativar-contrato':'cancelar-contrato'}" data-contrato-id="${c.id}" title="${c.canceladoNoMes?'Reativar comissão':'Marcar como cancelada'}">${c.canceladoNoMes?'↩️':'🚫'}</button>
           <button class="icon-btn" data-action="open-edit-contrato" data-contrato-id="${c.id}" title="Editar">${ICON_EDIT}</button>
           <button class="icon-btn" data-action="delete-contrato" data-contrato-id="${c.id}" title="Excluir">${ICON_TRASH}</button>
         </div>
@@ -5206,6 +5436,9 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="toggle-task"]').forEach(el=>{
     el.addEventListener('click', ()=> toggleTaskConcluida(el.dataset.taskId));
   });
+  app.querySelectorAll('[data-action="toggle-evento"]').forEach(el=>{
+    el.addEventListener('click', ()=> toggleEventoConcluido(el.dataset.eventoId));
+  });
   const openNewTaskBtn = app.querySelector('[data-action="open-new-task"]');
   if(openNewTaskBtn) openNewTaskBtn.addEventListener('click', ()=> openNewTask());
   app.querySelectorAll('[data-action="open-edit-task"]').forEach(btn=>{
@@ -5247,14 +5480,17 @@ function bindAppEvents(){
     });
     cel.addEventListener('contextmenu', (e)=>{
       e.preventDefault();
-      copiarDiaInteiro(cel.dataset.dia, cel);
+      abrirMenuDia(cel.dataset.dia, e.clientX, e.clientY);
     });
     cel.addEventListener('touchstart', (e)=>{
+      const touch = e.touches[0];
+      const x = touch.clientX, y = touch.clientY;
       clearTimeout(longPressTimer);
       longPressTimer = setTimeout(()=>{
         longPressDisparou = true;
         cel.classList.remove('agenda-cell-pressionando');
-        copiarDiaInteiro(cel.dataset.dia, cel);
+        if(navigator.vibrate) navigator.vibrate(15);
+        abrirMenuDia(cel.dataset.dia, x, y);
       }, 550);
       cel.classList.add('agenda-cell-pressionando');
     }, { passive:true });
@@ -5491,6 +5727,18 @@ function bindAppEvents(){
         onConfirm: ()=>{ deleteContratoById(id); closeConfirm(); },
       });
     });
+  });
+  app.querySelectorAll('[data-action="cancelar-contrato"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.contratoId;
+      showConfirm({
+        message: `Marcar esse contrato como cancelado a partir de ${monthLabel(comissoesMonth, true)}? As parcelas desse mês em diante param de contar — os meses anteriores continuam valendo.`,
+        onConfirm: ()=>{ cancelarContrato(id); closeConfirm(); },
+      });
+    });
+  });
+  app.querySelectorAll('[data-action="reativar-contrato"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> reativarContrato(btn.dataset.contratoId));
   });
 
   /* -- Configurações -- */
@@ -5842,7 +6090,56 @@ function bindAppEvents(){
       e.dataTransfer.setData('text/x-crm-card', cardEl.dataset.cardId);
       cardEl.classList.add('dragging');
     });
-    cardEl.addEventListener('dragend', ()=> cardEl.classList.remove('dragging'));
+    cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); });
+
+    // Arrastar por toque — a API nativa de drag-and-drop do navegador não funciona
+    // bem em touch (tablet/celular). A primeira versão tentava distinguir "rolar" de
+    // "arrastar" só pela distância percorrida, mas o navegador já trava a decisão de
+    // "isso é rolagem" assim que o dedo se move um pouco — tarde demais pra impedir.
+    // Por isso agora funciona igual o segurar-pra-copiar do calendário: primeiro
+    // segura parado por um instante (nada de rolagem ainda acontecendo), só DEPOIS
+    // disso o arrastar é liberado — com um cartão fantasma seguindo o dedo, pra ficar
+    // bem visível o que está sendo movido.
+    cardEl.addEventListener('touchstart', (e)=>{
+      if(e.target.closest('.card-move-wrap') || e.target.closest('[data-action="toggle-move-menu"]') || e.target.closest('.wa-btn')) return; // não conflita com os botões
+      const touch = e.touches[0];
+      clearTimeout(cardTouchLongPressTimer);
+      cardTouchDrag = { cardId: cardEl.dataset.cardId, cardEl, arrastando:false, ultimoX:touch.clientX, ultimoY:touch.clientY };
+      cardTouchLongPressTimer = setTimeout(()=>{
+        if(!cardTouchDrag) return;
+        iniciarArrastoDeCard(cardTouchDrag.ultimoX, cardTouchDrag.ultimoY);
+      }, 550);
+    }, { passive:true });
+
+    cardEl.addEventListener('touchmove', (e)=>{
+      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
+      const touch = e.touches[0];
+      cardTouchDrag.ultimoX = touch.clientX;
+      cardTouchDrag.ultimoY = touch.clientY;
+      if(!cardTouchDrag.arrastando){
+        clearTimeout(cardTouchLongPressTimer); // o dedo já se moveu antes de completar o segurar — cancela e deixa rolar normal
+        cardTouchDrag = null;
+        return;
+      }
+      e.preventDefault(); // já está arrastando de verdade — impede a página de rolar junto
+      atualizarArrastoDeCard(touch.clientX, touch.clientY);
+    }, { passive:false });
+
+    cardEl.addEventListener('touchend', (e)=>{
+      clearTimeout(cardTouchLongPressTimer);
+      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
+      if(cardTouchDrag.arrastando){
+        e.preventDefault(); // evita o clique fantasma que abriria o card logo depois de soltar
+        const touch = e.changedTouches[0];
+        finalizarArrastoDeCard(touch.clientX, touch.clientY);
+      }
+      cardTouchDrag = null;
+    });
+    cardEl.addEventListener('touchcancel', ()=>{
+      clearTimeout(cardTouchLongPressTimer);
+      if(cardTouchDrag && cardTouchDrag.cardEl === cardEl) cancelarArrastoDeCard();
+      cardTouchDrag = null;
+    });
   });
   app.querySelectorAll('[data-action="drag-col-handle"]').forEach(gripEl=>{
     gripEl.addEventListener('dragstart', (e)=>{
@@ -5858,9 +6155,14 @@ function bindAppEvents(){
     });
   });
   app.querySelectorAll('.column').forEach(colEl=>{
-    colEl.addEventListener('dragover', (e)=> e.preventDefault());
+    colEl.addEventListener('dragover', (e)=>{
+      e.preventDefault();
+      atualizarAutoScrollDoArrasto(e.clientX, e.clientY, colEl);
+    });
+    colEl.addEventListener('dragleave', ()=> clearInterval(autoScrollDoArrastoInterval));
     colEl.addEventListener('drop', (e)=>{
       e.preventDefault();
+      clearInterval(autoScrollDoArrastoInterval);
       const colId = e.dataTransfer.getData('text/x-crm-column');
       const cardId = e.dataTransfer.getData('text/x-crm-card');
       if(colId) reorderColumns(colId, colEl.dataset.colId);
@@ -5874,6 +6176,99 @@ function bindAppEvents(){
 // Renderiza o menu "Mover para" fora do card (que tem overflow:hidden e cortava as
 // opções de baixo) — usa uma raiz própria, colada no fim do <body>, posicionada via
 // JS com as coordenadas reais do botão que foi clicado.
+// Arrastar card por toque — cria um "fantasma" fixo que segue o dedo, deixando bem
+// visível o que está sendo movido. O fantasma tem pointer-events:none de propósito,
+// senão ele mesmo apareceria como "o que está embaixo do dedo" ao consultar
+// elementFromPoint, escondendo a coluna real por trás dele.
+function iniciarArrastoDeCard(x, y){
+  if(!cardTouchDrag) return;
+  cardTouchDrag.arrastando = true;
+  const rect = cardTouchDrag.cardEl.getBoundingClientRect();
+  cardTouchDrag.cardEl.classList.add('card-touch-arrastando');
+  const fantasma = document.createElement('div');
+  fantasma.id = 'card-touch-fantasma';
+  fantasma.className = 'card-touch-fantasma';
+  fantasma.style.width = rect.width + 'px';
+  fantasma.style.left = (x - rect.width/2) + 'px';
+  fantasma.style.top = (y - 24) + 'px';
+  fantasma.innerHTML = cardTouchDrag.cardEl.querySelector('.card-body') ? cardTouchDrag.cardEl.querySelector('.card-body').innerHTML : cardTouchDrag.cardEl.innerHTML;
+  document.body.appendChild(fantasma);
+  cardTouchDrag.fantasmaEl = fantasma;
+  if(navigator.vibrate) navigator.vibrate(15);
+  atualizarArrastoDeCard(x, y);
+}
+function atualizarArrastoDeCard(x, y){
+  if(!cardTouchDrag || !cardTouchDrag.fantasmaEl) return;
+  cardTouchDrag.fantasmaEl.style.left = (x - cardTouchDrag.fantasmaEl.offsetWidth/2) + 'px';
+  cardTouchDrag.fantasmaEl.style.top = (y - 24) + 'px';
+  const colAlvo = encontrarColunaMaisProxima(x);
+  document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+  if(colAlvo) colAlvo.classList.add('coluna-touch-alvo');
+  atualizarAutoScrollDoArrasto(x, y, colAlvo);
+}
+// Acha a coluna sob o dedo — e se não achar nenhuma exatamente ali (dedo soltou bem
+// na borda entre duas colunas, ou num pixel qualquer fora delas), pega a mais próxima
+// pela posição horizontal, em vez de simplesmente desistir. É bem mais tolerante que
+// depender de acertar o pixel exato num aparelho de toque.
+function encontrarColunaMaisProxima(x){
+  const colunas = [...document.querySelectorAll('.column')];
+  if(!colunas.length) return null;
+  const dentro = colunas.find(c=>{
+    const r = c.getBoundingClientRect();
+    return x >= r.left && x <= r.right;
+  });
+  if(dentro) return dentro;
+  let maisProxima = null, menorDist = Infinity;
+  colunas.forEach(c=>{
+    const r = c.getBoundingClientRect();
+    const centro = (r.left + r.right) / 2;
+    const dist = Math.abs(x - centro);
+    if(dist < menorDist){ menorDist = dist; maisProxima = c; }
+  });
+  return maisProxima;
+}
+// Rola a tela sozinha quando o dedo (arrastando um card) chega perto da borda —
+// horizontal pra passar de uma coluna pra outra que não estava visível, vertical
+// pra descer/subir dentro de uma coluna comprida. Fica repetindo a cada quadro
+// enquanto o dedo continuar perto da borda; some assim que ele se afasta.
+function atualizarAutoScrollDoArrasto(x, y, colAlvo){
+  clearInterval(autoScrollDoArrastoInterval);
+  const margem = 70;
+  const mainEl = document.querySelector('main.pipeline-main');
+  let dxScroll = 0;
+  if(mainEl){
+    if(x < margem) dxScroll = -14;
+    else if(x > window.innerWidth - margem) dxScroll = 14;
+  }
+  const colunaCardsEl = colAlvo ? colAlvo.querySelector('.cards') : null;
+  let dyScroll = 0;
+  if(colunaCardsEl){
+    if(y < margem) dyScroll = -12;
+    else if(y > window.innerHeight - margem) dyScroll = 12;
+  }
+  if(dxScroll===0 && dyScroll===0) return;
+  autoScrollDoArrastoInterval = setInterval(()=>{
+    if(mainEl && dxScroll) mainEl.scrollLeft += dxScroll;
+    if(colunaCardsEl && dyScroll) colunaCardsEl.scrollTop += dyScroll;
+  }, 16);
+}
+function finalizarArrastoDeCard(x, y){
+  if(!cardTouchDrag) return;
+  const colAlvo = encontrarColunaMaisProxima(x);
+  const cardId = cardTouchDrag.cardId;
+  limparVisualDoArrasto();
+  if(colAlvo && colAlvo.dataset.colId) moveCard(cardId, colAlvo.dataset.colId);
+}
+function cancelarArrastoDeCard(){
+  limparVisualDoArrasto();
+}
+function limparVisualDoArrasto(){
+  if(!cardTouchDrag) return;
+  clearInterval(autoScrollDoArrastoInterval);
+  cardTouchDrag.cardEl.classList.remove('card-touch-arrastando');
+  if(cardTouchDrag.fantasmaEl) cardTouchDrag.fantasmaEl.remove();
+  document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+}
 function renderFloatingMoveMenu(){
   let root = document.getElementById('floating-menu-root');
   if(!root){
@@ -5919,6 +6314,9 @@ function closeMenusOnOutsideClick(e){
   if(openMoveMenuCardId && !e.target.closest('.card-move-menu') && !e.target.closest('[data-action="toggle-move-menu"]')){
     openMoveMenuCardId = null; renderFloatingMoveMenu();
   }
+  if(menuDiaAberto && !e.target.closest('#menu-dia-root')){
+    fecharMenuDia();
+  }
   if(dateMenuOpen && !e.target.closest('.date-menu') && !e.target.closest('[data-action="toggle-date-menu"]')){
     dateMenuOpen = false; renderApp();
   }
@@ -5930,12 +6328,45 @@ function closeMenusOnOutsideClick(e){
 /* ---------- modal do cliente ---------- */
 function openNewCard(columnId){
   const colId = columnId || ((board.columns.find(c=>c.tipo==='aberto') || board.columns[0] || {}).id);
+  escolhaTipoPessoaColId = colId;
+  renderEscolhaTipoPessoaModal();
+}
+function fecharEscolhaTipoPessoa(){
+  escolhaTipoPessoaColId = null;
+  document.getElementById('modal-root').innerHTML = '';
+}
+function renderEscolhaTipoPessoaModal(){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="overlay" id="escolha-tipo-overlay">
+      <div class="modal" style="max-width:380px;">
+        <div class="modal-head">
+          <h3>Novo lead</h3>
+          <button id="escolha-tipo-close">✕</button>
+        </div>
+        <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
+          <button type="button" class="tipo-pessoa-escolha-btn" data-tipo="fisica">👤 Pessoa física</button>
+          <button type="button" class="tipo-pessoa-escolha-btn" data-tipo="juridica">🏢 Pessoa jurídica</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('escolha-tipo-close').addEventListener('click', fecharEscolhaTipoPessoa);
+  document.getElementById('escolha-tipo-overlay').addEventListener('click', (e)=>{ if(e.target.id==='escolha-tipo-overlay') fecharEscolhaTipoPessoa(); });
+  root.querySelectorAll('.tipo-pessoa-escolha-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirNovoCardComTipo(escolhaTipoPessoaColId, btn.dataset.tipo));
+  });
+}
+function abrirNovoCardComTipo(columnId, tipoPessoa){
   modalForm = {
-    __isNew: true, id:null, columnId: colId,
+    __isNew: true, id:null, columnId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
     mes: filterMonth || currentMonthKey(),
     etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
+    tipoPessoa, clienteFisica:'', clienteJuridica:'',
+    cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
   };
+  tipoPessoaDropdownAberto = false;
   renderModal();
 }
 async function toggleArquivarCard(){
@@ -5961,7 +6392,12 @@ async function toggleArquivarCard(){
 function openEditCard(id){
   const card = board.cards.find(c=>c.id===id);
   if(!card) return;
-  modalForm = { ...card, __isNew:false };
+  modalForm = {
+    ...card, __isNew:false,
+    clienteFisica: card.tipoPessoa==='juridica' ? '' : (card.cliente||''),
+    clienteJuridica: card.tipoPessoa==='juridica' ? (card.cliente||'') : '',
+  };
+  tipoPessoaDropdownAberto = false;
   notifOpen = false;
   anexosCarregados = false;
   anexosDoCard = [];
@@ -5985,9 +6421,51 @@ function renderModal(){
         </div>
         <div class="modal-body">
           <div class="field">
-            <label>Nome do cliente</label>
-            <input type="text" id="f-cliente" value="${esc(f.cliente)}" placeholder="Ex: Ana Souza" />
+            <button type="button" class="tipo-pessoa-select-btn" id="f-tipo-pessoa-select">
+              <span>${f.tipoPessoa==='juridica' ? '🏢 Pessoa jurídica' : '👤 Pessoa física'}</span>
+              <span class="tipo-pessoa-select-seta ${tipoPessoaDropdownAberto?'aberta':''}">▾</span>
+            </button>
+            ${tipoPessoaDropdownAberto ? `
+              <div class="tipo-pessoa-dropdown">
+                <button type="button" class="tipo-pessoa-dropdown-item" data-tipo-pessoa="fisica">👤 Pessoa física ${f.tipoPessoa!=='juridica'?'✓':''}</button>
+                <button type="button" class="tipo-pessoa-dropdown-item" data-tipo-pessoa="juridica">🏢 Pessoa jurídica ${f.tipoPessoa==='juridica'?'✓':''}</button>
+              </div>
+            ` : ''}
           </div>
+          <div class="field">
+            <label>${f.tipoPessoa==='juridica' ? 'Nome fantasia' : 'Nome do cliente'}</label>
+            <input type="text" id="f-cliente" value="${esc(f.tipoPessoa==='juridica' ? (f.clienteJuridica||'') : (f.clienteFisica||''))}" placeholder="${f.tipoPessoa==='juridica' ? 'Ex: Padaria do João' : 'Ex: Ana Souza'}" />
+          </div>
+          ${f.tipoPessoa==='juridica' ? `
+            <div class="field-row">
+              <div class="field">
+                <label>CNPJ</label>
+                <input type="text" id="f-cnpj" value="${esc(f.cnpj||'')}" placeholder="00.000.000/0000-00" />
+              </div>
+              <div class="field">
+                <label>Inscrição estadual (opcional)</label>
+                <input type="text" id="f-inscricao-estadual" value="${esc(f.inscricaoEstadual||'')}" placeholder="Isento ou número" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Razão social</label>
+              <input type="text" id="f-razao-social" value="${esc(f.razaoSocial||'')}" placeholder="Ex: Padaria do João Ltda" />
+            </div>
+            <div class="field">
+              <label>Ramo de atividade</label>
+              <input type="text" id="f-ramo-atividade" value="${esc(f.ramoAtividade||'')}" placeholder="Ex: Alimentação, Transporte, Varejo..." />
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Contato responsável</label>
+                <input type="text" id="f-contato-nome" value="${esc(f.contatoNome||'')}" placeholder="Quem você fala na empresa" />
+              </div>
+              <div class="field">
+                <label>Cargo do contato</label>
+                <input type="text" id="f-contato-cargo" value="${esc(f.contatoCargo||'')}" placeholder="Ex: Sócio, Financeiro..." />
+              </div>
+            </div>
+          ` : ''}
           <div class="field-row">
             <div class="field">
               <label>Valor de crédito</label>
@@ -6097,7 +6575,10 @@ function renderModal(){
   document.getElementById('f-cancel').addEventListener('click', closeModal);
   document.getElementById('modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='modal-overlay') closeModal(); });
 
-  document.getElementById('f-cliente').addEventListener('input', (e)=> modalForm.cliente = e.target.value);
+  document.getElementById('f-cliente').addEventListener('input', (e)=>{
+    if(modalForm.tipoPessoa==='juridica') modalForm.clienteJuridica = e.target.value;
+    else modalForm.clienteFisica = e.target.value;
+  });
   const telefoneInput = document.getElementById('f-telefone');
   const waModalBtn = document.getElementById('f-whatsapp');
   telefoneInput.addEventListener('input', (e)=>{
@@ -6189,6 +6670,30 @@ function renderModal(){
       });
     });
   });
+
+  document.getElementById('f-tipo-pessoa-select').addEventListener('click', ()=>{
+    tipoPessoaDropdownAberto = !tipoPessoaDropdownAberto;
+    renderModal();
+  });
+  document.querySelectorAll('.tipo-pessoa-dropdown-item').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      modalForm.tipoPessoa = btn.dataset.tipoPessoa;
+      tipoPessoaDropdownAberto = false;
+      renderModal(); // precisa redesenhar pra mostrar/esconder os campos de empresa
+    });
+  });
+  const cnpjInput = document.getElementById('f-cnpj');
+  if(cnpjInput) cnpjInput.addEventListener('input', (e)=> modalForm.cnpj = e.target.value);
+  const razaoSocialInput = document.getElementById('f-razao-social');
+  if(razaoSocialInput) razaoSocialInput.addEventListener('input', (e)=> modalForm.razaoSocial = e.target.value);
+  const inscricaoEstadualInput = document.getElementById('f-inscricao-estadual');
+  if(inscricaoEstadualInput) inscricaoEstadualInput.addEventListener('input', (e)=> modalForm.inscricaoEstadual = e.target.value);
+  const ramoAtividadeInput = document.getElementById('f-ramo-atividade');
+  if(ramoAtividadeInput) ramoAtividadeInput.addEventListener('input', (e)=> modalForm.ramoAtividade = e.target.value);
+  const contatoNomeInput = document.getElementById('f-contato-nome');
+  if(contatoNomeInput) contatoNomeInput.addEventListener('input', (e)=> modalForm.contatoNome = e.target.value);
+  const contatoCargoInput = document.getElementById('f-contato-cargo');
+  if(contatoCargoInput) contatoCargoInput.addEventListener('input', (e)=> modalForm.contatoCargo = e.target.value);
 
   document.getElementById('f-save').addEventListener('click', saveCardFromModal);
   if(!f.__isNew){
@@ -7952,6 +8457,7 @@ if(getToken()){
   loadPossiveisLeads();
   loadMetaVendas();
   loadMetaVendasEquipe();
+  if(!agendaLoaded) loadAgendaMes(agendaMesAtual); // carrega em segundo plano — o Dashboard também usa eventos do Google em "Tarefas abertas"
   loadConversas();
   loadEquipe();
   loadAutomacoes();

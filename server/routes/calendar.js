@@ -122,6 +122,7 @@ router.get('/agenda-mes', auth, async (req, res) => {
           return {
             ...ev,
             prioridade: extra ? extra.prioridade : 'media',
+            concluida: extra ? !!extra.concluida : false,
             leadId: extra && extra.leadId ? extra.leadId._id.toString() : null,
             clienteNome: extra && extra.leadId ? extra.leadId.cliente : null,
           };
@@ -189,6 +190,22 @@ router.put('/eventos/:eventId', auth, async (req, res) => {
 });
 
 // DELETE /api/calendar/eventos/:eventId -> remove um evento do Google Agenda principal
+// PUT /api/calendar/eventos/:eventId/toggle -> marca/desmarca um evento como concluído — só
+// no nosso CRM, não mexe no evento de verdade no Google (Calendar não tem esse conceito)
+router.put('/eventos/:eventId/toggle', auth, async (req, res) => {
+  try {
+    const existente = await EventoGoogleExtra.findOne({ userId: req.userId, eventId: req.params.eventId });
+    const extra = await EventoGoogleExtra.findOneAndUpdate(
+      { userId: req.userId, eventId: req.params.eventId },
+      { concluida: existente ? !existente.concluida : true },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.json(extra.toJSON());
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao atualizar o evento.' });
+  }
+});
+
 router.delete('/eventos/:eventId', auth, async (req, res) => {
   try {
     const user = await User.findById(req.userId);

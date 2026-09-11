@@ -9,7 +9,7 @@ const Fluxo = require('../models/Fluxo');
 const FluxoExecucao = require('../models/FluxoExecucao');
 const Anexo = require('../models/Anexo');
 const { registrarAuditoria } = require('../utils/auditoria');
-const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
+const { gerarComissaoAutomaticaSeGanho, cancelarComissaoSePerdidoAposGanho } = require('../utils/comissaoAutomatica');
 const { executarAcaoDeAutomacao } = require('../utils/executarAutomacao');
 const { dispararWebhooks } = require('../utils/dispararWebhooks');
 
@@ -54,7 +54,7 @@ async function executarAutomacoesDaColuna(userId, colunaId, card) {
   }
 }
 
-const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'etiquetas', 'camposPersonalizados', 'tipoCarta'];
+const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'etiquetas', 'camposPersonalizados', 'tipoCarta', 'tipoPessoa', 'cnpj', 'razaoSocial', 'inscricaoEstadual', 'ramoAtividade', 'contatoNome', 'contatoCargo'];
 function filtrarCampos(body) {
   const dados = {};
   for (const campo of CAMPOS_PERMITIDOS) {
@@ -184,6 +184,7 @@ router.put('/:id/move', async (req, res) => {
     executarAutomacoesDaColuna(req.userId, columnId, card);
     iniciarFluxosDaColuna(req.userId, columnId, card);
     gerarComissaoAutomaticaSeGanho(req.userId, card, columnId);
+    cancelarComissaoSePerdidoAposGanho(req.userId, card, columnId);
     const dadosWebhook = { id: card._id.toString(), cliente: card.cliente, telefone: card.telefone, valor: card.valor, columnId: card.columnId.toString(), colunaNome: coluna.nome };
     dispararWebhooks(req.userId, 'lead.movido', dadosWebhook);
     if (coluna.tipo === 'ganho') dispararWebhooks(req.userId, 'lead.ganho', dadosWebhook);

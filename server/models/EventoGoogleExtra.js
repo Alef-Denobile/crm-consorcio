@@ -10,6 +10,7 @@ const eventoGoogleExtraSchema = new mongoose.Schema(
     eventId: { type: String, required: true }, // ID do evento no Google Agenda
     prioridade: { type: String, enum: ['baixa', 'media', 'alta'], default: 'media' },
     leadId: { type: mongoose.Schema.Types.ObjectId, ref: 'Card', default: null },
+    concluida: { type: Boolean, default: false },
   },
   {
     timestamps: true,

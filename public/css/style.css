@@ -137,9 +137,12 @@ main.pipeline-main{ padding-bottom:4px; }
 .cards{ padding:0 4px; min-height:40px; flex:1; overflow-y:auto; }
 .empty-col{ font-size:12px; font-style:italic; text-align:center; color:#ABABAB; padding:26px 0; }
 
-.card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; margin-bottom:12px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.04); transition:box-shadow .15s, transform .15s, opacity .15s; display:flex; }
+.card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; margin-bottom:12px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.04); transition:box-shadow .15s, transform .15s, opacity .15s; display:flex; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
 .card:hover{ box-shadow:0 10px 22px rgba(0,0,0,.10); transform:translateY(-2px); }
 .card.dragging{ opacity:.35; }
+.card.card-touch-arrastando{ opacity:.25; }
+.card-touch-fantasma{ position:fixed; z-index:250; pointer-events:none; background:var(--paper); border:2px solid var(--accent); border-radius:14px; padding:12px; box-shadow:0 16px 36px rgba(0,0,0,.35); transform:scale(1.03) rotate(-1deg); opacity:.96; }
+.column.coluna-touch-alvo{ background:var(--hover-tint); outline:2px solid var(--accent); outline-offset:-2px; border-radius:14px; }
 
 /* alça de arraste — área bem maior e clara pra segurar o card */
 .card-drag-handle{ flex-shrink:0; width:34px; display:flex; align-items:center; justify-content:center; cursor:grab; color:#C2C2C2; background:var(--col-bg); border-right:1px dashed var(--line); touch-action:none; }
@@ -371,6 +374,8 @@ main.pipeline-main{ padding-bottom:4px; }
 .month-step-nav span{ min-width:130px; text-align:center; }
 .contratos-list{ display:flex; flex-direction:column; gap:14px; }
 .contrato-card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:18px; }
+.contrato-card-cancelado{ opacity:.7; border-color:var(--danger); }
+.contrato-card-cancelado .stage-bar-fill{ background:var(--danger); }
 .contrato-card-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:12px; }
 .contrato-card-title{ font-size:14px; font-weight:700; margin:0 0 4px; }
 .contrato-card-note{ font-size:12px; color:var(--ink-soft); margin:0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
@@ -708,3 +713,23 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 
 /* linhas de tarefa/evento dentro do dia — copiáveis por segurar/botão direito, igual as células do mês */
 [data-copiar-tarefa], [data-copiar-evento]{ -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+
+/* ---------- Tipo de pessoa (física/jurídica) — escolha inicial e dropdown no modal ---------- */
+.tipo-pessoa-escolha-btn{ width:100%; padding:16px; border-radius:12px; border:1px solid var(--line); background:var(--col-bg); color:var(--ink); font-size:14px; font-weight:600; cursor:pointer; text-align:left; transition:border-color .15s, background .15s; }
+.tipo-pessoa-escolha-btn:hover{ border-color:var(--accent); background:var(--hover-tint); }
+.tipo-pessoa-select-btn{ width:100%; display:flex; align-items:center; justify-content:space-between; padding:10px 14px; min-height:42px; border-radius:8px; border:1px solid var(--line); background:var(--col-bg); color:var(--ink); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+.tipo-pessoa-select-btn:hover{ border-color:var(--accent); }
+.tipo-pessoa-select-seta{ transition:transform .15s; color:var(--ink-soft); }
+.tipo-pessoa-select-seta.aberta{ transform:rotate(180deg); }
+.tipo-pessoa-dropdown{ margin-top:6px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper); }
+.tipo-pessoa-dropdown-item{ width:100%; text-align:left; padding:10px 14px; min-height:40px; font-size:13px; background:none; border:none; cursor:pointer; color:var(--ink); font-family:inherit; display:flex; align-items:center; justify-content:space-between; }
+.tipo-pessoa-dropdown-item:hover{ background:var(--hover-tint); }
+.tipo-pessoa-dropdown-item + .tipo-pessoa-dropdown-item{ border-top:1px solid var(--line); }
+
+/* ---------- Checklist de itens do dia (copiar/mover) ---------- */
+.checklist-dia-lista{ display:flex; flex-direction:column; gap:2px; max-height:340px; overflow-y:auto; }
+.checklist-dia-item{ display:flex; align-items:center; gap:10px; padding:9px 8px; border-radius:8px; cursor:pointer; font-size:13px; color:var(--ink); }
+.checklist-dia-item:hover{ background:var(--hover-tint); }
+.checklist-dia-checkbox{ width:18px; height:18px; flex-shrink:0; cursor:pointer; }
+.checklist-dia-item-texto{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.checklist-dia-item-hora{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); flex-shrink:0; }

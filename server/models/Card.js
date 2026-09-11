@@ -6,6 +6,13 @@ const cardSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     columnId: { type: mongoose.Schema.Types.ObjectId, ref: 'Column', required: true },
     cliente: { type: String, required: true, trim: true },
+    tipoPessoa: { type: String, enum: ['fisica', 'juridica'], default: 'fisica' },
+    cnpj: { type: String, default: '' },
+    razaoSocial: { type: String, default: '' },
+    inscricaoEstadual: { type: String, default: '' },
+    ramoAtividade: { type: String, default: '' },
+    contatoNome: { type: String, default: '' }, // pessoa responsável do lado da empresa
+    contatoCargo: { type: String, default: '' },
     valor: { type: Number, default: 0 },
     temperatura: { type: String, enum: ['quente', 'morno', 'frio'], default: 'morno' },
     telefone: { type: String, default: '' },

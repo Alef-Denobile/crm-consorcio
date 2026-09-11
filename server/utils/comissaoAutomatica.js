@@ -19,14 +19,20 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
     if (jaExiste) return; // já foi gerada antes pra esse cliente, não duplica
 
     const { parcelas, parcelas1, value, value2 } = calcComissaoPorTipo(credito, card.tipoCarta);
+    // Usa o "mês" que a pessoa definiu no lead como referência — só cai pra data de hoje
+    // se o lead não tiver esse campo preenchido (formato esperado: "YYYY-MM").
+    const mesValido = /^\d{4}-\d{2}$/.test(card.mes || '');
     const hoje = new Date();
+    const dataReferencia = mesValido
+      ? new Date(Number(card.mes.slice(0, 4)), Number(card.mes.slice(5, 7)) - 1, 1)
+      : new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     await Contrato.create({
       userId,
       cardId: card._id,
       geradoAutomaticamente: true,
       desc: card.cliente || 'Cliente',
       scope: 'Pessoal',
-      date: new Date(hoje.getFullYear(), hoje.getMonth(), 1),
+      date: dataReferencia,
       creditoValor: credito,
       tipoCarta: card.tipoCarta || 'imovel',
       parcelas,
@@ -39,4 +45,24 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
   }
 }
 
-module.exports = { gerarComissaoAutomaticaSeGanho };
+// Quando um cliente que JÁ tinha comissão gerada (estava numa coluna "ganho") é
+// movido pra uma coluna do tipo "perdido" — cobrindo tanto "nunca fechou" quanto
+// "fechou e depois cancelou" — corta a comissão dele a partir do mês desse movimento
+// em diante. Meses anteriores (já vencidos) continuam contando normalmente.
+async function cancelarComissaoSePerdidoAposGanho(userId, card, columnId) {
+  try {
+    const coluna = await Column.findOne({ _id: columnId, userId });
+    if (!coluna || coluna.tipo !== 'perdido') return;
+
+    const contrato = await Contrato.findOne({ cardId: card._id, userId });
+    if (!contrato || contrato.canceladoNoMes) return; // sem contrato, ou já estava cancelado — não mexe
+
+    const hoje = new Date();
+    contrato.canceladoNoMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+    await contrato.save();
+  } catch (err) {
+    console.error('Erro ao cancelar comissão automaticamente:', err.message);
+  }
+}
+
+module.exports = { gerarComissaoAutomaticaSeGanho, cancelarComissaoSePerdidoAposGanho };
