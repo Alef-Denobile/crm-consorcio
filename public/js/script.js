@@ -6198,52 +6198,71 @@ function bindAppEvents(){
       cardEl.classList.add('dragging');
     });
     cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); limparIndicadorDeInsercao(); });
-  });
 
-  // Arrastar por toque — usa Pointer Events com setPointerCapture, e (isso é o
-  // ponto principal) começa a partir da ALCINHA (botão ⇄), não do card inteiro.
-  // Segundo a documentação oficial de bibliotecas de drag-and-drop (dnd-kit): depois
-  // que um toque começa, mudar "touch-action" por JavaScript não tem efeito nenhum —
-  // ele precisa estar fixado no CSS *antes* do dedo tocar. Como não dá pra travar o
-  // card inteiro sem quebrar a rolagem normal da lista, a solução recomendada é usar
-  // uma alcinha dedicada com touch-action:none já no CSS (veja style.css). Como essa
-  // alcinha não compete com nenhuma rolagem, nem precisa mais de temporizador de
-  // segurar — o próprio movimento do dedo já decide na hora se é toque (abre o menu)
-  // ou arrastar. Mouse continua com o arrastar nativo do card inteiro, de sempre.
-  app.querySelectorAll('.card-move-btn').forEach(btn=>{
-    btn.addEventListener('pointerdown', (e)=>{
+    // Arrastar por toque no card inteiro — usa Pointer Events com setPointerCapture.
+    // O CSS do .card já trava touch-action:none desde o início (precisa ser assim,
+    // travar depois que o toque já começou não tem efeito — é por isso que antes
+    // tocar e segurar acabava selecionando texto: o navegador assumia esse gesto
+    // por conta própria). Só que travar touch-action:none tira a rolagem nativa da
+    // lista também — por isso, aqui embaixo, quando o gesto claramente é rolar (dedo
+    // se move rápido, sem pausa) em vez de arrastar (segura parado um instante), a
+    // gente rola a lista na mão, imitando o que o navegador faria sozinho.
+    cardEl.addEventListener('pointerdown', (e)=>{
       if(e.pointerType === 'mouse') return;
-      const cardEl = btn.closest('.card');
-      if(!cardEl) return;
-      cardTouchDrag = { cardId: cardEl.dataset.cardId, cardEl, btn, arrastando:false, startX:e.clientX, startY:e.clientY, ultimoX:e.clientX, ultimoY:e.clientY, pointerId:e.pointerId };
+      if(e.target.closest('.card-move-wrap') || e.target.closest('[data-action="toggle-move-menu"]') || e.target.closest('.wa-btn')) return; // não conflita com os botões
+      const cardsContainer = cardEl.closest('.cards');
+      cardTouchDrag = {
+        cardId: cardEl.dataset.cardId, cardEl, arrastando:false, modoRolagem:false,
+        startX:e.clientX, startY:e.clientY, ultimoX:e.clientX, ultimoY:e.clientY,
+        pointerId:e.pointerId, cardsContainer, scrollInicial: cardsContainer ? cardsContainer.scrollTop : 0,
+      };
+      cardTouchLongPressTimer = setTimeout(()=>{
+        if(!cardTouchDrag || cardTouchDrag.modoRolagem) return; // já virou rolagem, não inicia arrastar
+        try{ cardEl.setPointerCapture(cardTouchDrag.pointerId); }catch(err){ /* aparelho sem suporte — segue sem capturar */ }
+        iniciarArrastoDeCard(cardTouchDrag.ultimoX, cardTouchDrag.ultimoY);
+      }, 280);
     });
-    btn.addEventListener('pointermove', (e)=>{
-      if(!cardTouchDrag || cardTouchDrag.btn !== btn || cardTouchDrag.pointerId !== e.pointerId) return;
+
+    cardEl.addEventListener('pointermove', (e)=>{
+      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl || cardTouchDrag.pointerId !== e.pointerId) return;
+      const dxTotal = e.clientX - cardTouchDrag.startX;
+      const dyTotal = e.clientY - cardTouchDrag.startY;
       cardTouchDrag.ultimoX = e.clientX;
       cardTouchDrag.ultimoY = e.clientY;
-      if(!cardTouchDrag.arrastando){
-        const dx = e.clientX - cardTouchDrag.startX;
-        const dy = e.clientY - cardTouchDrag.startY;
-        if(Math.sqrt(dx*dx + dy*dy) < 8) return; // ainda é só um toque, não decidiu se vira arrastar
-        try{ btn.setPointerCapture(cardTouchDrag.pointerId); }catch(err){ /* aparelho sem suporte — segue sem capturar */ }
-        iniciarArrastoDeCard(cardTouchDrag.ultimoX, cardTouchDrag.ultimoY);
+
+      if(!cardTouchDrag.arrastando && !cardTouchDrag.modoRolagem){
+        if(Math.sqrt(dxTotal*dxTotal + dyTotal*dyTotal) > 10){
+          // se moveu antes do temporizador confirmar o arrastar, é rolagem, não segurar-parado
+          clearTimeout(cardTouchLongPressTimer);
+          cardTouchDrag.modoRolagem = true;
+        } else {
+          return; // ainda não decidiu — pode virar arrastar (temporizador) ou rolagem (mais movimento)
+        }
       }
+
+      if(cardTouchDrag.modoRolagem){
+        e.preventDefault();
+        if(cardTouchDrag.cardsContainer) cardTouchDrag.cardsContainer.scrollTop = cardTouchDrag.scrollInicial - dyTotal;
+        return;
+      }
+
+      if(!cardTouchDrag.arrastando) return; // ainda esperando o temporizador decidir
       e.preventDefault();
       atualizarArrastoDeCard(e.clientX, e.clientY);
     }, { passive:false });
-    btn.addEventListener('pointerup', (e)=>{
-      if(!cardTouchDrag || cardTouchDrag.btn !== btn || cardTouchDrag.pointerId !== e.pointerId) return;
+
+    cardEl.addEventListener('pointerup', (e)=>{
+      clearTimeout(cardTouchLongPressTimer);
+      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl || cardTouchDrag.pointerId !== e.pointerId) return;
       if(cardTouchDrag.arrastando){
-        e.preventDefault(); // impede o clique de também abrir o menu logo depois de soltar
-        e.stopPropagation();
+        e.preventDefault(); // evita o clique fantasma que abriria o card logo depois de soltar
         finalizarArrastoDeCard(e.clientX, e.clientY);
       }
-      // se não chegou a arrastar (foi só um toque rápido), não faz nada aqui — o
-      // clique natural do botão continua e abre o menu "Mover para", como sempre
       cardTouchDrag = null;
     });
-    btn.addEventListener('pointercancel', ()=>{
-      if(cardTouchDrag && cardTouchDrag.btn === btn) cancelarArrastoDeCard();
+    cardEl.addEventListener('pointercancel', ()=>{
+      clearTimeout(cardTouchLongPressTimer);
+      if(cardTouchDrag && cardTouchDrag.cardEl === cardEl && cardTouchDrag.arrastando) cancelarArrastoDeCard();
       cardTouchDrag = null;
     });
   });
