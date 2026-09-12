@@ -19,6 +19,15 @@ const fmtBRL = (n) => new Intl.NumberFormat('pt-BR', { style:'currency', currenc
 const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const MESES_CHEIO = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 const currentMonthKey = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; };
+// Acha a segunda-feira da semana de uma data, no formato "YYYY-MM-DD" — usado como
+// identificador de cada semana do GEROT.
+function inicioDaSemana(data){
+  const d = new Date(data);
+  const diaSemana = d.getDay(); // 0=domingo, 1=segunda, ...
+  const deslocamento = diaSemana === 0 ? -6 : 1 - diaSemana; // volta até a segunda-feira daquela semana
+  d.setDate(d.getDate() + deslocamento);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 const monthLabel = (key, full=false) => {
   if(!key) return '';
   const [y,m] = key.split('-').map(Number);
@@ -242,6 +251,13 @@ const ROTULOS_EVENTOS_WEBHOOK = {
   'tarefa.criada': 'Nova tarefa criada',
 };
 let anexosDoCard = [];
+let historicoContatoCarregado = false;
+let historicoContatoItens = [];
+let historicoContatoTexto = '';
+let historicoContatoEnviando = false;
+let tarefaRapidaTitulo = '';
+let tarefaRapidaData = '';
+let tarefaRapidaCriando = false;
 let anexosCarregados = false;
 let anexoEnviando = false;
 let anexoMsg = null;
@@ -299,6 +315,12 @@ let equipeNomeNovo = '';
 let equipeCodigoEntrar = '';
 let equipeMsg = null;
 let equipeSubTab = 'chat';
+let agendaSubTab = 'calendario';
+let gerotSemanaAtual = inicioDaSemana(new Date());
+let gerotBlocos = [];
+let gerotLoaded = false;
+let gerotCelulaEditando = null; // "diaSemana-horario" da célula sendo editada agora, ou null
+let gerotCopiando = false;
 let chatMensagens = [];
 let chatLoaded = false;
 let chatTexto = '';
@@ -804,6 +826,55 @@ async function colarEmHorariosSelecionados(){
   horariosSelecionados.clear();
   renderApp();
   if(agendaDiaSelecionado) renderAgendaDiaModal();
+}
+async function loadGerot(semana){
+  gerotLoaded = false;
+  renderApp();
+  try{
+    const data = await apiRequest('GET', `/gerot/${semana}`);
+    gerotBlocos = data.blocos || [];
+  }catch(e){
+    gerotBlocos = [];
+  }
+  gerotLoaded = true;
+  renderApp();
+}
+function mudarSemanaGerot(delta){
+  const [ano,mes,dia] = gerotSemanaAtual.split('-').map(Number);
+  const d = new Date(ano, mes-1, dia + delta*7);
+  gerotSemanaAtual = inicioDaSemana(d);
+  loadGerot(gerotSemanaAtual);
+}
+async function salvarBlocoGerot(diaSemana, horario, texto){
+  gerotCelulaEditando = null;
+  try{
+    const resultado = await apiRequest('PUT', '/gerot', { semanaInicio: gerotSemanaAtual, diaSemana, horario, texto });
+    const idx = gerotBlocos.findIndex(b=>b.diaSemana===diaSemana && b.horario===horario);
+    if(resultado.apagado){
+      if(idx>-1) gerotBlocos.splice(idx,1);
+    } else if(idx>-1){
+      gerotBlocos[idx] = resultado;
+    } else {
+      gerotBlocos.push(resultado);
+    }
+  }catch(e){
+    errorMsg = 'Não foi possível salvar esse horário.';
+  }
+  renderApp();
+}
+async function copiarSemanaAnteriorGerot(){
+  const [ano,mes,dia] = gerotSemanaAtual.split('-').map(Number);
+  const semanaAnterior = inicioDaSemana(new Date(ano, mes-1, dia - 7));
+  gerotCopiando = true;
+  renderApp();
+  try{
+    await apiRequest('POST', '/gerot/copiar', { semanaOrigem: semanaAnterior, semanaDestino: gerotSemanaAtual });
+    await loadGerot(gerotSemanaAtual);
+  }catch(e){
+    errorMsg = 'Não foi possível copiar a semana anterior.';
+  }
+  gerotCopiando = false;
+  renderApp();
 }
 async function loadAgendaMes(mesKey){
   agendaLoaded = false;
@@ -2140,7 +2211,72 @@ async function excluirCampoPersonalizado(id){
   }
 }
 
-/* ---------- Anexos (dentro do card) ---------- */
+/* ---------- Histórico de contato (dentro do card) ---------- */
+async function loadHistoricoContato(cardId){
+  try{
+    const data = await apiRequest('GET', `/historico-contato/${cardId}`);
+    historicoContatoItens = data.itens || [];
+  }catch(e){
+    historicoContatoItens = [];
+  }
+  historicoContatoCarregado = true;
+  const lista = document.getElementById('f-historico-lista');
+  if(lista){
+    lista.innerHTML = renderHistoricoContatoListaHtml();
+    ligarBindingsHistoricoContato();
+  }
+}
+function renderHistoricoContatoListaHtml(){
+  if(!historicoContatoItens.length) return '<p class="dash-empty">Nenhum registro ainda.</p>';
+  return `<div class="historico-lista">${historicoContatoItens.map(i=>`
+    <div class="historico-item">
+      <div style="flex:1;">
+        <span class="historico-item-texto">${esc(i.texto)}</span>
+        <span class="historico-item-data">${formatDateHora(i.createdAt)}</span>
+      </div>
+      <button class="icon-btn" data-action="excluir-historico-contato" data-id="${i.id}" title="Excluir">${ICON_TRASH}</button>
+    </div>
+  `).join('')}</div>`;
+}
+function ligarBindingsHistoricoContato(){
+  document.querySelectorAll('[data-action="excluir-historico-contato"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.id;
+      const idx = historicoContatoItens.findIndex(i=>i.id===id);
+      if(idx===-1) return;
+      const [removido] = historicoContatoItens.splice(idx,1);
+      const lista = document.getElementById('f-historico-lista');
+      if(lista){ lista.innerHTML = renderHistoricoContatoListaHtml(); ligarBindingsHistoricoContato(); }
+      try{
+        await apiRequest('DELETE', `/historico-contato/${id}`);
+      }catch(e){
+        historicoContatoItens.splice(idx,0,removido);
+        errorMsg = 'Não foi possível excluir o registro.';
+        if(lista){ lista.innerHTML = renderHistoricoContatoListaHtml(); ligarBindingsHistoricoContato(); }
+      }
+    });
+  });
+}
+async function adicionarHistoricoContato(){
+  const texto = historicoContatoTexto.trim();
+  if(!texto || !modalForm || modalForm.__isNew) return;
+  historicoContatoEnviando = true;
+  const input = document.getElementById('historico-input');
+  if(input) input.disabled = true;
+  try{
+    const novo = await apiRequest('POST', '/historico-contato', { cardId: modalForm.id, texto });
+    historicoContatoItens.unshift(novo);
+    historicoContatoTexto = '';
+    const lista = document.getElementById('f-historico-lista');
+    if(lista){ lista.innerHTML = renderHistoricoContatoListaHtml(); ligarBindingsHistoricoContato(); }
+    if(input){ input.value = ''; }
+  }catch(e){
+    errorMsg = 'Não foi possível salvar o registro.';
+    renderApp();
+  }
+  historicoContatoEnviando = false;
+  if(input) input.disabled = false;
+}
 function formatarTamanhoArquivo(bytes){
   if(!bytes) return '0 KB';
   if(bytes < 1024*1024) return `${Math.round(bytes/1024)} KB`;
@@ -4793,8 +4929,80 @@ function renderAgendaDiaModal(){
 }
 
 function renderTarefasPage(){
+  const abas = [['calendario','Calendário'],['gerot','GEROT']];
+  return `
+    <div class="page-head">
+      <div>
+        <h1>Agenda/Tarefas</h1>
+        <p>Tarefas do CRM, compromissos do Google Agenda e sua rotina semanal</p>
+      </div>
+      ${agendaSubTab==='calendario' ? `
+        <div class="page-head-actions">
+          ${calendarConnected ? `<button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'📅 Sincronizar Agenda'}</button>` : ''}
+          <button class="btn-primary" data-action="open-new-task">+ Nova tarefa</button>
+        </div>
+      ` : ''}
+    </div>
+    <div class="funil-tabs" style="margin-bottom:20px;">
+      ${abas.map(([key,label])=>`<button class="tab-btn ${agendaSubTab===key?'active':''}" data-action="set-agenda-subtab" data-subtab="${key}">${label}</button>`).join('')}
+    </div>
+    ${agendaSubTab==='calendario' ? renderCalendarioConteudo() : renderGerotConteudo()}
+  `;
+}
+const GEROT_DIAS = ['Segunda','Terça','Quarta','Quinta','Sexta'];
+const GEROT_HORARIOS = (()=>{ const lista=[]; for(let h=8; h<=19; h++){ lista.push(`${String(h).padStart(2,'0')}:00`); if(h<19) lista.push(`${String(h).padStart(2,'0')}:30`); } return lista; })();
+function renderGerotConteudo(){
+  const [ano,mes,dia] = gerotSemanaAtual.split('-').map(Number);
+  const segunda = new Date(ano, mes-1, dia);
+  const datasDaSemana = GEROT_DIAS.map((_,i)=>{ const d = new Date(segunda); d.setDate(d.getDate()+i); return d; });
+  const labelSemana = `${datasDaSemana[0].toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} a ${datasDaSemana[4].toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}`;
+  const textoDoBloco = (diaIdx, horario) => { const b = gerotBlocos.find(x=>x.diaSemana===diaIdx && x.horario===horario); return b ? b.texto : ''; };
+
+  return `
+    <div class="settings-page-section" style="margin-bottom:16px;">
+      <p class="settings-page-note">Sua rotina semanal — planeje o que fazer em cada horário, de segunda a sexta. Diferente do calendário, isso não é sobre um dia específico: pense nela como um "molde" da sua semana ideal, que você ajusta quando precisar. Clique em qualquer horário pra escrever.</p>
+    </div>
+    <div class="month-step-nav" style="margin-bottom:16px;">
+      <button class="icon-btn" data-action="gerot-semana" data-delta="-1" title="Semana anterior">‹</button>
+      <span>${labelSemana}</span>
+      <button class="icon-btn" data-action="gerot-semana" data-delta="1" title="Próxima semana">›</button>
+      <button class="btn-outline" data-action="gerot-hoje" style="margin-left:10px;">Essa semana</button>
+      <button class="btn-outline" data-action="gerot-copiar-semana" style="margin-left:auto;" ${gerotCopiando?'disabled':''}>${gerotCopiando?'Copiando…':'📋 Copiar semana anterior'}</button>
+    </div>
+    ${!gerotLoaded ? `<p class="settings-page-note">Carregando…</p>` : `
+      <div class="gerot-grid-wrap">
+        <table class="gerot-tabela">
+          <thead>
+            <tr>
+              <th class="gerot-col-hora"></th>
+              ${GEROT_DIAS.map((d,i)=>`<th>${d}<br><span class="gerot-data-cabecalho">${datasDaSemana[i].toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</span></th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${GEROT_HORARIOS.map(horario=>`
+              <tr>
+                <td class="gerot-col-hora">${horario}</td>
+                ${GEROT_DIAS.map((_,diaIdx)=>{
+                  const chave = `${diaIdx}-${horario}`;
+                  const editando = gerotCelulaEditando === chave;
+                  const texto = textoDoBloco(diaIdx, horario);
+                  return `<td class="gerot-celula ${texto?'gerot-celula-preenchida':''}">${
+                    editando
+                      ? `<input type="text" class="gerot-celula-input" id="gerot-input-${chave}" value="${esc(texto)}" data-dia="${diaIdx}" data-horario="${horario}" placeholder="Ex: Prospecção ativa" />`
+                      : `<button class="gerot-celula-btn" data-action="gerot-editar-celula" data-dia="${diaIdx}" data-horario="${horario}">${esc(texto)}</button>`
+                  }</td>`;
+                }).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `}
+  `;
+}
+function renderCalendarioConteudo(){
   if(!agendaLoaded){
-    return `<div class="page-head"><div><h1>Agenda/Tarefas</h1><p>Carregando…</p></div></div>`;
+    return `<p class="settings-page-note">Carregando…</p>`;
   }
   const [ano, mesNum] = agendaMesAtual.split('-').map(Number);
   const primeiroDia = new Date(ano, mesNum-1, 1);
@@ -4809,17 +5017,6 @@ function renderTarefasPage(){
   while(celulas.length % 7 !== 0) celulas.push(null);
 
   return `
-    <div class="page-head">
-      <div>
-        <h1>Agenda/Tarefas</h1>
-        <p>Tarefas do CRM e compromissos do Google Agenda, num só lugar</p>
-      </div>
-      <div class="page-head-actions">
-        ${calendarConnected ? `<button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'📅 Sincronizar Agenda'}</button>` : ''}
-        <button class="btn-primary" data-action="open-new-task">+ Nova tarefa</button>
-      </div>
-    </div>
-
     ${tarefaCopiada ? `
       <div class="agenda-clipboard-hint" style="margin-bottom:16px;">
         Copiado: <b>${esc(tarefaCopiada.titulo)}</b> — abra qualquer dia e clique num horário vazio pra colar
@@ -5573,6 +5770,39 @@ function bindAppEvents(){
   /* -- Agenda (calendário) -- */
   app.querySelectorAll('[data-action="agenda-mes"]').forEach(btn=>{
     btn.addEventListener('click', ()=> mudarMesAgenda(parseInt(btn.dataset.delta,10)));
+  });
+  app.querySelectorAll('[data-action="set-agenda-subtab"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      agendaSubTab = btn.dataset.subtab;
+      if(agendaSubTab==='gerot' && !gerotLoaded) loadGerot(gerotSemanaAtual);
+      renderApp();
+    });
+  });
+  app.querySelectorAll('[data-action="gerot-semana"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> mudarSemanaGerot(parseInt(btn.dataset.delta,10)));
+  });
+  const gerotHojeBtn = app.querySelector('[data-action="gerot-hoje"]');
+  if(gerotHojeBtn) gerotHojeBtn.addEventListener('click', ()=>{
+    gerotSemanaAtual = inicioDaSemana(new Date());
+    loadGerot(gerotSemanaAtual);
+  });
+  const gerotCopiarBtn = app.querySelector('[data-action="gerot-copiar-semana"]');
+  if(gerotCopiarBtn) gerotCopiarBtn.addEventListener('click', copiarSemanaAnteriorGerot);
+  app.querySelectorAll('[data-action="gerot-editar-celula"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      gerotCelulaEditando = `${btn.dataset.dia}-${btn.dataset.horario}`;
+      renderApp();
+      const input = document.getElementById(`gerot-input-${gerotCelulaEditando}`);
+      if(input){ input.focus(); input.select(); }
+    });
+  });
+  app.querySelectorAll('.gerot-celula-input').forEach(input=>{
+    const salvar = ()=> salvarBlocoGerot(Number(input.dataset.dia), input.dataset.horario, input.value);
+    input.addEventListener('blur', salvar);
+    input.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter') input.blur();
+      if(e.key==='Escape'){ gerotCelulaEditando = null; renderApp(); }
+    });
   });
   const cancelarCopiaPrincipalBtn = app.querySelector('[data-action="cancelar-tarefa-copiada"]');
   if(cancelarCopiaPrincipalBtn) cancelarCopiaPrincipalBtn.addEventListener('click', cancelarTarefaCopiada);
@@ -6578,8 +6808,36 @@ function openEditCard(id){
   anexosCarregados = false;
   anexosDoCard = [];
   anexoMsg = null;
+  historicoContatoCarregado = false;
+  historicoContatoItens = [];
+  historicoContatoTexto = '';
+  tarefaRapidaTitulo = '';
+  tarefaRapidaData = '';
   renderModal();
   loadAnexosDoCard(id);
+  loadHistoricoContato(id);
+}
+async function criarTarefaRapidaDoCard(){
+  const titulo = tarefaRapidaTitulo.trim();
+  if(!titulo || !modalForm || modalForm.__isNew) return;
+  const dataEscolhida = tarefaRapidaData || new Date().toISOString().slice(0,10);
+  tarefaRapidaCriando = true;
+  renderApp();
+  try{
+    const nova = await apiRequest('POST', '/tasks', { titulo, vencimento: dataEscolhida, prioridade:'media', leadId: modalForm.id, descricao:'' });
+    tasks.push(nova);
+    atualizarTarefaNaAgendaLocal(nova);
+    closeModal();
+    agendaMesAtual = dataEscolhida.slice(0,7);
+    goToPage('tarefas');
+    await loadAgendaMes(agendaMesAtual);
+    agendaDiaSelecionado = dataEscolhida;
+    renderAgendaDiaModal();
+  }catch(e){
+    errorMsg = 'Não foi possível criar a tarefa.';
+    tarefaRapidaCriando = false;
+    renderApp();
+  }
 }
 function closeModal(){ modalForm = null; document.getElementById('modal-root').innerHTML=''; }
 
@@ -6721,6 +6979,24 @@ function renderModal(){
               <div id="f-anexos-lista">${!anexosCarregados ? '<p class="settings-page-note">Carregando…</p>' : renderAnexosListaHtml()}</div>
             </div>
           ` : ''}
+          ${!f.__isNew ? `
+            <div class="field">
+              <label>Nova tarefa pra esse lead</label>
+              <div class="field-row-flex">
+                <input type="text" id="tarefa-rapida-titulo" value="${esc(tarefaRapidaTitulo)}" placeholder="Ex: Ligar amanhã de manhã" />
+                <input type="date" id="tarefa-rapida-data" value="${tarefaRapidaData || new Date().toISOString().slice(0,10)}" style="max-width:160px;" />
+                <button type="button" class="btn-outline" id="tarefa-rapida-criar-btn" ${tarefaRapidaCriando?'disabled':''}>${tarefaRapidaCriando?'Criando…':'Criar e abrir na Agenda'}</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Histórico de contato</label>
+              <div class="field-row-flex">
+                <input type="text" id="historico-input" value="${esc(historicoContatoTexto)}" placeholder="Ex: Tentei contato 3x hoje, cliente não atendeu" />
+                <button type="button" class="btn-outline" id="historico-add-btn" ${historicoContatoEnviando?'disabled':''}>${historicoContatoEnviando?'Salvando…':'Adicionar'}</button>
+              </div>
+              <div id="f-historico-lista">${!historicoContatoCarregado ? '<p class="settings-page-note">Carregando…</p>' : renderHistoricoContatoListaHtml()}</div>
+            </div>
+          ` : ''}
           ${!f.__isNew && f.sugestaoIA && f.sugestaoIA.texto ? `
             <div class="field">
               <div class="ai-result" style="display:block;">
@@ -6780,6 +7056,20 @@ function renderModal(){
     const file = e.target.files && e.target.files[0];
     if(file) handleAnexoFileSelected(file);
   });
+  const tarefaRapidaTituloInput = document.getElementById('tarefa-rapida-titulo');
+  if(tarefaRapidaTituloInput) tarefaRapidaTituloInput.addEventListener('input', (e)=> tarefaRapidaTitulo = e.target.value);
+  const tarefaRapidaDataInput = document.getElementById('tarefa-rapida-data');
+  if(tarefaRapidaDataInput) tarefaRapidaDataInput.addEventListener('input', (e)=> tarefaRapidaData = e.target.value);
+  const tarefaRapidaCriarBtn = document.getElementById('tarefa-rapida-criar-btn');
+  if(tarefaRapidaCriarBtn) tarefaRapidaCriarBtn.addEventListener('click', criarTarefaRapidaDoCard);
+  const historicoInput = document.getElementById('historico-input');
+  if(historicoInput){
+    historicoInput.addEventListener('input', (e)=> historicoContatoTexto = e.target.value);
+    historicoInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); adicionarHistoricoContato(); } });
+  }
+  const historicoAddBtn = document.getElementById('historico-add-btn');
+  if(historicoAddBtn) historicoAddBtn.addEventListener('click', adicionarHistoricoContato);
+  ligarBindingsHistoricoContato();
   const aiMensagemBtn = document.getElementById('f-ai-mensagem');
   if(aiMensagemBtn) aiMensagemBtn.addEventListener('click', sugerirMensagemIA);
   const aiTarefaBtn = document.getElementById('f-ai-tarefa');

@@ -27,6 +27,8 @@ const backupRoutes = require('./routes/backup');
 const monitoramentoRoutes = require('./routes/monitoramento');
 const webhooksSaidaRoutes = require('./routes/webhooksSaida');
 const agendamentoPublicoRoutes = require('./routes/agendamentoPublico');
+const gerotRoutes = require('./routes/gerot');
+const historicoContatoRoutes = require('./routes/historicoContato');
 
 const app = express();
 // O Render (e a maioria dos serviços de hospedagem) fica atrás de um proxy: o HTTPS
@@ -90,6 +92,8 @@ app.use('/api/backup', backupRoutes);
 app.use('/api/monitoramento', monitoramentoRoutes);
 app.use('/api/webhooks-saida', webhooksSaidaRoutes);
 app.use('/api/agendamento-publico', agendamentoPublicoRoutes);
+app.use('/api/gerot', gerotRoutes);
+app.use('/api/historico-contato', historicoContatoRoutes);
 
 // página pública de agendamento — /agendar/<userId> (sem login, o cliente acessa direto)
 app.get('/agendar/:userId', (req, res) => {

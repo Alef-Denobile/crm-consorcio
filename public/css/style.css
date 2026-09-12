@@ -743,3 +743,21 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .checklist-dia-checkbox{ width:18px; height:18px; flex-shrink:0; cursor:pointer; }
 .checklist-dia-item-texto{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .checklist-dia-item-hora{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); flex-shrink:0; }
+
+/* ---------- GEROT: grade semanal de rotina ---------- */
+.gerot-grid-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:12px; }
+.gerot-tabela{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:760px; }
+.gerot-tabela th{ padding:10px 6px; text-align:center; background:var(--col-bg); border-bottom:1px solid var(--line); font-weight:600; }
+.gerot-data-cabecalho{ font-weight:400; color:var(--ink-soft); font-size:11px; }
+.gerot-col-hora{ width:64px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-soft); text-align:center; padding:6px; border-right:1px solid var(--line); white-space:nowrap; }
+.gerot-tabela td{ border-bottom:1px solid var(--line); border-right:1px solid var(--line); padding:0; }
+.gerot-tabela td:last-child{ border-right:none; }
+.gerot-celula{ height:36px; }
+.gerot-celula-btn{ width:100%; height:36px; border:none; background:none; cursor:pointer; font-family:inherit; font-size:12px; color:var(--ink); text-align:left; padding:0 8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gerot-celula-btn:hover{ background:var(--hover-tint); }
+.gerot-celula-preenchida .gerot-celula-btn{ background:var(--gold-soft); font-weight:500; }
+.gerot-celula-input{ width:100%; height:36px; border:2px solid var(--accent); background:var(--paper); font-family:inherit; font-size:12px; color:var(--ink); padding:0 7px; outline:none; box-sizing:border-box; }
+
+/* variante do field-row pra linhas com número variável de itens (2 ou 3), tipo tarefa rápida e histórico */
+.field-row-flex{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.field-row-flex input[type="text"]{ flex:1; min-width:160px; }
