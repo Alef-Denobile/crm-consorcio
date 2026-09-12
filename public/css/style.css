@@ -140,14 +140,14 @@ main.pipeline-main{ padding-bottom:4px; }
 .card{ background:var(--paper); border:1px solid var(--line); border-radius:14px; margin-bottom:12px; overflow:hidden; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.04); transition:box-shadow .15s, transform .15s, opacity .15s, margin .15s; display:flex; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; touch-action:none; }
 .card.card-indicador-antes{ margin-top:56px; }
 .card.card-indicador-depois{ margin-bottom:56px; }
-@keyframes cardSaindoFade{ from{ opacity:1; transform:translateX(0); } to{ opacity:0; transform:translateX(22px); } }
-@keyframes cardChegandoFade{ from{ opacity:0; transform:translateX(-22px); } to{ opacity:1; transform:translateX(0); } }
+@keyframes cardSaindoFade{ from{ opacity:1; } to{ opacity:0; } }
+@keyframes cardChegandoFade{ from{ opacity:0; } to{ opacity:1; } }
 .card.card-saindo{ animation:cardSaindoFade .15s ease forwards; pointer-events:none; }
 .card.card-chegando{ animation:cardChegandoFade .25s ease; }
-@keyframes cardSaindoFadeEsquerda{ from{ opacity:1; transform:translateX(0); } to{ opacity:0; transform:translateX(-22px); } }
-@keyframes cardChegandoFadeEsquerda{ from{ opacity:0; transform:translateX(22px); } to{ opacity:1; transform:translateX(0); } }
-.card.card-saindo-esquerda{ animation:cardSaindoFadeEsquerda .15s ease forwards; pointer-events:none; }
-.card.card-chegando-esquerda{ animation:cardChegandoFadeEsquerda .25s ease; }
+@keyframes cardChegandoDeBaixo{ from{ opacity:0; transform:translateY(24px); } to{ opacity:1; transform:translateY(0); } }
+@keyframes cardChegandoDeCima{ from{ opacity:0; transform:translateY(-24px); } to{ opacity:1; transform:translateY(0); } }
+.card.card-chegando-cima{ animation:cardChegandoDeBaixo .25s ease; } /* subiu de posição — entra vindo de baixo pra cima */
+.card.card-chegando-baixo{ animation:cardChegandoDeCima .25s ease; } /* desceu de posição — entra vindo de cima pra baixo */
 .card:hover{ box-shadow:0 10px 22px rgba(0,0,0,.10); transform:translateY(-2px); }
 .card.dragging{ opacity:.35; }
 .card.card-touch-arrastando{ opacity:.25; }

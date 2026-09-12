@@ -2989,16 +2989,12 @@ async function moveCard(cardId, columnId, ordem){
   if(card.columnId===columnId && ordem===undefined) return; // mesma coluna e sem posição nova pra aplicar — nada a fazer
   const anterior = { columnId: card.columnId, ordem: card.ordem };
 
-  // decide se a coluna de destino fica à esquerda ou à direita da atual, pra
-  // animação de saída/chegada ir pro lado certo (mesma direção do movimento real)
-  const colOrigemEl = document.querySelector(`.column[data-col-id="${anterior.columnId}"]`);
-  const colDestinoEl = document.querySelector(`.column[data-col-id="${columnId}"]`);
-  const indoParaEsquerda = !!(colOrigemEl && colDestinoEl && colDestinoEl.getBoundingClientRect().left < colOrigemEl.getBoundingClientRect().left);
-
-  // fade-out rapidinho no lugar de origem, antes de mudar de coluna de verdade
+  // guarda a posição vertical de origem, pra comparar com a de chegada depois do
+  // redesenho e decidir a direção certa da animação (pra cima, pra baixo, ou parado)
   const elAntigo = document.querySelector(`.card[data-card-id="${cardId}"]`);
+  const topAntigo = elAntigo ? elAntigo.getBoundingClientRect().top : null;
   if(elAntigo){
-    elAntigo.classList.add(indoParaEsquerda ? 'card-saindo-esquerda' : 'card-saindo');
+    elAntigo.classList.add('card-saindo'); // fade simples na saída — a direção certa só dá pra saber depois, na chegada
     await new Promise(resolve=> setTimeout(resolve, 150));
   }
 
@@ -3006,9 +3002,19 @@ async function moveCard(cardId, columnId, ordem){
   card.columnId = columnId; // otimista
   if(ordem!==undefined) card.ordem = ordem;
   renderAppPreservandoScroll();
-  animarComFlip('.card[data-card-id]', posicoesAntigas, cardId); // desliza os outros cards que abriram espaço; o card movido fica de fora, ganha o fade-in abaixo
+  animarComFlip('.card[data-card-id]', posicoesAntigas, cardId); // desliza os outros cards que abriram espaço; o card movido fica de fora, ganha a animação de chegada abaixo
+
   const elNovo = document.querySelector(`.card[data-card-id="${cardId}"]`);
-  if(elNovo) elNovo.classList.add(indoParaEsquerda ? 'card-chegando-esquerda' : 'card-chegando');
+  if(elNovo){
+    const topNovo = elNovo.getBoundingClientRect().top;
+    if(topAntigo==null || Math.abs(topNovo - topAntigo) < 6){
+      elNovo.classList.add('card-chegando'); // não mudou de posição vertical de forma perceptível — só fade
+    } else if(topNovo < topAntigo){
+      elNovo.classList.add('card-chegando-cima'); // subiu — entra vindo de baixo pra cima
+    } else {
+      elNovo.classList.add('card-chegando-baixo'); // desceu — entra vindo de cima pra baixo
+    }
+  }
 
   try{
     const dados = { columnId };
