@@ -181,6 +181,7 @@ let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade
 let longPressTimer = null;
 let cardTouchDrag = null; // { cardId, cardEl, btn, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque, iniciado pela alcinha
 let autoScrollDoArrastoInterval = null;
+let arrastoRafPendente = false; // limita o trabalho pesado do arrastar a 1x por quadro de tela
 let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
 let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de escolher quais itens do dia entram na cópia/mover
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
@@ -6333,15 +6334,30 @@ function iniciarArrastoDeCard(x, y){
 }
 function atualizarArrastoDeCard(x, y){
   if(!cardTouchDrag || !cardTouchDrag.fantasmaEl) return;
+  // isso aqui é barato — atualiza sempre na hora, o fantasma nunca fica atrasado atrás do dedo
   cardTouchDrag.fantasmaEl.style.left = (x - cardTouchDrag.fantasmaEl.offsetWidth/2) + 'px';
   cardTouchDrag.fantasmaEl.style.top = (y - 24) + 'px';
-  const colAlvo = encontrarColunaMaisProxima(x);
-  document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
-  if(colAlvo){
-    colAlvo.classList.add('coluna-touch-alvo');
-    mostrarIndicadorDeInsercao(colAlvo, y, cardTouchDrag.cardId);
-  }
-  atualizarAutoScrollDoArrasto(x, y, colAlvo);
+  cardTouchDrag.ultimoXCalculo = x;
+  cardTouchDrag.ultimoYCalculo = y;
+  // isso aqui é caro (olha a posição de TODOS os cards da coluna, toda vez) — segurando
+  // por muito tempo, o dedo dispara centenas de eventos de movimento, e refazer essa
+  // conta pesada em cada um deles ia acumulando trabalho e deixando tudo mais lento
+  // (parecendo "parar de reconhecer" depois de um tempo). Por isso, no máximo uma vez
+  // por quadro de tela (~60x por segundo), nunca mais que isso.
+  if(arrastoRafPendente) return;
+  arrastoRafPendente = true;
+  requestAnimationFrame(()=>{
+    arrastoRafPendente = false;
+    if(!cardTouchDrag) return;
+    const xAtual = cardTouchDrag.ultimoXCalculo, yAtual = cardTouchDrag.ultimoYCalculo;
+    const colAlvo = encontrarColunaMaisProxima(xAtual);
+    document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+    if(colAlvo){
+      colAlvo.classList.add('coluna-touch-alvo');
+      mostrarIndicadorDeInsercao(colAlvo, yAtual, cardTouchDrag.cardId);
+    }
+    atualizarAutoScrollDoArrasto(xAtual, yAtual, colAlvo);
+  });
 }
 // Acha a coluna sob o dedo — e se não achar nenhuma exatamente ali (dedo soltou bem
 // na borda entre duas colunas, ou num pixel qualquer fora delas), pega a mais próxima
