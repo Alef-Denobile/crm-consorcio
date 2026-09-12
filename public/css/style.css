@@ -144,6 +144,10 @@ main.pipeline-main{ padding-bottom:4px; }
 @keyframes cardChegandoFade{ from{ opacity:0; transform:translateX(-22px); } to{ opacity:1; transform:translateX(0); } }
 .card.card-saindo{ animation:cardSaindoFade .15s ease forwards; pointer-events:none; }
 .card.card-chegando{ animation:cardChegandoFade .25s ease; }
+@keyframes cardSaindoFadeEsquerda{ from{ opacity:1; transform:translateX(0); } to{ opacity:0; transform:translateX(-22px); } }
+@keyframes cardChegandoFadeEsquerda{ from{ opacity:0; transform:translateX(22px); } to{ opacity:1; transform:translateX(0); } }
+.card.card-saindo-esquerda{ animation:cardSaindoFadeEsquerda .15s ease forwards; pointer-events:none; }
+.card.card-chegando-esquerda{ animation:cardChegandoFadeEsquerda .25s ease; }
 .card:hover{ box-shadow:0 10px 22px rgba(0,0,0,.10); transform:translateY(-2px); }
 .card.dragging{ opacity:.35; }
 .card.card-touch-arrastando{ opacity:.25; }
@@ -153,7 +157,7 @@ main.pipeline-main{ padding-bottom:4px; }
 /* alça de arraste — área bem maior e clara pra segurar o card */
 .card-drag-handle{ flex-shrink:0; width:34px; display:flex; align-items:center; justify-content:center; cursor:grab; color:#C2C2C2; background:var(--col-bg); border-right:1px dashed var(--line); touch-action:none; }
 .card-move-wrap{ position:relative; flex-shrink:0; width:26px; display:flex; align-items:center; justify-content:center; background:var(--col-bg); border-right:1px dashed var(--line); }
-.card-move-btn{ width:36px; height:36px; border:none; background:none; color:var(--ink-soft); cursor:pointer; border-radius:8px; font-size:17px; display:flex; align-items:center; justify-content:center; }
+.card-move-btn{ width:36px; height:36px; border:none; background:none; color:var(--ink-soft); cursor:pointer; border-radius:8px; font-size:17px; display:flex; align-items:center; justify-content:center; touch-action:none; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; }
 .card-move-btn:hover{ background:var(--hover-tint); color:var(--ink); }
 .card-move-btn:active{ background:var(--accent); color:#fff; }
 .card-move-menu{ position:absolute; left:0; right:auto; top:30px; max-height:260px; overflow-y:auto; }

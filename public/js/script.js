@@ -179,8 +179,7 @@ let modoSelecaoMultipla = false;
 let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar de uma vez, no modo de seleção múltipla
 let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade,leadId,descricao,hora}], modo:'copiar'|'mover' } — cópia/corte do dia inteiro
 let longPressTimer = null;
-let cardTouchDrag = null; // { cardId, cardEl, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque
-let cardTouchLongPressTimer = null;
+let cardTouchDrag = null; // { cardId, cardEl, btn, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque, iniciado pela alcinha
 let autoScrollDoArrastoInterval = null;
 let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
 let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de escolher quais itens do dia entram na cópia/mover
@@ -2989,10 +2988,16 @@ async function moveCard(cardId, columnId, ordem){
   if(card.columnId===columnId && ordem===undefined) return; // mesma coluna e sem posição nova pra aplicar — nada a fazer
   const anterior = { columnId: card.columnId, ordem: card.ordem };
 
+  // decide se a coluna de destino fica à esquerda ou à direita da atual, pra
+  // animação de saída/chegada ir pro lado certo (mesma direção do movimento real)
+  const colOrigemEl = document.querySelector(`.column[data-col-id="${anterior.columnId}"]`);
+  const colDestinoEl = document.querySelector(`.column[data-col-id="${columnId}"]`);
+  const indoParaEsquerda = !!(colOrigemEl && colDestinoEl && colDestinoEl.getBoundingClientRect().left < colOrigemEl.getBoundingClientRect().left);
+
   // fade-out rapidinho no lugar de origem, antes de mudar de coluna de verdade
   const elAntigo = document.querySelector(`.card[data-card-id="${cardId}"]`);
   if(elAntigo){
-    elAntigo.classList.add('card-saindo');
+    elAntigo.classList.add(indoParaEsquerda ? 'card-saindo-esquerda' : 'card-saindo');
     await new Promise(resolve=> setTimeout(resolve, 150));
   }
 
@@ -3002,7 +3007,7 @@ async function moveCard(cardId, columnId, ordem){
   renderAppPreservandoScroll();
   animarComFlip('.card[data-card-id]', posicoesAntigas, cardId); // desliza os outros cards que abriram espaço; o card movido fica de fora, ganha o fade-in abaixo
   const elNovo = document.querySelector(`.card[data-card-id="${cardId}"]`);
-  if(elNovo) elNovo.classList.add('card-chegando');
+  if(elNovo) elNovo.classList.add(indoParaEsquerda ? 'card-chegando-esquerda' : 'card-chegando');
 
   try{
     const dados = { columnId };
@@ -3018,14 +3023,25 @@ async function moveCard(cardId, columnId, ordem){
 // Calcula em que posição um card deve entrar dentro de uma coluna, olhando pra qual
 // altura (y) o dedo/mouse está — encontra os dois cards vizinhos naquele ponto e usa o
 // valor do meio entre as ordens deles, sem precisar reajustar a ordem de mais ninguém.
-function calcularOrdemDeInsercao(colEl, y, cardIdSendoMovido){
-  const cardEls = [...colEl.querySelectorAll('.card')].filter(el=> el.dataset.cardId !== cardIdSendoMovido);
-  if(!cardEls.length) return 1000;
+// Usada tanto pra mostrar o indicador visual (durante o arrastar) quanto pra calcular
+// a ordem de verdade (ao soltar) — as duas usam exatamente a mesma lógica, garantindo
+// que o que aparece na tela bate com o que realmente vai acontecer ao soltar.
+function encontrarIndiceDeInsercao(cardEls, y){
   let indiceInsercao = cardEls.length;
   for(let i=0;i<cardEls.length;i++){
     const rect = cardEls[i].getBoundingClientRect();
     if(y < rect.top + rect.height/2){ indiceInsercao = i; break; }
   }
+  return indiceInsercao;
+}
+function calcularOrdemDeInsercao(colEl, y, cardIdSendoMovido){
+  const cardEls = [...colEl.querySelectorAll('.card')].filter(el=> el.dataset.cardId !== cardIdSendoMovido);
+  if(!cardEls.length) return 1000;
+  // zera qualquer resto de transform/transição de uma animação de deslize anterior
+  // que ainda possa estar em andamento — sem isso, a posição lida pode ser a de
+  // um quadro intermediário da animação, não a posição final de descanso do card.
+  cardEls.forEach(el=>{ el.style.transition = 'none'; el.style.transform = ''; });
+  const indiceInsercao = encontrarIndiceDeInsercao(cardEls, y);
   const cardAntes = indiceInsercao > 0 ? board.cards.find(c=>c.id===cardEls[indiceInsercao-1].dataset.cardId) : null;
   const cardDepois = indiceInsercao < cardEls.length ? board.cards.find(c=>c.id===cardEls[indiceInsercao].dataset.cardId) : null;
   const ordemAntes = cardAntes ? (cardAntes.ordem||0) : null;
@@ -3042,11 +3058,7 @@ function mostrarIndicadorDeInsercao(colEl, y, cardIdSendoMovido){
   limparIndicadorDeInsercao();
   const cardEls = [...colEl.querySelectorAll('.card')].filter(el=> el.dataset.cardId !== cardIdSendoMovido);
   if(!cardEls.length) return;
-  let indiceInsercao = cardEls.length;
-  for(let i=0;i<cardEls.length;i++){
-    const rect = cardEls[i].getBoundingClientRect();
-    if(y < rect.top + rect.height/2){ indiceInsercao = i; break; }
-  }
+  const indiceInsercao = encontrarIndiceDeInsercao(cardEls, y);
   if(indiceInsercao < cardEls.length) cardEls[indiceInsercao].classList.add('card-indicador-antes');
   else cardEls[cardEls.length-1].classList.add('card-indicador-depois');
 }
@@ -6186,58 +6198,52 @@ function bindAppEvents(){
       cardEl.classList.add('dragging');
     });
     cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); limparIndicadorDeInsercao(); });
+  });
 
-    // Arrastar por toque — usa Pointer Events (não Touch Events puro) porque dá pra
-    // "capturar" o ponteiro com setPointerCapture: uma vez chamado, TODOS os eventos
-    // seguintes desse dedo chegam garantidamente aqui, mesmo que ele se mova pra cima
-    // de outro elemento na tela. É mais confiável que depender do navegador entregar
-    // touchmove certinho o tempo todo. Só entra em ação pra toque/caneta — mouse
-    // continua usando o arrastar nativo (dragstart/dragover/drop) de sempre, que já
-    // funciona bem.
-    cardEl.addEventListener('pointerdown', (e)=>{
+  // Arrastar por toque — usa Pointer Events com setPointerCapture, e (isso é o
+  // ponto principal) começa a partir da ALCINHA (botão ⇄), não do card inteiro.
+  // Segundo a documentação oficial de bibliotecas de drag-and-drop (dnd-kit): depois
+  // que um toque começa, mudar "touch-action" por JavaScript não tem efeito nenhum —
+  // ele precisa estar fixado no CSS *antes* do dedo tocar. Como não dá pra travar o
+  // card inteiro sem quebrar a rolagem normal da lista, a solução recomendada é usar
+  // uma alcinha dedicada com touch-action:none já no CSS (veja style.css). Como essa
+  // alcinha não compete com nenhuma rolagem, nem precisa mais de temporizador de
+  // segurar — o próprio movimento do dedo já decide na hora se é toque (abre o menu)
+  // ou arrastar. Mouse continua com o arrastar nativo do card inteiro, de sempre.
+  app.querySelectorAll('.card-move-btn').forEach(btn=>{
+    btn.addEventListener('pointerdown', (e)=>{
       if(e.pointerType === 'mouse') return;
-      if(e.target.closest('.card-move-wrap') || e.target.closest('[data-action="toggle-move-menu"]') || e.target.closest('.wa-btn')) return; // não conflita com os botões
-      clearTimeout(cardTouchLongPressTimer);
-      cardTouchDrag = { cardId: cardEl.dataset.cardId, cardEl, arrastando:false, ultimoX:e.clientX, ultimoY:e.clientY, pointerId:e.pointerId };
-      cardTouchLongPressTimer = setTimeout(()=>{
-        if(!cardTouchDrag) return;
-        try{ cardEl.setPointerCapture(cardTouchDrag.pointerId); }catch(err){ /* aparelho sem suporte — segue sem capturar, cai pro comportamento antigo */ }
-        iniciarArrastoDeCard(cardTouchDrag.ultimoX, cardTouchDrag.ultimoY);
-      }, 550);
+      const cardEl = btn.closest('.card');
+      if(!cardEl) return;
+      cardTouchDrag = { cardId: cardEl.dataset.cardId, cardEl, btn, arrastando:false, startX:e.clientX, startY:e.clientY, ultimoX:e.clientX, ultimoY:e.clientY, pointerId:e.pointerId };
     });
-
-    cardEl.addEventListener('pointermove', (e)=>{
-      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl || cardTouchDrag.pointerId !== e.pointerId) return;
-      if(!cardTouchDrag.arrastando){
-        // A mão treme naturalmente mesmo tentando ficar parada — só cancela o
-        // "segurar" se o movimento for grande o suficiente pra ser claramente uma
-        // rolagem de verdade, não essa tremedeira natural do dedo.
-        const dx = e.clientX - cardTouchDrag.ultimoX;
-        const dy = e.clientY - cardTouchDrag.ultimoY;
-        if(Math.sqrt(dx*dx + dy*dy) > 10){
-          clearTimeout(cardTouchLongPressTimer);
-          cardTouchDrag = null;
-        }
-        return;
-      }
+    btn.addEventListener('pointermove', (e)=>{
+      if(!cardTouchDrag || cardTouchDrag.btn !== btn || cardTouchDrag.pointerId !== e.pointerId) return;
       cardTouchDrag.ultimoX = e.clientX;
       cardTouchDrag.ultimoY = e.clientY;
-      e.preventDefault(); // já está arrastando de verdade — impede a página de rolar junto
+      if(!cardTouchDrag.arrastando){
+        const dx = e.clientX - cardTouchDrag.startX;
+        const dy = e.clientY - cardTouchDrag.startY;
+        if(Math.sqrt(dx*dx + dy*dy) < 8) return; // ainda é só um toque, não decidiu se vira arrastar
+        try{ btn.setPointerCapture(cardTouchDrag.pointerId); }catch(err){ /* aparelho sem suporte — segue sem capturar */ }
+        iniciarArrastoDeCard(cardTouchDrag.ultimoX, cardTouchDrag.ultimoY);
+      }
+      e.preventDefault();
       atualizarArrastoDeCard(e.clientX, e.clientY);
     }, { passive:false });
-
-    cardEl.addEventListener('pointerup', (e)=>{
-      clearTimeout(cardTouchLongPressTimer);
-      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl || cardTouchDrag.pointerId !== e.pointerId) return;
+    btn.addEventListener('pointerup', (e)=>{
+      if(!cardTouchDrag || cardTouchDrag.btn !== btn || cardTouchDrag.pointerId !== e.pointerId) return;
       if(cardTouchDrag.arrastando){
-        e.preventDefault(); // evita o clique fantasma que abriria o card logo depois de soltar
+        e.preventDefault(); // impede o clique de também abrir o menu logo depois de soltar
+        e.stopPropagation();
         finalizarArrastoDeCard(e.clientX, e.clientY);
       }
+      // se não chegou a arrastar (foi só um toque rápido), não faz nada aqui — o
+      // clique natural do botão continua e abre o menu "Mover para", como sempre
       cardTouchDrag = null;
     });
-    cardEl.addEventListener('pointercancel', ()=>{
-      clearTimeout(cardTouchLongPressTimer);
-      if(cardTouchDrag && cardTouchDrag.cardEl === cardEl) cancelarArrastoDeCard();
+    btn.addEventListener('pointercancel', ()=>{
+      if(cardTouchDrag && cardTouchDrag.btn === btn) cancelarArrastoDeCard();
       cardTouchDrag = null;
     });
   });
