@@ -2963,9 +2963,10 @@ function capturarPosicoes(seletor){
   });
   return posicoes;
 }
-function animarComFlip(seletor, posicoesAntigas){
+function animarComFlip(seletor, posicoesAntigas, idParaExcluir){
   document.querySelectorAll(seletor).forEach(el=>{
     const chave = el.dataset.cardId || el.dataset.colId;
+    if(idParaExcluir && chave===idParaExcluir) return; // esse aqui vai ganhar sua própria animação (fade), não o deslize
     const antiga = posicoesAntigas.get(chave);
     if(!antiga) return; // elemento novo (não existia antes) — nasce direto no lugar, sem animação
     const nova = el.getBoundingClientRect();
@@ -2982,17 +2983,27 @@ function animarComFlip(seletor, posicoesAntigas){
   });
 }
 function capturarPosicoesDosCards(){ return capturarPosicoes('.card[data-card-id]'); }
-function animarCardsComFlip(posicoesAntigas){ animarComFlip('.card[data-card-id]', posicoesAntigas); }
 async function moveCard(cardId, columnId, ordem){
   const card = board.cards.find(c=>c.id===cardId);
   if(!card) return;
   if(card.columnId===columnId && ordem===undefined) return; // mesma coluna e sem posição nova pra aplicar — nada a fazer
   const anterior = { columnId: card.columnId, ordem: card.ordem };
+
+  // fade-out rapidinho no lugar de origem, antes de mudar de coluna de verdade
+  const elAntigo = document.querySelector(`.card[data-card-id="${cardId}"]`);
+  if(elAntigo){
+    elAntigo.classList.add('card-saindo');
+    await new Promise(resolve=> setTimeout(resolve, 150));
+  }
+
   const posicoesAntigas = capturarPosicoesDosCards();
   card.columnId = columnId; // otimista
   if(ordem!==undefined) card.ordem = ordem;
   renderAppPreservandoScroll();
-  animarCardsComFlip(posicoesAntigas);
+  animarComFlip('.card[data-card-id]', posicoesAntigas, cardId); // desliza os outros cards que abriram espaço; o card movido fica de fora, ganha o fade-in abaixo
+  const elNovo = document.querySelector(`.card[data-card-id="${cardId}"]`);
+  if(elNovo) elNovo.classList.add('card-chegando');
+
   try{
     const dados = { columnId };
     if(ordem!==undefined) dados.ordem = ordem;
@@ -6176,57 +6187,55 @@ function bindAppEvents(){
     });
     cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); limparIndicadorDeInsercao(); });
 
-    // Arrastar por toque — a API nativa de drag-and-drop do navegador não funciona
-    // bem em touch (tablet/celular). A primeira versão tentava distinguir "rolar" de
-    // "arrastar" só pela distância percorrida, mas o navegador já trava a decisão de
-    // "isso é rolagem" assim que o dedo se move um pouco — tarde demais pra impedir.
-    // Por isso agora funciona igual o segurar-pra-copiar do calendário: primeiro
-    // segura parado por um instante (nada de rolagem ainda acontecendo), só DEPOIS
-    // disso o arrastar é liberado — com um cartão fantasma seguindo o dedo, pra ficar
-    // bem visível o que está sendo movido.
-    cardEl.addEventListener('touchstart', (e)=>{
+    // Arrastar por toque — usa Pointer Events (não Touch Events puro) porque dá pra
+    // "capturar" o ponteiro com setPointerCapture: uma vez chamado, TODOS os eventos
+    // seguintes desse dedo chegam garantidamente aqui, mesmo que ele se mova pra cima
+    // de outro elemento na tela. É mais confiável que depender do navegador entregar
+    // touchmove certinho o tempo todo. Só entra em ação pra toque/caneta — mouse
+    // continua usando o arrastar nativo (dragstart/dragover/drop) de sempre, que já
+    // funciona bem.
+    cardEl.addEventListener('pointerdown', (e)=>{
+      if(e.pointerType === 'mouse') return;
       if(e.target.closest('.card-move-wrap') || e.target.closest('[data-action="toggle-move-menu"]') || e.target.closest('.wa-btn')) return; // não conflita com os botões
-      const touch = e.touches[0];
       clearTimeout(cardTouchLongPressTimer);
-      cardTouchDrag = { cardId: cardEl.dataset.cardId, cardEl, arrastando:false, ultimoX:touch.clientX, ultimoY:touch.clientY };
+      cardTouchDrag = { cardId: cardEl.dataset.cardId, cardEl, arrastando:false, ultimoX:e.clientX, ultimoY:e.clientY, pointerId:e.pointerId };
       cardTouchLongPressTimer = setTimeout(()=>{
         if(!cardTouchDrag) return;
+        try{ cardEl.setPointerCapture(cardTouchDrag.pointerId); }catch(err){ /* aparelho sem suporte — segue sem capturar, cai pro comportamento antigo */ }
         iniciarArrastoDeCard(cardTouchDrag.ultimoX, cardTouchDrag.ultimoY);
       }, 550);
-    }, { passive:true });
+    });
 
-    cardEl.addEventListener('touchmove', (e)=>{
-      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
-      const touch = e.touches[0];
+    cardEl.addEventListener('pointermove', (e)=>{
+      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl || cardTouchDrag.pointerId !== e.pointerId) return;
       if(!cardTouchDrag.arrastando){
         // A mão treme naturalmente mesmo tentando ficar parada — só cancela o
         // "segurar" se o movimento for grande o suficiente pra ser claramente uma
         // rolagem de verdade, não essa tremedeira natural do dedo.
-        const dx = touch.clientX - cardTouchDrag.ultimoX;
-        const dy = touch.clientY - cardTouchDrag.ultimoY;
+        const dx = e.clientX - cardTouchDrag.ultimoX;
+        const dy = e.clientY - cardTouchDrag.ultimoY;
         if(Math.sqrt(dx*dx + dy*dy) > 10){
           clearTimeout(cardTouchLongPressTimer);
           cardTouchDrag = null;
         }
         return;
       }
-      cardTouchDrag.ultimoX = touch.clientX;
-      cardTouchDrag.ultimoY = touch.clientY;
+      cardTouchDrag.ultimoX = e.clientX;
+      cardTouchDrag.ultimoY = e.clientY;
       e.preventDefault(); // já está arrastando de verdade — impede a página de rolar junto
-      atualizarArrastoDeCard(touch.clientX, touch.clientY);
+      atualizarArrastoDeCard(e.clientX, e.clientY);
     }, { passive:false });
 
-    cardEl.addEventListener('touchend', (e)=>{
+    cardEl.addEventListener('pointerup', (e)=>{
       clearTimeout(cardTouchLongPressTimer);
-      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl) return;
+      if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl || cardTouchDrag.pointerId !== e.pointerId) return;
       if(cardTouchDrag.arrastando){
         e.preventDefault(); // evita o clique fantasma que abriria o card logo depois de soltar
-        const touch = e.changedTouches[0];
-        finalizarArrastoDeCard(touch.clientX, touch.clientY);
+        finalizarArrastoDeCard(e.clientX, e.clientY);
       }
       cardTouchDrag = null;
     });
-    cardEl.addEventListener('touchcancel', ()=>{
+    cardEl.addEventListener('pointercancel', ()=>{
       clearTimeout(cardTouchLongPressTimer);
       if(cardTouchDrag && cardTouchDrag.cardEl === cardEl) cancelarArrastoDeCard();
       cardTouchDrag = null;
