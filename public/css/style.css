@@ -342,7 +342,7 @@ input[type=date]::-webkit-calendar-picker-indicator:hover, input[type=time]::-we
 .metric-value{ font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:600; color:var(--ink); }
 .metric-sub{ font-size:11px; color:var(--ink-soft); margin-top:3px; }
 
-.dash-grid{ display:grid; grid-template-columns:1.4fr 1fr; gap:16px; margin-bottom:16px; }
+.dash-grid{ display:grid; grid-template-columns:1.4fr 1fr; gap:16px; margin-bottom:16px; align-items:start; }
 .dash-panel{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:20px; min-width:0; }
 .dash-panel-title{ font-size:14px; font-weight:600; margin:0 0 16px; }
 .dash-panel-title-recolhivel{ display:flex; align-items:center; justify-content:space-between; }
