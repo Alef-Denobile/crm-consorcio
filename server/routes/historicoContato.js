@@ -33,6 +33,23 @@ router.post('/', async (req, res) => {
   }
 });
 
+// PUT /api/historico-contato/:id -> edita o texto de um registro existente
+router.put('/:id', async (req, res) => {
+  try {
+    const { texto } = req.body;
+    if (!texto || !texto.trim()) return res.status(400).json({ error: 'Escreva o que aconteceu.' });
+    const item = await HistoricoContato.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { texto: texto.trim() },
+      { new: true }
+    );
+    if (!item) return res.status(404).json({ error: 'Registro não encontrado.' });
+    res.json(item.toJSON());
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao editar o registro.' });
+  }
+});
+
 // DELETE /api/historico-contato/:id -> remove um registro (ex: escreveu errado)
 router.delete('/:id', async (req, res) => {
   try {

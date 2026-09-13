@@ -258,6 +258,13 @@ let historicoContatoEnviando = false;
 let tarefaRapidaTitulo = '';
 let tarefaRapidaData = '';
 let tarefaRapidaCriando = false;
+let extrasTela = null; // null (fechado) | 'menu' | 'etiquetas' | 'anexos' | 'tarefas' | 'tarefas-lista' | 'historico'
+let etiquetaInputValor = '';
+let etiquetaEditandoOriginal = null; // texto original da etiqueta sendo editada, ou null se for uma nova
+let tarefasDoLeadCarregadas = false;
+let tarefasDoLead = [];
+let agendaDiaDestacado = null; // dia (YYYY-MM-DD) marcado com a cor de destaque, ao vir de um clique numa tarefa
+let historicoContatoEditandoId = null;
 let anexosCarregados = false;
 let anexoEnviando = false;
 let anexoMsg = null;
@@ -895,6 +902,7 @@ function mudarMesAgenda(delta){
   const [ano, mes] = agendaMesAtual.split('-').map(Number);
   const d = new Date(ano, mes - 1 + delta, 1);
   agendaMesAtual = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  agendaDiaDestacado = null;
   loadAgendaMes(agendaMesAtual);
 }
 // Extrai a data (YYYY-MM-DD) certa do vencimento de uma tarefa, em horário local —
@@ -2228,15 +2236,27 @@ async function loadHistoricoContato(cardId){
 }
 function renderHistoricoContatoListaHtml(){
   if(!historicoContatoItens.length) return '<p class="dash-empty">Nenhum registro ainda.</p>';
-  return `<div class="historico-lista">${historicoContatoItens.map(i=>`
+  return `<div class="historico-lista">${historicoContatoItens.map(i=>{
+    if(historicoContatoEditandoId === i.id){
+      return `
+    <div class="historico-item">
+      <div class="field-row-flex" style="flex:1;">
+        <input type="text" id="historico-edit-input-${i.id}" value="${esc(i.texto)}" />
+        <button class="btn-primary" data-action="salvar-edicao-historico" data-id="${i.id}">Salvar</button>
+        <button class="btn-outline" data-action="cancelar-edicao-historico">Cancelar</button>
+      </div>
+    </div>`;
+    }
+    return `
     <div class="historico-item">
       <div style="flex:1;">
         <span class="historico-item-texto">${esc(i.texto)}</span>
         <span class="historico-item-data">${formatDateHora(i.createdAt)}</span>
       </div>
+      <button class="icon-btn" data-action="editar-historico-contato" data-id="${i.id}" title="Editar">✎</button>
       <button class="icon-btn" data-action="excluir-historico-contato" data-id="${i.id}" title="Excluir">${ICON_TRASH}</button>
-    </div>
-  `).join('')}</div>`;
+    </div>`;
+  }).join('')}</div>`;
 }
 function ligarBindingsHistoricoContato(){
   document.querySelectorAll('[data-action="excluir-historico-contato"]').forEach(btn=>{
@@ -2252,6 +2272,44 @@ function ligarBindingsHistoricoContato(){
       }catch(e){
         historicoContatoItens.splice(idx,0,removido);
         errorMsg = 'Não foi possível excluir o registro.';
+        if(lista){ lista.innerHTML = renderHistoricoContatoListaHtml(); ligarBindingsHistoricoContato(); }
+      }
+    });
+  });
+  document.querySelectorAll('[data-action="editar-historico-contato"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      historicoContatoEditandoId = btn.dataset.id;
+      const lista = document.getElementById('f-historico-lista');
+      if(lista){ lista.innerHTML = renderHistoricoContatoListaHtml(); ligarBindingsHistoricoContato(); }
+      const input = document.getElementById(`historico-edit-input-${historicoContatoEditandoId}`);
+      if(input){ input.focus(); input.select(); }
+    });
+  });
+  document.querySelectorAll('[data-action="cancelar-edicao-historico"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      historicoContatoEditandoId = null;
+      const lista = document.getElementById('f-historico-lista');
+      if(lista){ lista.innerHTML = renderHistoricoContatoListaHtml(); ligarBindingsHistoricoContato(); }
+    });
+  });
+  document.querySelectorAll('[data-action="salvar-edicao-historico"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.id;
+      const input = document.getElementById(`historico-edit-input-${id}`);
+      const novoTexto = input ? input.value.trim() : '';
+      if(!novoTexto) return;
+      const idx = historicoContatoItens.findIndex(i=>i.id===id);
+      if(idx===-1) return;
+      const anterior = historicoContatoItens[idx].texto;
+      historicoContatoItens[idx].texto = novoTexto;
+      historicoContatoEditandoId = null;
+      const lista = document.getElementById('f-historico-lista');
+      if(lista){ lista.innerHTML = renderHistoricoContatoListaHtml(); ligarBindingsHistoricoContato(); }
+      try{
+        await apiRequest('PUT', `/historico-contato/${id}`, { texto: novoTexto });
+      }catch(e){
+        historicoContatoItens[idx].texto = anterior;
+        errorMsg = 'Não foi possível editar o registro.';
         if(lista){ lista.innerHTML = renderHistoricoContatoListaHtml(); ligarBindingsHistoricoContato(); }
       }
     });
@@ -5051,7 +5109,7 @@ function renderCalendarioConteudo(){
         ].slice(0,3);
         const isHoje = diaISO === hojeISO;
         return `
-          <div class="agenda-cell ${isHoje?'agenda-cell-hoje':''} ${totalItens?'tem-itens':''}" data-action="abrir-dia-agenda" data-dia="${diaISO}">
+          <div class="agenda-cell ${isHoje?'agenda-cell-hoje':''} ${totalItens?'tem-itens':''} ${diaISO===agendaDiaDestacado?'agenda-cell-destacada':''}" data-action="abrir-dia-agenda" data-dia="${diaISO}">
             <span class="agenda-cell-numero">${dia}</span>
             ${totalItens ? `
               <div class="agenda-cell-itens">
@@ -6805,6 +6863,9 @@ function openEditCard(id){
   };
   tipoPessoaDropdownAberto = false;
   notifOpen = false;
+  extrasTela = null;
+  etiquetaInputValor = '';
+  etiquetaEditandoOriginal = null;
   anexosCarregados = false;
   anexosDoCard = [];
   anexoMsg = null;
@@ -6832,6 +6893,7 @@ async function criarTarefaRapidaDoCard(){
     goToPage('tarefas');
     await loadAgendaMes(agendaMesAtual);
     agendaDiaSelecionado = dataEscolhida;
+    agendaDiaDestacado = dataEscolhida;
     renderAgendaDiaModal();
   }catch(e){
     errorMsg = 'Não foi possível criar a tarefa.';
@@ -6841,10 +6903,231 @@ async function criarTarefaRapidaDoCard(){
 }
 function closeModal(){ modalForm = null; document.getElementById('modal-root').innerHTML=''; }
 
+function renderExtrasOverlayHtml(f){
+  let titulo = 'Extras';
+  let voltarPara = null; // pra onde o botão de voltar leva — null fecha os Extras de vez
+  let corpo = '';
+
+  if(extrasTela === 'menu'){
+    corpo = `
+      <div class="extras-menu">
+        <button type="button" class="extras-menu-btn" data-action="extras-ir" data-tela="etiquetas">🏷️<span>Etiquetas</span></button>
+        <button type="button" class="extras-menu-btn" data-action="extras-ir" data-tela="anexos">📎<span>Anexos</span></button>
+        <button type="button" class="extras-menu-btn" data-action="extras-ir" data-tela="tarefas">✅<span>Tarefas</span></button>
+        <button type="button" class="extras-menu-btn" data-action="extras-ir" data-tela="historico">📞<span>Histórico</span></button>
+      </div>
+    `;
+  } else if(extrasTela === 'etiquetas'){
+    titulo = 'Etiquetas';
+    voltarPara = 'menu';
+    const etiquetas = f.etiquetas || [];
+    corpo = `
+      <div class="field-row-flex">
+        <input type="text" id="etiqueta-input" value="${esc(etiquetaInputValor)}" placeholder="Nome da etiqueta" />
+        <button type="button" class="btn-primary" id="etiqueta-salvar-btn">${etiquetaEditandoOriginal ? 'Salvar' : '+ Adicionar'}</button>
+        ${etiquetaEditandoOriginal ? `<button type="button" class="btn-outline" id="etiqueta-cancelar-btn">Cancelar</button>` : ''}
+      </div>
+      ${etiquetas.length ? `
+        <div class="etiquetas-pills" style="margin-top:14px;">
+          ${etiquetas.map(et=>`
+            <span class="etiqueta-pill etiqueta-pill-editavel">
+              ${esc(et)}
+              <button type="button" data-action="etiqueta-editar" data-etiqueta="${esc(et)}" title="Editar">✎</button>
+              <button type="button" data-action="etiqueta-apagar" data-etiqueta="${esc(et)}" title="Apagar">✕</button>
+            </span>
+          `).join('')}
+        </div>
+      ` : '<p class="dash-empty">Nenhuma etiqueta ainda.</p>'}
+    `;
+  } else if(extrasTela === 'anexos'){
+    titulo = 'Anexos';
+    voltarPara = 'menu';
+    corpo = `
+      <input type="file" id="anexo-input" style="display:none;" accept="image/*,application/pdf" />
+      <button type="button" class="btn-outline" id="anexo-upload-btn" ${anexoEnviando?'disabled':''}>${anexoEnviando?'Enviando…':'+ Adicionar anexo'}</button>
+      <p class="settings-page-note">Imagens ou PDF, até ~3 MB por arquivo.</p>
+      <div id="f-anexos-lista">${!anexosCarregados ? '<p class="settings-page-note">Carregando…</p>' : renderAnexosListaHtml()}</div>
+    `;
+  } else if(extrasTela === 'tarefas'){
+    titulo = 'Tarefas';
+    voltarPara = 'menu';
+    const qtd = tasks.filter(t=>t.leadId===f.id).length;
+    corpo = `
+      <div class="field">
+        <label>Nova tarefa</label>
+        <div class="field-row-flex">
+          <input type="text" id="tarefa-rapida-titulo" value="${esc(tarefaRapidaTitulo)}" placeholder="Ex: Ligar amanhã de manhã" />
+          <input type="date" id="tarefa-rapida-data" value="${tarefaRapidaData || new Date().toISOString().slice(0,10)}" style="max-width:160px;" />
+          <button type="button" class="btn-primary" id="tarefa-rapida-criar-btn" ${tarefaRapidaCriando?'disabled':''}>${tarefaRapidaCriando?'Criando…':'Criar'}</button>
+        </div>
+      </div>
+      <button type="button" class="btn-outline" style="width:100%;" data-action="extras-ir" data-tela="tarefas-lista">Ver tarefas existentes (${qtd})</button>
+    `;
+  } else if(extrasTela === 'tarefas-lista'){
+    titulo = 'Tarefas existentes';
+    voltarPara = 'tarefas';
+    const tarefasDoLead = tasks.filter(t=>t.leadId===f.id).slice().sort((a,b)=> (a.vencimento||'').localeCompare(b.vencimento||''));
+    corpo = tarefasDoLead.length ? `
+      <div class="historico-lista">
+        ${tarefasDoLead.map(t=>`
+          <button type="button" class="historico-item historico-item-clicavel" data-action="extras-abrir-tarefa-na-agenda" data-vencimento="${t.vencimento||''}">
+            <div style="flex:1; text-align:left;">
+              <span class="historico-item-texto">${t.concluida?'✓ ':''}${esc(t.titulo)}</span>
+              <span class="historico-item-data">${t.vencimento ? formatDate(t.vencimento) : 'Sem data'}</span>
+            </div>
+          </button>
+        `).join('')}
+      </div>
+    ` : '<p class="dash-empty">Nenhuma tarefa ainda pra esse lead.</p>';
+  } else if(extrasTela === 'historico'){
+    titulo = 'Histórico de contato';
+    voltarPara = 'menu';
+    corpo = `
+      <div class="field-row-flex">
+        <input type="text" id="historico-input" value="${esc(historicoContatoTexto)}" placeholder="Ex: Tentei contato 3x hoje, cliente não atendeu" />
+        <button type="button" class="btn-primary" id="historico-add-btn" ${historicoContatoEnviando?'disabled':''}>${historicoContatoEnviando?'Salvando…':'Adicionar'}</button>
+      </div>
+      <div id="f-historico-lista" style="margin-top:12px;">${!historicoContatoCarregado ? '<p class="settings-page-note">Carregando…</p>' : renderHistoricoContatoListaHtml()}</div>
+    `;
+  }
+
+  return `
+    <div class="overlay" id="modal-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <button id="extras-voltar" class="icon-btn" title="Voltar" data-voltar-para="${voltarPara||''}">←</button>
+          <h3>${titulo}</h3>
+          <button id="modal-close">✕</button>
+        </div>
+        <div class="modal-body">${corpo}</div>
+      </div>
+    </div>
+  `;
+}
+function ligarBindingsExtras(){
+  document.getElementById('modal-close').addEventListener('click', closeModal);
+  document.getElementById('modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='modal-overlay') closeModal(); });
+  const voltarBtn = document.getElementById('extras-voltar');
+  if(voltarBtn) voltarBtn.addEventListener('click', ()=>{
+    const para = voltarBtn.dataset.voltarPara;
+    extrasTela = para || null; // sem "voltarPara" = fecha os Extras de vez, volta pro formulário
+    etiquetaEditandoOriginal = null;
+    etiquetaInputValor = '';
+    renderModal();
+  });
+  app.querySelectorAll ? null : null; // (sem uso — mantém o padrão dos outros bindings do arquivo)
+
+  document.querySelectorAll('[data-action="extras-ir"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ extrasTela = btn.dataset.tela; renderModal(); });
+  });
+
+  // Etiquetas
+  const etiquetaInput = document.getElementById('etiqueta-input');
+  if(etiquetaInput) etiquetaInput.addEventListener('input', (e)=> etiquetaInputValor = e.target.value);
+  const etiquetaSalvarBtn = document.getElementById('etiqueta-salvar-btn');
+  if(etiquetaSalvarBtn) etiquetaSalvarBtn.addEventListener('click', salvarEtiquetaExtras);
+  const etiquetaCancelarBtn = document.getElementById('etiqueta-cancelar-btn');
+  if(etiquetaCancelarBtn) etiquetaCancelarBtn.addEventListener('click', ()=>{
+    etiquetaEditandoOriginal = null; etiquetaInputValor = ''; renderModal();
+  });
+  document.querySelectorAll('[data-action="etiqueta-editar"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      etiquetaEditandoOriginal = btn.dataset.etiqueta;
+      etiquetaInputValor = btn.dataset.etiqueta;
+      renderModal();
+      const input = document.getElementById('etiqueta-input');
+      if(input){ input.focus(); input.select(); }
+    });
+  });
+  document.querySelectorAll('[data-action="etiqueta-apagar"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> apagarEtiquetaExtras(btn.dataset.etiqueta));
+  });
+
+  // Anexos (mesmo comportamento de antes, só que agora dentro dos Extras)
+  const anexoInput = document.getElementById('anexo-input');
+  const anexoUploadBtn = document.getElementById('anexo-upload-btn');
+  if(anexoUploadBtn && anexoInput) anexoUploadBtn.addEventListener('click', ()=> anexoInput.click());
+  if(anexoInput) anexoInput.addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(file) handleAnexoFileSelected(file);
+  });
+
+  // Tarefas
+  const tarefaRapidaTituloInput = document.getElementById('tarefa-rapida-titulo');
+  if(tarefaRapidaTituloInput) tarefaRapidaTituloInput.addEventListener('input', (e)=> tarefaRapidaTitulo = e.target.value);
+  const tarefaRapidaDataInput = document.getElementById('tarefa-rapida-data');
+  if(tarefaRapidaDataInput) tarefaRapidaDataInput.addEventListener('input', (e)=> tarefaRapidaData = e.target.value);
+  const tarefaRapidaCriarBtn = document.getElementById('tarefa-rapida-criar-btn');
+  if(tarefaRapidaCriarBtn) tarefaRapidaCriarBtn.addEventListener('click', criarTarefaRapidaDoCard);
+  document.querySelectorAll('[data-action="extras-abrir-tarefa-na-agenda"]').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const vencimento = btn.dataset.vencimento;
+      if(!vencimento) return;
+      closeModal();
+      agendaMesAtual = vencimento.slice(0,7);
+      goToPage('tarefas');
+      await loadAgendaMes(agendaMesAtual);
+      agendaDiaSelecionado = vencimento;
+      agendaDiaDestacado = vencimento;
+      renderAgendaDiaModal();
+    });
+  });
+
+  // Histórico de contato
+  const historicoInput = document.getElementById('historico-input');
+  if(historicoInput){
+    historicoInput.addEventListener('input', (e)=> historicoContatoTexto = e.target.value);
+    historicoInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); adicionarHistoricoContato(); } });
+  }
+  const historicoAddBtn = document.getElementById('historico-add-btn');
+  if(historicoAddBtn) historicoAddBtn.addEventListener('click', adicionarHistoricoContato);
+  ligarBindingsHistoricoContato();
+}
+async function salvarEtiquetaExtras(){
+  const novoValor = etiquetaInputValor.trim();
+  if(!novoValor || !modalForm) return;
+  const atuais = modalForm.etiquetas || [];
+  let novasEtiquetas;
+  if(etiquetaEditandoOriginal){
+    novasEtiquetas = atuais.map(et=> et===etiquetaEditandoOriginal ? novoValor : et);
+  } else {
+    if(atuais.includes(novoValor)){ etiquetaInputValor=''; renderModal(); return; } // já existe, não duplica
+    novasEtiquetas = [...atuais, novoValor];
+  }
+  await salvarEtiquetasNoCard(novasEtiquetas);
+  etiquetaEditandoOriginal = null;
+  etiquetaInputValor = '';
+  renderModal();
+}
+async function apagarEtiquetaExtras(etiqueta){
+  if(!modalForm) return;
+  const novasEtiquetas = (modalForm.etiquetas||[]).filter(et=> et!==etiqueta);
+  await salvarEtiquetasNoCard(novasEtiquetas);
+  renderModal();
+}
+async function salvarEtiquetasNoCard(novasEtiquetas){
+  const anteriores = modalForm.etiquetas || [];
+  modalForm.etiquetas = novasEtiquetas; // otimista
+  try{
+    await apiRequest('PUT', `/cards/${modalForm.id}`, { etiquetas: novasEtiquetas });
+    const card = board.cards.find(c=>c.id===modalForm.id);
+    if(card) card.etiquetas = novasEtiquetas;
+  }catch(e){
+    modalForm.etiquetas = anteriores;
+    errorMsg = 'Não foi possível salvar as etiquetas.';
+  }
+}
+
 function renderModal(){
   const root = document.getElementById('modal-root');
   if(!modalForm){ root.innerHTML=''; return; }
   const f = modalForm;
+
+  if(extrasTela){
+    root.innerHTML = renderExtrasOverlayHtml(f);
+    ligarBindingsExtras();
+    return;
+  }
 
   root.innerHTML = `
     <div class="overlay" id="modal-overlay">
@@ -6959,11 +7242,6 @@ function renderModal(){
             ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-tarefa">${ICON_SPARKLE} Sugerir tarefa de acompanhamento</button>` : ''}
             <div class="ai-result" id="f-ai-tarefa-result" style="display:none;"></div>
           </div>
-          <div class="field">
-            <label>Etiquetas (separadas por vírgula)</label>
-            <input type="text" id="f-etiquetas" value="${esc((f.etiquetas||[]).join(', '))}" placeholder="Ex: indicação, urgente" />
-            ${(f.etiquetas||[]).length ? `<div class="etiquetas-pills">${f.etiquetas.map(et=>`<span class="etiqueta-pill">${esc(et)}</span>`).join('')}</div>` : ''}
-          </div>
           ${camposPersonalizados.map(campo=>`
             <div class="field">
               <label>${esc(campo.nome)}</label>
@@ -6972,29 +7250,7 @@ function renderModal(){
           `).join('')}
           ${!f.__isNew ? `
             <div class="field">
-              <label>Anexos</label>
-              <input type="file" id="anexo-input" style="display:none;" accept="image/*,application/pdf" />
-              <button type="button" class="btn-outline" id="anexo-upload-btn" ${anexoEnviando?'disabled':''}>${anexoEnviando?'Enviando…':'+ Adicionar anexo'}</button>
-              <p class="settings-page-note">Imagens ou PDF, até ~3 MB por arquivo.</p>
-              <div id="f-anexos-lista">${!anexosCarregados ? '<p class="settings-page-note">Carregando…</p>' : renderAnexosListaHtml()}</div>
-            </div>
-          ` : ''}
-          ${!f.__isNew ? `
-            <div class="field">
-              <label>Nova tarefa pra esse lead</label>
-              <div class="field-row-flex">
-                <input type="text" id="tarefa-rapida-titulo" value="${esc(tarefaRapidaTitulo)}" placeholder="Ex: Ligar amanhã de manhã" />
-                <input type="date" id="tarefa-rapida-data" value="${tarefaRapidaData || new Date().toISOString().slice(0,10)}" style="max-width:160px;" />
-                <button type="button" class="btn-outline" id="tarefa-rapida-criar-btn" ${tarefaRapidaCriando?'disabled':''}>${tarefaRapidaCriando?'Criando…':'Criar e abrir na Agenda'}</button>
-              </div>
-            </div>
-            <div class="field">
-              <label>Histórico de contato</label>
-              <div class="field-row-flex">
-                <input type="text" id="historico-input" value="${esc(historicoContatoTexto)}" placeholder="Ex: Tentei contato 3x hoje, cliente não atendeu" />
-                <button type="button" class="btn-outline" id="historico-add-btn" ${historicoContatoEnviando?'disabled':''}>${historicoContatoEnviando?'Salvando…':'Adicionar'}</button>
-              </div>
-              <div id="f-historico-lista">${!historicoContatoCarregado ? '<p class="settings-page-note">Carregando…</p>' : renderHistoricoContatoListaHtml()}</div>
+              <button type="button" class="btn-outline" id="f-abrir-extras" style="width:100%;">⋯ Extras (etiquetas, anexos, tarefas, histórico)</button>
             </div>
           ` : ''}
           ${!f.__isNew && f.sugestaoIA && f.sugestaoIA.texto ? `
@@ -7039,37 +7295,14 @@ function renderModal(){
   });
   waModalBtn.addEventListener('click', ()=> abrirWhatsapp(modalForm.telefone));
   document.getElementById('f-obs').addEventListener('input', (e)=> modalForm.obs = e.target.value);
-  const etiquetasInput = document.getElementById('f-etiquetas');
-  if(etiquetasInput) etiquetasInput.addEventListener('input', (e)=>{
-    modalForm.etiquetas = e.target.value.split(',').map(s=>s.trim()).filter(Boolean);
-  });
   document.querySelectorAll('.f-campo-personalizado').forEach(el=>{
     el.addEventListener('input', (e)=>{
       if(!modalForm.camposPersonalizados) modalForm.camposPersonalizados = {};
       modalForm.camposPersonalizados[el.dataset.campoId] = e.target.value;
     });
   });
-  const anexoInput = document.getElementById('anexo-input');
-  const anexoUploadBtn = document.getElementById('anexo-upload-btn');
-  if(anexoUploadBtn && anexoInput) anexoUploadBtn.addEventListener('click', ()=> anexoInput.click());
-  if(anexoInput) anexoInput.addEventListener('change', (e)=>{
-    const file = e.target.files && e.target.files[0];
-    if(file) handleAnexoFileSelected(file);
-  });
-  const tarefaRapidaTituloInput = document.getElementById('tarefa-rapida-titulo');
-  if(tarefaRapidaTituloInput) tarefaRapidaTituloInput.addEventListener('input', (e)=> tarefaRapidaTitulo = e.target.value);
-  const tarefaRapidaDataInput = document.getElementById('tarefa-rapida-data');
-  if(tarefaRapidaDataInput) tarefaRapidaDataInput.addEventListener('input', (e)=> tarefaRapidaData = e.target.value);
-  const tarefaRapidaCriarBtn = document.getElementById('tarefa-rapida-criar-btn');
-  if(tarefaRapidaCriarBtn) tarefaRapidaCriarBtn.addEventListener('click', criarTarefaRapidaDoCard);
-  const historicoInput = document.getElementById('historico-input');
-  if(historicoInput){
-    historicoInput.addEventListener('input', (e)=> historicoContatoTexto = e.target.value);
-    historicoInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); adicionarHistoricoContato(); } });
-  }
-  const historicoAddBtn = document.getElementById('historico-add-btn');
-  if(historicoAddBtn) historicoAddBtn.addEventListener('click', adicionarHistoricoContato);
-  ligarBindingsHistoricoContato();
+  const abrirExtrasBtn = document.getElementById('f-abrir-extras');
+  if(abrirExtrasBtn) abrirExtrasBtn.addEventListener('click', ()=>{ extrasTela = 'menu'; renderModal(); });
   const aiMensagemBtn = document.getElementById('f-ai-mensagem');
   if(aiMensagemBtn) aiMensagemBtn.addEventListener('click', sugerirMensagemIA);
   const aiTarefaBtn = document.getElementById('f-ai-tarefa');

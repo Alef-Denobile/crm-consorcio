@@ -761,3 +761,14 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 /* variante do field-row pra linhas com número variável de itens (2 ou 3), tipo tarefa rápida e histórico */
 .field-row-flex{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
 .field-row-flex input[type="text"]{ flex:1; min-width:160px; }
+
+/* ---------- Extras (menu dentro do modal do lead) ---------- */
+.extras-menu{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.extras-menu-btn{ display:flex; flex-direction:column; align-items:center; gap:8px; padding:22px 12px; border:1px solid var(--line); border-radius:14px; background:var(--paper); cursor:pointer; font-size:13px; font-weight:600; color:var(--ink); }
+.extras-menu-btn:hover{ background:var(--hover-tint); }
+.etiqueta-pill-editavel{ display:inline-flex; align-items:center; gap:6px; }
+.etiqueta-pill-editavel button{ border:none; background:none; cursor:pointer; color:inherit; opacity:.65; font-size:11px; padding:0; }
+.etiqueta-pill-editavel button:hover{ opacity:1; }
+.historico-item-clicavel{ width:100%; border:none; background:none; cursor:pointer; font-family:inherit; }
+.historico-item-clicavel:hover{ background:var(--hover-tint); }
+.agenda-cell-destacada{ outline:2px solid var(--accent); outline-offset:-2px; border-radius:8px; }
