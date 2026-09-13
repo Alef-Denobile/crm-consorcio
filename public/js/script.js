@@ -326,8 +326,11 @@ let agendaSubTab = 'calendario';
 let gerotSemanaAtual = inicioDaSemana(new Date());
 let gerotBlocos = [];
 let gerotLoaded = false;
-let gerotCelulaEditando = null; // "diaSemana-horario" da célula sendo editada agora, ou null
 let gerotCopiando = false;
+let gerotEditor = null; // { diaSemana, horarioInicio, horarioFim, texto, blocoId (se editando um existente) } ou null se fechado
+let gerotSalvandoErro = null;
+let gerotImportando = false;
+let gerotImportMsg = null;
 let chatMensagens = [];
 let chatLoaded = false;
 let chatTexto = '';
@@ -850,23 +853,151 @@ function mudarSemanaGerot(delta){
   const [ano,mes,dia] = gerotSemanaAtual.split('-').map(Number);
   const d = new Date(ano, mes-1, dia + delta*7);
   gerotSemanaAtual = inicioDaSemana(d);
+  gerotEditor = null;
   loadGerot(gerotSemanaAtual);
 }
-async function salvarBlocoGerot(diaSemana, horario, texto){
-  gerotCelulaEditando = null;
-  try{
-    const resultado = await apiRequest('PUT', '/gerot', { semanaInicio: gerotSemanaAtual, diaSemana, horario, texto });
-    const idx = gerotBlocos.findIndex(b=>b.diaSemana===diaSemana && b.horario===horario);
-    if(resultado.apagado){
-      if(idx>-1) gerotBlocos.splice(idx,1);
-    } else if(idx>-1){
-      gerotBlocos[idx] = resultado;
-    } else {
-      gerotBlocos.push(resultado);
-    }
-  }catch(e){
-    errorMsg = 'Não foi possível salvar esse horário.';
+function abrirGerotEditor(diaSemana, horario, blocoId){
+  gerotSalvandoErro = null;
+  if(blocoId){
+    const b = gerotBlocos.find(x=>x.id===blocoId);
+    if(!b) return;
+    gerotEditor = { diaSemana, horarioInicio: b.horarioInicio, horarioFim: b.horarioFim, texto: b.texto, blocoId: b.id };
+  } else {
+    const idxInicio = GEROT_HORARIOS.indexOf(horario);
+    const fimPadrao = GEROT_LIMITES[idxInicio+1] || GEROT_LIMITES[GEROT_LIMITES.length-1];
+    gerotEditor = { diaSemana, horarioInicio: horario, horarioFim: fimPadrao, texto: '', blocoId: null };
   }
+  renderApp();
+  const input = document.getElementById('gerot-editor-texto');
+  if(input) input.focus();
+}
+function fecharGerotEditor(){
+  gerotEditor = null;
+  gerotSalvandoErro = null;
+  renderApp();
+}
+async function salvarGerotEditor(){
+  if(!gerotEditor) return;
+  const texto = gerotEditor.texto.trim();
+  if(!texto){ gerotSalvandoErro = 'Escreva a atividade desse bloco.'; renderApp(); return; }
+  try{
+    const resultado = await apiRequest('PUT', '/gerot', {
+      semanaInicio: gerotSemanaAtual, diaSemana: gerotEditor.diaSemana,
+      horarioInicio: gerotEditor.horarioInicio, horarioFim: gerotEditor.horarioFim,
+      texto, blocoId: gerotEditor.blocoId,
+    });
+    const idx = gerotBlocos.findIndex(b=>b.id===resultado.id);
+    if(idx>-1) gerotBlocos[idx] = resultado; else gerotBlocos.push(resultado);
+    gerotEditor = null;
+    gerotSalvandoErro = null;
+  }catch(e){
+    gerotSalvandoErro = (e && e.message) || 'Não foi possível salvar esse bloco.';
+  }
+  renderApp();
+}
+async function apagarGerotEditorAtual(){
+  if(!gerotEditor || !gerotEditor.blocoId) return;
+  const blocoId = gerotEditor.blocoId;
+  try{
+    await apiRequest('DELETE', `/gerot/${blocoId}`);
+    gerotBlocos = gerotBlocos.filter(b=>b.id!==blocoId);
+    gerotEditor = null;
+  }catch(e){
+    gerotSalvandoErro = 'Não foi possível apagar esse bloco.';
+  }
+  renderApp();
+}
+function renderGerotEditorHtml(){
+  const ed = gerotEditor;
+  const opcoesInicio = GEROT_HORARIOS.map(h=>`<option value="${h}" ${h===ed.horarioInicio?'selected':''}>${h}</option>`).join('');
+  const opcoesFim = GEROT_LIMITES.filter(h=>h>ed.horarioInicio).map(h=>`<option value="${h}" ${h===ed.horarioFim?'selected':''}>${h}</option>`).join('');
+  return `
+    <div class="gerot-editor">
+      <p class="settings-page-subtitle">${GEROT_DIAS[ed.diaSemana]} — ${ed.blocoId?'editar bloco':'novo bloco'}</p>
+      <div class="field-row-flex">
+        <select id="gerot-editor-inicio">${opcoesInicio}</select>
+        <span class="settings-page-note">até</span>
+        <select id="gerot-editor-fim">${opcoesFim}</select>
+      </div>
+      <input type="text" id="gerot-editor-texto" value="${esc(ed.texto)}" placeholder="Ex: Prospecção ativa" style="margin-top:10px; width:100%;" />
+      ${gerotSalvandoErro ? `<p class="settings-page-note" style="color:var(--danger);">${esc(gerotSalvandoErro)}</p>` : ''}
+      <div class="field-row-flex" style="margin-top:12px;">
+        <button class="btn-primary" id="gerot-editor-salvar">Salvar</button>
+        <button class="btn-outline" id="gerot-editor-cancelar">Cancelar</button>
+        ${ed.blocoId ? `<button class="btn-outline" id="gerot-editor-apagar" style="color:var(--danger);">Apagar bloco</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+function exportarGerotParaPlanilha(){
+  const [ano,mes,dia] = gerotSemanaAtual.split('-').map(Number);
+  const segunda = new Date(ano, mes-1, dia);
+  const datasDaSemana = GEROT_DIAS.map((_,i)=>{ const d = new Date(segunda); d.setDate(d.getDate()+i); return d; });
+  const grade = calcularGradeGerot();
+
+  // monta a matriz: linha 0 é o cabeçalho (dias da semana), as demais são os horários
+  const dados = [['', ...GEROT_DIAS.map((d,i)=> `${d} (${datasDaSemana[i].toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})})`)]];
+  GEROT_HORARIOS.forEach(h => dados.push([h, '', '', '', '', '']));
+
+  const merges = [];
+  GEROT_DIAS.forEach((_, diaIdx)=>{
+    GEROT_HORARIOS.forEach((horario, linhaIdx)=>{
+      const info = grade[diaIdx][horario];
+      if(info.tipo === 'inicio'){
+        dados[linhaIdx+1][diaIdx+1] = info.bloco.texto; // +1 na linha pq a 0 é cabeçalho, +1 na coluna pq a 0 é o horário
+        if(info.rowspan > 1){
+          merges.push({ s:{ r:linhaIdx+1, c:diaIdx+1 }, e:{ r:linhaIdx+1+info.rowspan-1, c:diaIdx+1 } });
+        }
+      }
+    });
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(dados);
+  ws['!merges'] = merges;
+  ws['!cols'] = [{wch:8}, {wch:24}, {wch:24}, {wch:24}, {wch:24}, {wch:24}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'GEROT');
+  XLSX.writeFile(wb, `gerot-semana-${gerotSemanaAtual}.xlsx`);
+}
+async function importarGerotDePlanilha(file){
+  if(!file) return;
+  gerotImportando = true;
+  gerotImportMsg = null;
+  renderApp();
+  try{
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type:'array' });
+    const ws = workbook.Sheets[workbook.SheetNames[0]];
+    const dados = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+    const merges = ws['!merges'] || [];
+
+    // limpa os blocos já existentes dessa semana antes de importar, pra não dar
+    // conflito de horário com o que já tinha e pra garantir que o resultado bate
+    // exatamente com a planilha importada
+    await Promise.all(gerotBlocos.map(b=> apiRequest('DELETE', `/gerot/${b.id}`).catch(()=>{})));
+
+    let importados = 0, falhas = 0;
+    for(let linhaIdx=1; linhaIdx<dados.length && linhaIdx<=GEROT_HORARIOS.length; linhaIdx++){
+      const horarioInicio = GEROT_HORARIOS[linhaIdx-1];
+      for(let diaIdx=0; diaIdx<5; diaIdx++){
+        const coluna = diaIdx+1;
+        const texto = ((dados[linhaIdx]||[])[coluna]||'').toString().trim();
+        if(!texto) continue;
+        const merge = merges.find(m=> m.s.r===linhaIdx && m.s.c===coluna);
+        const horarioFim = merge ? GEROT_LIMITES[merge.e.r] : GEROT_LIMITES[linhaIdx];
+        if(!horarioFim) continue; // fora do intervalo de horários válidos (08:00-19:30), ignora
+        try{
+          await apiRequest('PUT', '/gerot', { semanaInicio: gerotSemanaAtual, diaSemana: diaIdx, horarioInicio, horarioFim, texto });
+          importados++;
+        }catch(e){ falhas++; }
+      }
+    }
+    await loadGerot(gerotSemanaAtual);
+    gerotImportMsg = { tipo: falhas ? 'erro' : 'ok', texto: `${importados} bloco(s) importado(s)${falhas ? `, ${falhas} não puderam ser importados (conflito de horário)` : ''}.` };
+  }catch(e){
+    gerotImportMsg = { tipo:'erro', texto:'Não foi possível ler essa planilha. Confira se ela segue o mesmo formato exportado pelo sistema.' };
+  }
+  gerotImportando = false;
   renderApp();
 }
 async function copiarSemanaAnteriorGerot(){
@@ -4279,6 +4410,26 @@ function renderSidebar(){
 }
 
 /* ---------- página: Dashboard ---------- */
+// Painéis recolhíveis do Dashboard — o estado (aberto/fechado) fica salvo no
+// localStorage do navegador, então continua do jeito que a pessoa deixou mesmo
+// depois de fechar e abrir o CRM de novo.
+function painelDashboardAberto(id){
+  try{
+    const v = localStorage.getItem('dash-painel-'+id);
+    return v === null ? true : v === '1'; // aberto por padrão, antes da primeira vez que a pessoa mexe
+  }catch(e){ return true; }
+}
+function renderCabecalhoPainelDashboard(id, titulo, extraHtml){
+  const aberto = painelDashboardAberto(id);
+  return `
+    <div class="dash-panel-title dash-panel-title-recolhivel">
+      <button type="button" class="dash-panel-toggle" data-action="toggle-painel-dashboard" data-painel-id="${id}">
+        <span class="dash-panel-seta ${aberto?'aberta':''}">▾</span> ${titulo}
+      </button>
+      ${extraHtml||''}
+    </div>
+  `;
+}
 function renderDashboardPage(){
   const m = dashMetrics();
   const stages = stageTotals();
@@ -4326,11 +4477,8 @@ function renderDashboardPage(){
 
     <div class="dash-grid" style="margin-bottom:20px;">
       <div class="dash-panel">
-        <div class="dash-panel-title">
-          Meta de vendas do mês
-          ${!editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : ''}
-        </div>
-        ${!metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
+        ${renderCabecalhoPainelDashboard('meta-individual', 'Meta de vendas do mês', !editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : '')}
+        ${painelDashboardAberto('meta-individual') ? (!metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
           <div class="field-row" style="align-items:flex-end;">
             <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
             <button class="btn-primary" id="meta-vendas-salvar" style="margin-bottom:14px;">Salvar</button>
@@ -4338,15 +4486,12 @@ function renderDashboardPage(){
         ` : (metaVendasValor > 0 ? `
           <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${Math.min(100, (vendidoNoMesAtual()/metaVendasValor*100))}%"></div></div>
           <p class="settings-page-note">${fmtBRL(vendidoNoMesAtual())} de ${fmtBRL(metaVendasValor)} — ${Math.round(Math.min(999,vendidoNoMesAtual()/metaVendasValor*100))}%</p>
-        ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`))}
+        ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`))) : ''}
       </div>
       ${equipe ? `
         <div class="dash-panel">
-          <div class="dash-panel-title">
-            Meta de vendas da equipe
-            ${(equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : ''}
-          </div>
-          ${!metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
+          ${renderCabecalhoPainelDashboard('meta-equipe', 'Meta de vendas da equipe', (equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : '')}
+          ${painelDashboardAberto('meta-equipe') ? (!metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
             <div class="field-row" style="align-items:flex-end;">
               <div class="field"><label>Meta da equipe no mês (R$)</label><input type="number" id="meta-vendas-equipe-input" value="${metaVendasEquipeValor||0}" min="0" step="0.01" /></div>
               <button class="btn-primary" id="meta-vendas-equipe-salvar" style="margin-bottom:14px;">Salvar</button>
@@ -4354,18 +4499,19 @@ function renderDashboardPage(){
           ` : `
             <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${metaVendasEquipeValor ? Math.min(100, (metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%"></div></div>
             <p class="settings-page-note">${fmtBRL(metaVendasEquipeVendido)} de ${fmtBRL(metaVendasEquipeValor)} — ${metaVendasEquipeValor ? Math.round(Math.min(999,metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%</p>
-          `)}
+          `)) : ''}
         </div>
       ` : ''}
     </div>
 
     <div class="dash-grid">
       <div class="dash-panel">
-        <div class="dash-panel-title">Leads captados</div>
-        ${renderLeadsChart()}
+        ${renderCabecalhoPainelDashboard('leads-captados', 'Leads captados')}
+        ${painelDashboardAberto('leads-captados') ? renderLeadsChart() : ''}
       </div>
       <div class="dash-panel">
-        <div class="dash-panel-title">Pipeline por etapa</div>
+        ${renderCabecalhoPainelDashboard('pipeline-etapa', 'Pipeline por etapa')}
+        ${painelDashboardAberto('pipeline-etapa') ? `
         <div class="stage-list">
           ${stages.length ? stages.map(s=>`
             <div class="stage-row">
@@ -4374,19 +4520,20 @@ function renderDashboardPage(){
             </div>
           `).join('') : '<p class="dash-empty">Nenhuma coluna criada ainda.</p>'}
         </div>
+        ` : ''}
       </div>
     </div>
 
     <div class="dash-grid">
       <div class="dash-panel">
-        <div class="dash-panel-title">Últimos leads</div>
-        ${recentes.length ? `<div class="recent-list">${recentes.map(c=>`
+        ${renderCabecalhoPainelDashboard('ultimos-leads', 'Últimos leads')}
+        ${painelDashboardAberto('ultimos-leads') ? (recentes.length ? `<div class="recent-list">${recentes.map(c=>`
           <div class="recent-item"><span class="recent-name">${esc(c.cliente) || 'Sem nome'}</span><span class="recent-value">${fmtBRL(c.valor)}</span></div>
-        `).join('')}</div>` : '<p class="dash-empty">Nenhum lead neste período.</p>'}
+        `).join('')}</div>` : '<p class="dash-empty">Nenhum lead neste período.</p>') : ''}
       </div>
       <div class="dash-panel">
-        <div class="dash-panel-title">Tarefas abertas</div>
-        ${abertas.length ? `<div class="recent-list">${abertas.map(t=>`
+        ${renderCabecalhoPainelDashboard('tarefas-abertas', 'Tarefas abertas')}
+        ${painelDashboardAberto('tarefas-abertas') ? (abertas.length ? `<div class="recent-list">${abertas.map(t=>`
           <div class="task-mini-item">
             ${t.tipo==='evento'
               ? `<span class="check-circle" data-action="toggle-evento" data-evento-id="${t.id}"></span>`
@@ -4395,7 +4542,7 @@ function renderDashboardPage(){
             <span class="task-mini-title">${esc(t.titulo)}</span>
             ${t.data ? `<span class="metric-sub">${formatDate(t.data)}</span>` : ''}
           </div>
-        `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>'}
+        `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>') : ''}
       </div>
     </div>
   `;
@@ -5009,24 +5156,51 @@ function renderTarefasPage(){
 }
 const GEROT_DIAS = ['Segunda','Terça','Quarta','Quinta','Sexta'];
 const GEROT_HORARIOS = (()=>{ const lista=[]; for(let h=8; h<=19; h++){ lista.push(`${String(h).padStart(2,'0')}:00`); if(h<19) lista.push(`${String(h).padStart(2,'0')}:30`); } return lista; })();
+const GEROT_LIMITES = [...GEROT_HORARIOS, '19:30']; // 24 limites (23 horários de início + o fim do último bloco) — usado pra calcular quantas linhas um bloco ocupa
+
+// Monta, pra cada dia, um mapa horário -> { tipo: 'inicio'|'coberto'|'vazio', bloco, rowspan }.
+// "inicio" é onde a célula mesclada nasce (rowspan cobre o resto); "coberto" são as
+// linhas por baixo dela, que não desenham nada (já fazem parte da célula de cima).
+function calcularGradeGerot(){
+  const grade = {};
+  for(let diaIdx=0; diaIdx<5; diaIdx++){
+    grade[diaIdx] = {};
+    GEROT_HORARIOS.forEach(h => grade[diaIdx][h] = { tipo:'vazio' });
+    gerotBlocos.filter(b=>b.diaSemana===diaIdx).forEach(b=>{
+      const idxInicio = GEROT_HORARIOS.indexOf(b.horarioInicio);
+      const idxFim = GEROT_LIMITES.indexOf(b.horarioFim);
+      if(idxInicio===-1 || idxFim===-1 || idxFim<=idxInicio) return;
+      const rowspan = idxFim - idxInicio;
+      grade[diaIdx][b.horarioInicio] = { tipo:'inicio', bloco:b, rowspan };
+      for(let i=1;i<rowspan;i++) grade[diaIdx][GEROT_HORARIOS[idxInicio+i]] = { tipo:'coberto' };
+    });
+  }
+  return grade;
+}
 function renderGerotConteudo(){
   const [ano,mes,dia] = gerotSemanaAtual.split('-').map(Number);
   const segunda = new Date(ano, mes-1, dia);
   const datasDaSemana = GEROT_DIAS.map((_,i)=>{ const d = new Date(segunda); d.setDate(d.getDate()+i); return d; });
   const labelSemana = `${datasDaSemana[0].toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})} a ${datasDaSemana[4].toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}`;
-  const textoDoBloco = (diaIdx, horario) => { const b = gerotBlocos.find(x=>x.diaSemana===diaIdx && x.horario===horario); return b ? b.texto : ''; };
+  const grade = calcularGradeGerot();
 
   return `
     <div class="settings-page-section" style="margin-bottom:16px;">
-      <p class="settings-page-note">Sua rotina semanal — planeje o que fazer em cada horário, de segunda a sexta. Diferente do calendário, isso não é sobre um dia específico: pense nela como um "molde" da sua semana ideal, que você ajusta quando precisar. Clique em qualquer horário pra escrever.</p>
+      <p class="settings-page-note">Sua rotina semanal — planeje o que fazer em cada horário, de segunda a sexta. Diferente do calendário, isso não é sobre um dia específico: pense nela como um "molde" da sua semana ideal, que você ajusta quando precisar. Clique num horário livre pra criar um bloco (pode escolher até que horas ele vai), ou num bloco já preenchido pra editar.</p>
     </div>
-    <div class="month-step-nav" style="margin-bottom:16px;">
+    <div class="month-step-nav" style="margin-bottom:10px;">
       <button class="icon-btn" data-action="gerot-semana" data-delta="-1" title="Semana anterior">‹</button>
       <span>${labelSemana}</span>
       <button class="icon-btn" data-action="gerot-semana" data-delta="1" title="Próxima semana">›</button>
       <button class="btn-outline" data-action="gerot-hoje" style="margin-left:10px;">Essa semana</button>
       <button class="btn-outline" data-action="gerot-copiar-semana" style="margin-left:auto;" ${gerotCopiando?'disabled':''}>${gerotCopiando?'Copiando…':'📋 Copiar semana anterior'}</button>
     </div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-bottom:16px;">
+      <button class="btn-outline" data-action="gerot-exportar-planilha">⬇️ Exportar planilha</button>
+      <input type="file" id="gerot-importar-input" accept=".xlsx,.xls" style="display:none;" />
+      <button class="btn-outline" data-action="gerot-importar-planilha" ${gerotImportando?'disabled':''}>${gerotImportando?'Importando…':'⬆️ Importar planilha'}</button>
+    </div>
+    ${gerotImportMsg ? `<p class="settings-page-msg ${gerotImportMsg.tipo}" style="margin-bottom:14px;">${esc(gerotImportMsg.texto)}</p>` : ''}
     ${!gerotLoaded ? `<p class="settings-page-note">Carregando…</p>` : `
       <div class="gerot-grid-wrap">
         <table class="gerot-tabela">
@@ -5041,20 +5215,25 @@ function renderGerotConteudo(){
               <tr>
                 <td class="gerot-col-hora">${horario}</td>
                 ${GEROT_DIAS.map((_,diaIdx)=>{
-                  const chave = `${diaIdx}-${horario}`;
-                  const editando = gerotCelulaEditando === chave;
-                  const texto = textoDoBloco(diaIdx, horario);
-                  return `<td class="gerot-celula ${texto?'gerot-celula-preenchida':''}">${
-                    editando
-                      ? `<input type="text" class="gerot-celula-input" id="gerot-input-${chave}" value="${esc(texto)}" data-dia="${diaIdx}" data-horario="${horario}" placeholder="Ex: Prospecção ativa" />`
-                      : `<button class="gerot-celula-btn" data-action="gerot-editar-celula" data-dia="${diaIdx}" data-horario="${horario}">${esc(texto)}</button>`
-                  }</td>`;
+                  const info = grade[diaIdx][horario];
+                  if(info.tipo==='coberto') return '';
+                  if(info.tipo==='inicio'){
+                    const b = info.bloco;
+                    return `<td class="gerot-celula gerot-celula-preenchida" rowspan="${info.rowspan}">
+                      <button class="gerot-celula-btn" data-action="gerot-abrir-editor" data-dia="${diaIdx}" data-horario="${horario}" data-bloco-id="${b.id}">
+                        <span class="gerot-bloco-horario">${b.horarioInicio}–${b.horarioFim}</span>
+                        <span class="gerot-bloco-texto">${esc(b.texto)}</span>
+                      </button>
+                    </td>`;
+                  }
+                  return `<td class="gerot-celula"><button class="gerot-celula-btn" data-action="gerot-abrir-editor" data-dia="${diaIdx}" data-horario="${horario}"></button></td>`;
                 }).join('')}
               </tr>
             `).join('')}
           </tbody>
         </table>
       </div>
+      ${gerotEditor ? renderGerotEditorHtml() : ''}
     `}
   `;
 }
@@ -5800,6 +5979,14 @@ function bindAppEvents(){
   if(editarMetaEquipeBtn) editarMetaEquipeBtn.addEventListener('click', ()=>{ editandoMetaVendasEquipe = true; renderApp(); });
   const salvarMetaEquipeBtn = document.getElementById('meta-vendas-equipe-salvar');
   if(salvarMetaEquipeBtn) salvarMetaEquipeBtn.addEventListener('click', salvarMetaVendasEquipe);
+  app.querySelectorAll('[data-action="toggle-painel-dashboard"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.painelId;
+      const aberto = painelDashboardAberto(id);
+      try{ localStorage.setItem('dash-painel-'+id, aberto ? '0' : '1'); }catch(e){}
+      renderApp();
+    });
+  });
 
   /* -- tarefas (usado no Dashboard e na página Tarefas) -- */
   app.querySelectorAll('[data-action="toggle-task"]').forEach(el=>{
@@ -5846,22 +6033,41 @@ function bindAppEvents(){
   });
   const gerotCopiarBtn = app.querySelector('[data-action="gerot-copiar-semana"]');
   if(gerotCopiarBtn) gerotCopiarBtn.addEventListener('click', copiarSemanaAnteriorGerot);
-  app.querySelectorAll('[data-action="gerot-editar-celula"]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      gerotCelulaEditando = `${btn.dataset.dia}-${btn.dataset.horario}`;
-      renderApp();
-      const input = document.getElementById(`gerot-input-${gerotCelulaEditando}`);
-      if(input){ input.focus(); input.select(); }
-    });
+  const gerotExportarBtn = app.querySelector('[data-action="gerot-exportar-planilha"]');
+  if(gerotExportarBtn) gerotExportarBtn.addEventListener('click', exportarGerotParaPlanilha);
+  const gerotImportarBtn = app.querySelector('[data-action="gerot-importar-planilha"]');
+  const gerotImportarInput = document.getElementById('gerot-importar-input');
+  if(gerotImportarBtn && gerotImportarInput) gerotImportarBtn.addEventListener('click', ()=> gerotImportarInput.click());
+  if(gerotImportarInput) gerotImportarInput.addEventListener('change', (e)=>{
+    const file = e.target.files && e.target.files[0];
+    if(file) importarGerotDePlanilha(file);
+    e.target.value = ''; // permite selecionar o mesmo arquivo de novo depois, se precisar
   });
-  app.querySelectorAll('.gerot-celula-input').forEach(input=>{
-    const salvar = ()=> salvarBlocoGerot(Number(input.dataset.dia), input.dataset.horario, input.value);
-    input.addEventListener('blur', salvar);
-    input.addEventListener('keydown', (e)=>{
-      if(e.key==='Enter') input.blur();
-      if(e.key==='Escape'){ gerotCelulaEditando = null; renderApp(); }
-    });
+  app.querySelectorAll('[data-action="gerot-abrir-editor"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirGerotEditor(Number(btn.dataset.dia), btn.dataset.horario, btn.dataset.blocoId || null));
   });
+  const gerotEditorInicio = document.getElementById('gerot-editor-inicio');
+  if(gerotEditorInicio) gerotEditorInicio.addEventListener('change', (e)=>{
+    gerotEditor.horarioInicio = e.target.value;
+    if(gerotEditor.horarioFim <= gerotEditor.horarioInicio){
+      const idx = GEROT_HORARIOS.indexOf(gerotEditor.horarioInicio);
+      gerotEditor.horarioFim = GEROT_LIMITES[idx+1] || GEROT_LIMITES[GEROT_LIMITES.length-1];
+    }
+    renderApp();
+  });
+  const gerotEditorFim = document.getElementById('gerot-editor-fim');
+  if(gerotEditorFim) gerotEditorFim.addEventListener('change', (e)=> gerotEditor.horarioFim = e.target.value);
+  const gerotEditorTexto = document.getElementById('gerot-editor-texto');
+  if(gerotEditorTexto){
+    gerotEditorTexto.addEventListener('input', (e)=> gerotEditor.texto = e.target.value);
+    gerotEditorTexto.addEventListener('keydown', (e)=>{ if(e.key==='Enter') salvarGerotEditor(); });
+  }
+  const gerotEditorSalvar = document.getElementById('gerot-editor-salvar');
+  if(gerotEditorSalvar) gerotEditorSalvar.addEventListener('click', salvarGerotEditor);
+  const gerotEditorCancelar = document.getElementById('gerot-editor-cancelar');
+  if(gerotEditorCancelar) gerotEditorCancelar.addEventListener('click', fecharGerotEditor);
+  const gerotEditorApagar = document.getElementById('gerot-editor-apagar');
+  if(gerotEditorApagar) gerotEditorApagar.addEventListener('click', apagarGerotEditorAtual);
   const cancelarCopiaPrincipalBtn = app.querySelector('[data-action="cancelar-tarefa-copiada"]');
   if(cancelarCopiaPrincipalBtn) cancelarCopiaPrincipalBtn.addEventListener('click', cancelarTarefaCopiada);
   const agendaHojeBtn = app.querySelector('[data-action="agenda-hoje"]');

@@ -207,6 +207,19 @@ main.pipeline-main{ padding-bottom:4px; }
 .field input[type=text], .field input[type=number], .field input[type=month], .field select, .field textarea{
   width:100%; margin-top:5px; padding:10px 12px; min-height:42px; border-radius:8px; border:1px solid var(--line); font-size:13px; outline:none; font-family:inherit; color:var(--ink); background:var(--paper);
 }
+/* Campos de data/hora — estilizados à parte porque, por padrão, o navegador não
+   aplica nenhum visual customizado neles (ficam "crus", destoando do resto do
+   site). O calendário/relógio que abre ao clicar é controlado pelo sistema
+   operacional e não dá pra estilizar por CSS — mas a caixinha em si, sim. */
+input[type=date], input[type=time]{
+  width:100%; margin-top:5px; padding:10px 12px; min-height:42px; border-radius:8px; border:1px solid var(--line); font-size:13px; outline:none; font-family:inherit; color:var(--ink); background:var(--paper); box-sizing:border-box; transition:border-color .15s, box-shadow .15s; color-scheme:light;
+}
+input[type=date]:focus, input[type=time]:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--hover-tint); }
+input[type=date]::-webkit-calendar-picker-indicator, input[type=time]::-webkit-calendar-picker-indicator{
+  cursor:pointer; padding:4px; border-radius:6px; opacity:.65;
+}
+input[type=date]::-webkit-calendar-picker-indicator:hover, input[type=time]::-webkit-calendar-picker-indicator:hover{ opacity:1; background:var(--hover-tint); }
+[data-theme="dark"] input[type=date], [data-theme="dark"] input[type=time]{ color-scheme:dark; }
 .field textarea{ resize:none; font-family:inherit; min-height:74px; }
 .field-row{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .money-wrap{ position:relative; margin-top:5px; }
@@ -332,6 +345,10 @@ main.pipeline-main{ padding-bottom:4px; }
 .dash-grid{ display:grid; grid-template-columns:1.4fr 1fr; gap:16px; margin-bottom:16px; }
 .dash-panel{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:20px; min-width:0; }
 .dash-panel-title{ font-size:14px; font-weight:600; margin:0 0 16px; }
+.dash-panel-title-recolhivel{ display:flex; align-items:center; justify-content:space-between; }
+.dash-panel-toggle{ display:flex; align-items:center; gap:6px; border:none; background:none; cursor:pointer; font-family:inherit; font-size:14px; font-weight:600; color:var(--ink); padding:0; }
+.dash-panel-seta{ display:inline-block; transition:transform .15s; color:var(--ink-soft); }
+.dash-panel-seta.aberta{ transform:rotate(180deg); }
 @media (max-width:980px){ .dash-grid{ grid-template-columns:1fr; } }
 
 .chart-wrap{ width:100%; overflow-x:auto; }
@@ -753,10 +770,14 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .gerot-tabela td{ border-bottom:1px solid var(--line); border-right:1px solid var(--line); padding:0; }
 .gerot-tabela td:last-child{ border-right:none; }
 .gerot-celula{ height:36px; }
-.gerot-celula-btn{ width:100%; height:36px; border:none; background:none; cursor:pointer; font-family:inherit; font-size:12px; color:var(--ink); text-align:left; padding:0 8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gerot-celula-btn{ width:100%; height:100%; min-height:36px; border:none; background:none; cursor:pointer; font-family:inherit; font-size:12px; color:var(--ink); text-align:left; padding:6px 8px; display:flex; flex-direction:column; gap:2px; justify-content:center; }
 .gerot-celula-btn:hover{ background:var(--hover-tint); }
 .gerot-celula-preenchida .gerot-celula-btn{ background:var(--gold-soft); font-weight:500; }
-.gerot-celula-input{ width:100%; height:36px; border:2px solid var(--accent); background:var(--paper); font-family:inherit; font-size:12px; color:var(--ink); padding:0 7px; outline:none; box-sizing:border-box; }
+.gerot-bloco-horario{ font-size:10px; color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; }
+.gerot-bloco-texto{ overflow:hidden; text-overflow:ellipsis; white-space:normal; }
+.gerot-editor{ margin-top:16px; padding:16px; border:1px solid var(--line); border-radius:12px; background:var(--col-bg); }
+.gerot-editor select{ padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--ink); font-family:inherit; }
+.gerot-editor input[type="text"]{ padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--paper); color:var(--ink); font-family:inherit; box-sizing:border-box; }
 
 /* variante do field-row pra linhas com número variável de itens (2 ou 3), tipo tarefa rápida e histórico */
 .field-row-flex{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
