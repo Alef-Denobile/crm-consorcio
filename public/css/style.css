@@ -372,7 +372,6 @@ input[type=date]::-webkit-calendar-picker-indicator:hover, input[type=time]::-we
 .task-mini-item{ display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:12px; }
 .task-mini-item:last-child{ border-bottom:none; }
 .task-mini-item .task-mini-title{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.task-mini-item.done .task-mini-title{ text-decoration:line-through; color:var(--ink-soft); }
 
 /* ---------- checkbox circular reutilizado (tarefas) ---------- */
 .check-circle{ width:19px; height:19px; border-radius:999px; border:1.5px solid var(--line); flex-shrink:0; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#fff; }
@@ -643,8 +642,6 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .agenda-dia-item-titulo{ font-size:13px; font-weight:500; color:var(--ink); }
 .agenda-dia-item-titulo.concluida{ text-decoration:line-through; opacity:.6; }
 .agenda-dia-item-hora{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
-.agenda-item-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-.agenda-item-dot.agenda-item-evento{ background:var(--cold); }
 
 @media (max-width: 640px){
   .agenda-cell{ min-height:64px; padding:5px; }

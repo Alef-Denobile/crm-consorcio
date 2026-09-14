@@ -4668,7 +4668,7 @@ function renderColumn(col){
   const menuOpen = openMenuColId === col.id;
 
   return `
-    <div class="column" data-col-id="${col.id}" data-action="col-dropzone">
+    <div class="column" data-col-id="${col.id}">
       <div class="col-head">
         <div class="col-head-top">
           <span class="grip" draggable="true" data-action="drag-col-handle" data-col-id="${col.id}" title="Arraste para reordenar">⠿</span>
@@ -4819,7 +4819,7 @@ function renderCard(card){
   const temp = TEMPS[card.temperatura] || TEMPS.frio;
   const showMonth = filterMonth === null && card.mes;
   return `
-    <div class="card" draggable="true" data-action="drag-card" data-card-id="${card.id}">
+    <div class="card" draggable="true" data-card-id="${card.id}">
       <div class="card-drag-handle" title="Arraste para mover">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <circle cx="5" cy="3" r="1.4"/><circle cx="11" cy="3" r="1.4"/>
@@ -7176,7 +7176,7 @@ function renderExtrasOverlayHtml(f){
     corpo = tarefasDoLead.length ? `
       <div class="historico-lista">
         ${tarefasDoLead.map(t=>`
-          <button type="button" class="historico-item historico-item-clicavel" data-action="extras-abrir-tarefa-na-agenda" data-vencimento="${t.vencimento||''}">
+          <button type="button" class="historico-item historico-item-clicavel" data-action="extras-perguntar-conclusao-tarefa" data-task-id="${t.id}">
             <div style="flex:1; text-align:left;">
               <span class="historico-item-texto">${t.concluida?'✓ ':''}${esc(t.titulo)}</span>
               <span class="historico-item-data">${t.vencimento ? formatDate(t.vencimento) : 'Sem data'}</span>
@@ -7265,17 +7265,22 @@ function ligarBindingsExtras(){
   if(tarefaRapidaDataInput) tarefaRapidaDataInput.addEventListener('input', (e)=> tarefaRapidaData = e.target.value);
   const tarefaRapidaCriarBtn = document.getElementById('tarefa-rapida-criar-btn');
   if(tarefaRapidaCriarBtn) tarefaRapidaCriarBtn.addEventListener('click', criarTarefaRapidaDoCard);
-  document.querySelectorAll('[data-action="extras-abrir-tarefa-na-agenda"]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const vencimento = btn.dataset.vencimento;
-      if(!vencimento) return;
-      closeModal();
-      agendaMesAtual = vencimento.slice(0,7);
-      goToPage('tarefas');
-      await loadAgendaMes(agendaMesAtual);
-      agendaDiaSelecionado = vencimento;
-      agendaDiaDestacado = vencimento;
-      renderAgendaDiaModal();
+  document.querySelectorAll('[data-action="extras-perguntar-conclusao-tarefa"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const taskId = btn.dataset.taskId;
+      const task = tasks.find(t=>t.id===taskId);
+      if(!task) return;
+      const mensagem = task.concluida
+        ? `Marcar "${task.titulo}" como não concluída de novo?`
+        : `A tarefa "${task.titulo}" foi concluída?`;
+      showConfirm({
+        message: mensagem,
+        onConfirm: async ()=>{
+          closeConfirm();
+          await toggleTaskConcluida(taskId);
+          if(extrasTela==='tarefas-lista') renderModal(); // atualiza a marcação (✓) na lista, já que renderApp() não mexe no modal
+        },
+      });
     });
   });
 
