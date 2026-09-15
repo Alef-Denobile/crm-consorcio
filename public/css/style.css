@@ -347,8 +347,10 @@ input[type=date]::-webkit-calendar-picker-indicator:hover, input[type=time]::-we
 .dash-panel-title{ font-size:14px; font-weight:600; margin:0 0 16px; }
 .dash-panel-title-recolhivel{ display:flex; align-items:center; justify-content:space-between; }
 .dash-panel-toggle{ display:flex; align-items:center; gap:6px; border:none; background:none; cursor:pointer; font-family:inherit; font-size:14px; font-weight:600; color:var(--ink); padding:0; }
-.dash-panel-seta{ display:inline-block; transition:transform .15s; color:var(--ink-soft); }
-.dash-panel-seta.aberta{ transform:rotate(180deg); }
+.dash-panel-seta{ display:inline-block; transition:transform .25s ease; color:var(--ink-soft); }
+.dash-panel-seta.fechada{ transform:rotate(-90deg); }
+.dash-panel-collapse{ display:grid; transition:grid-template-rows .3s ease; }
+.dash-panel-collapse-inner{ overflow:hidden; }
 @media (max-width:980px){ .dash-grid{ grid-template-columns:1fr; } }
 
 .chart-wrap{ width:100%; overflow-x:auto; }

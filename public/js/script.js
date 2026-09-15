@@ -4424,9 +4424,22 @@ function renderCabecalhoPainelDashboard(id, titulo, extraHtml){
   return `
     <div class="dash-panel-title dash-panel-title-recolhivel" style="${aberto?'':'margin-bottom:0;'}">
       <button type="button" class="dash-panel-toggle" data-action="toggle-painel-dashboard" data-painel-id="${id}">
-        <span class="dash-panel-seta ${aberto?'aberta':''}">▾</span> ${titulo}
+        <span class="dash-panel-seta ${aberto?'':'fechada'}">▾</span> ${titulo}
       </button>
       ${extraHtml||''}
+    </div>
+  `;
+}
+// Envolve o conteúdo de um painel numa estrutura que anima o recolher/abrir suavemente
+// (usa grid-template-rows 1fr↔0fr, que consegue animar até uma altura "automática"
+// sem precisar saber o tamanho do conteúdo de antemão — ao contrário de max-height,
+// que precisa de um valor fixo chutado). O conteúdo fica sempre no DOM; é só a altura
+// visível que encolhe a zero quando fechado.
+function envolverConteudoPainel(id, conteudoHtml){
+  const aberto = painelDashboardAberto(id);
+  return `
+    <div class="dash-panel-collapse" style="grid-template-rows:${aberto ? '1fr' : '0fr'};">
+      <div class="dash-panel-collapse-inner">${conteudoHtml}</div>
     </div>
   `;
 }
@@ -4478,7 +4491,7 @@ function renderDashboardPage(){
     <div class="dash-grid" style="margin-bottom:20px;">
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('meta-individual', 'Meta de vendas do mês', !editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : '')}
-        ${painelDashboardAberto('meta-individual') ? (!metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
+        ${envolverConteudoPainel('meta-individual', !metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
           <div class="field-row" style="align-items:flex-end;">
             <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
             <button class="btn-primary" id="meta-vendas-salvar" style="margin-bottom:14px;">Salvar</button>
@@ -4486,12 +4499,12 @@ function renderDashboardPage(){
         ` : (metaVendasValor > 0 ? `
           <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${Math.min(100, (vendidoNoMesAtual()/metaVendasValor*100))}%"></div></div>
           <p class="settings-page-note">${fmtBRL(vendidoNoMesAtual())} de ${fmtBRL(metaVendasValor)} — ${Math.round(Math.min(999,vendidoNoMesAtual()/metaVendasValor*100))}%</p>
-        ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`))) : ''}
+        ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`)))}
       </div>
       ${equipe ? `
         <div class="dash-panel">
           ${renderCabecalhoPainelDashboard('meta-equipe', 'Meta de vendas da equipe', (equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : '')}
-          ${painelDashboardAberto('meta-equipe') ? (!metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
+          ${envolverConteudoPainel('meta-equipe', !metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
             <div class="field-row" style="align-items:flex-end;">
               <div class="field"><label>Meta da equipe no mês (R$)</label><input type="number" id="meta-vendas-equipe-input" value="${metaVendasEquipeValor||0}" min="0" step="0.01" /></div>
               <button class="btn-primary" id="meta-vendas-equipe-salvar" style="margin-bottom:14px;">Salvar</button>
@@ -4499,7 +4512,7 @@ function renderDashboardPage(){
           ` : `
             <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${metaVendasEquipeValor ? Math.min(100, (metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%"></div></div>
             <p class="settings-page-note">${fmtBRL(metaVendasEquipeVendido)} de ${fmtBRL(metaVendasEquipeValor)} — ${metaVendasEquipeValor ? Math.round(Math.min(999,metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%</p>
-          `)) : ''}
+          `))}
         </div>
       ` : ''}
     </div>
@@ -4507,11 +4520,11 @@ function renderDashboardPage(){
     <div class="dash-grid">
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('leads-captados', 'Leads captados')}
-        ${painelDashboardAberto('leads-captados') ? renderLeadsChart() : ''}
+        ${envolverConteudoPainel('leads-captados', renderLeadsChart())}
       </div>
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('pipeline-etapa', 'Pipeline por etapa')}
-        ${painelDashboardAberto('pipeline-etapa') ? `
+        ${envolverConteudoPainel('pipeline-etapa', `
         <div class="stage-list">
           ${stages.length ? stages.map(s=>`
             <div class="stage-row">
@@ -4520,20 +4533,20 @@ function renderDashboardPage(){
             </div>
           `).join('') : '<p class="dash-empty">Nenhuma coluna criada ainda.</p>'}
         </div>
-        ` : ''}
+        `)}
       </div>
     </div>
 
     <div class="dash-grid">
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('ultimos-leads', 'Últimos leads')}
-        ${painelDashboardAberto('ultimos-leads') ? (recentes.length ? `<div class="recent-list">${recentes.map(c=>`
+        ${envolverConteudoPainel('ultimos-leads', recentes.length ? `<div class="recent-list">${recentes.map(c=>`
           <div class="recent-item"><span class="recent-name">${esc(c.cliente) || 'Sem nome'}</span><span class="recent-value">${fmtBRL(c.valor)}</span></div>
-        `).join('')}</div>` : '<p class="dash-empty">Nenhum lead neste período.</p>') : ''}
+        `).join('')}</div>` : '<p class="dash-empty">Nenhum lead neste período.</p>')}
       </div>
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('tarefas-abertas', 'Tarefas abertas')}
-        ${painelDashboardAberto('tarefas-abertas') ? (abertas.length ? `<div class="recent-list">${abertas.map(t=>`
+        ${envolverConteudoPainel('tarefas-abertas', abertas.length ? `<div class="recent-list">${abertas.map(t=>`
           <div class="task-mini-item">
             ${t.tipo==='evento'
               ? `<span class="check-circle" data-action="toggle-evento" data-evento-id="${t.id}"></span>`
@@ -4542,7 +4555,7 @@ function renderDashboardPage(){
             <span class="task-mini-title">${esc(t.titulo)}</span>
             ${t.data ? `<span class="metric-sub">${formatDate(t.data)}</span>` : ''}
           </div>
-        `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>') : ''}
+        `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>')}
       </div>
     </div>
   `;
