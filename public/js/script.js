@@ -191,6 +191,18 @@ let longPressTimer = null;
 let cardTouchDrag = null; // { cardId, cardEl, btn, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque, iniciado pela alcinha
 let autoScrollDoArrastoInterval = null;
 let arrastoRafPendente = false; // limita o trabalho pesado do arrastar a 1x por quadro de tela
+let assistenteBolhaX = null; // null = fica na posição padrão (canto inferior direito) até a pessoa arrastar
+let assistenteBolhaY = null;
+let assistenteAberto = false;
+let assistenteMensagens = [];
+let assistenteEnviando = false;
+let assistenteDrag = null; // { startX, startY, bolhaXInicial, bolhaYInicial, moveu, pointerId }
+try{
+  const posSalva = JSON.parse(localStorage.getItem('assistente-bolha-pos')||'null');
+  if(posSalva && typeof posSalva.x==='number' && typeof posSalva.y==='number'){
+    assistenteBolhaX = posSalva.x; assistenteBolhaY = posSalva.y;
+  }
+}catch(e){}
 let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
 let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de escolher quais itens do dia entram na cópia/mover
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
@@ -4210,6 +4222,127 @@ function renderAppPreservandoScroll(){
     if(scrollsColunas[el.dataset.colId]!==undefined) el.scrollTop = scrollsColunas[el.dataset.colId];
   });
 }
+/* ---------- Assistente flutuante (bolinha de ajuda) ---------- */
+function renderAssistente(){
+  const root = document.getElementById('assistente-root');
+  if(!root) return;
+  if(!getToken()){ root.innerHTML=''; return; } // só aparece logado
+
+  const posBolha = assistenteBolhaX!=null ? `left:${assistenteBolhaX}px; top:${assistenteBolhaY}px; right:auto; bottom:auto;` : '';
+
+  root.innerHTML = `
+    <button id="assistente-bolha" class="assistente-bolha" style="${posBolha}" title="Assistente do CRM">${assistenteAberto ? '✕' : '💬'}</button>
+    ${assistenteAberto ? `
+      <div class="assistente-painel" id="assistente-painel">
+        <div class="assistente-painel-head">
+          <span>✨ Assistente do CRM</span>
+          <button id="assistente-fechar" title="Fechar">✕</button>
+        </div>
+        <div class="assistente-mensagens" id="assistente-mensagens-lista">
+          ${!assistenteMensagens.length ? `<div class="assistente-msg assistente-msg-assistant">Oi! Pode perguntar qualquer coisa sobre como usar o CRM — Pipeline, Agenda, GEROT, Comissões, Fluxos, o que precisar.</div>` : ''}
+          ${assistenteMensagens.map(m=>`<div class="assistente-msg assistente-msg-${m.role}">${esc(m.content)}</div>`).join('')}
+          ${assistenteEnviando ? `<div class="assistente-msg assistente-msg-assistant assistente-digitando">Digitando…</div>` : ''}
+        </div>
+        <div class="assistente-input-row">
+          <input type="text" id="assistente-input" placeholder="Pergunte algo…" ${assistenteEnviando?'disabled':''} />
+          <button id="assistente-enviar" ${assistenteEnviando?'disabled':''} title="Enviar">➤</button>
+        </div>
+      </div>
+    ` : ''}
+  `;
+  if(assistenteAberto) posicionarPainelAssistente();
+  ligarBindingsAssistente();
+  const lista = document.getElementById('assistente-mensagens-lista');
+  if(lista) lista.scrollTop = lista.scrollHeight;
+}
+// Posiciona o painel de conversa perto de onde a bolinha estiver no momento (ela pode
+// ter sido arrastada pra qualquer canto), sempre mantendo ele inteiro dentro da tela.
+function posicionarPainelAssistente(){
+  const bolha = document.getElementById('assistente-bolha');
+  const painel = document.getElementById('assistente-painel');
+  if(!bolha || !painel) return;
+  const rectBolha = bolha.getBoundingClientRect();
+  const largura = 336, altura = 460;
+  let left = rectBolha.right - largura;
+  let top = rectBolha.top - altura - 12;
+  if(top < 12) top = rectBolha.bottom + 12; // não cabe em cima, abre embaixo da bolinha
+  left = Math.min(Math.max(12, left), window.innerWidth - largura - 12);
+  top = Math.min(Math.max(12, top), window.innerHeight - altura - 12);
+  painel.style.left = left+'px';
+  painel.style.top = top+'px';
+}
+async function enviarMensagemAssistente(){
+  const input = document.getElementById('assistente-input');
+  if(!input) return;
+  const texto = input.value.trim();
+  if(!texto || assistenteEnviando) return;
+  assistenteMensagens.push({ role:'user', content: texto });
+  input.value = '';
+  assistenteEnviando = true;
+  renderAssistente();
+  try{
+    const data = await apiRequest('POST', '/ai/assistente', { mensagens: assistenteMensagens });
+    assistenteMensagens.push({ role:'assistant', content: data.resposta || '(sem resposta)' });
+  }catch(e){
+    assistenteMensagens.push({ role:'assistant', content: 'Não consegui responder agora — ' + (e.message||'tenta de novo em instantes.') });
+  }
+  assistenteEnviando = false;
+  renderAssistente();
+}
+function ligarBindingsAssistente(){
+  const bolha = document.getElementById('assistente-bolha');
+  if(bolha){
+    bolha.addEventListener('pointerdown', (e)=>{
+      assistenteDrag = {
+        startX:e.clientX, startY:e.clientY,
+        bolhaXInicial: bolha.getBoundingClientRect().left, bolhaYInicial: bolha.getBoundingClientRect().top,
+        moveu:false, pointerId:e.pointerId,
+      };
+      try{ bolha.setPointerCapture(e.pointerId); }catch(err){}
+    });
+    bolha.addEventListener('pointermove', (e)=>{
+      if(!assistenteDrag || assistenteDrag.pointerId!==e.pointerId) return;
+      const dx = e.clientX - assistenteDrag.startX;
+      const dy = e.clientY - assistenteDrag.startY;
+      if(!assistenteDrag.moveu && Math.sqrt(dx*dx+dy*dy) < 5) return; // tremedeira do dedo/mão, não é arrastar de verdade ainda
+      assistenteDrag.moveu = true;
+      let novoX = assistenteDrag.bolhaXInicial + dx;
+      let novoY = assistenteDrag.bolhaYInicial + dy;
+      novoX = Math.min(Math.max(4, novoX), window.innerWidth - bolha.offsetWidth - 4);
+      novoY = Math.min(Math.max(4, novoY), window.innerHeight - bolha.offsetHeight - 4);
+      bolha.style.left = novoX+'px';
+      bolha.style.top = novoY+'px';
+      bolha.style.right = 'auto';
+      bolha.style.bottom = 'auto';
+      const painel = document.getElementById('assistente-painel');
+      if(painel) posicionarPainelAssistente();
+    });
+    const soltar = (e)=>{
+      if(!assistenteDrag || assistenteDrag.pointerId!==e.pointerId) return;
+      if(assistenteDrag.moveu){
+        assistenteBolhaX = parseFloat(bolha.style.left);
+        assistenteBolhaY = parseFloat(bolha.style.top);
+        try{ localStorage.setItem('assistente-bolha-pos', JSON.stringify({x:assistenteBolhaX, y:assistenteBolhaY})); }catch(err){}
+      } else {
+        assistenteAberto = !assistenteAberto;
+        renderAssistente();
+      }
+      assistenteDrag = null;
+    };
+    bolha.addEventListener('pointerup', soltar);
+    bolha.addEventListener('pointercancel', ()=>{ assistenteDrag = null; });
+  }
+  const fecharBtn = document.getElementById('assistente-fechar');
+  if(fecharBtn) fecharBtn.addEventListener('click', ()=>{ assistenteAberto = false; renderAssistente(); });
+  const enviarBtn = document.getElementById('assistente-enviar');
+  if(enviarBtn) enviarBtn.addEventListener('click', enviarMensagemAssistente);
+  const input = document.getElementById('assistente-input');
+  if(input){
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') enviarMensagemAssistente(); });
+  }
+}
+window.addEventListener('resize', ()=>{ if(assistenteAberto) posicionarPainelAssistente(); });
+
 function renderApp(){
   const app = document.getElementById('app');
   if(!loaded){ app.innerHTML = '<div class="loading">Carregando painel…</div>'; return; }
@@ -4438,10 +4571,44 @@ function renderCabecalhoPainelDashboard(id, titulo, extraHtml){
 function envolverConteudoPainel(id, conteudoHtml){
   const aberto = painelDashboardAberto(id);
   return `
-    <div class="dash-panel-collapse" style="grid-template-rows:${aberto ? '1fr' : '0fr'};">
+    <div class="dash-panel-collapse" id="dash-collapse-${id}" style="max-height:${aberto ? 'none' : '0px'};">
       <div class="dash-panel-collapse-inner">${conteudoHtml}</div>
     </div>
   `;
+}
+// Abre/fecha um painel específico do Dashboard sem redesenhar a página inteira — se
+// redesenhasse tudo (como o resto do app costuma fazer), o elemento nasceria de novo
+// já no estado final, sem um "antes" pra animação partir. Mede a altura real do
+// conteúdo em pixels (em vez de usar grid-template-rows com fr, que tem suporte menos
+// confiável entre navegadores) e anima o max-height até lá.
+function alternarPainelDashboard(id, btn){
+  const vaiAbrir = !painelDashboardAberto(id);
+  try{ localStorage.setItem('dash-painel-'+id, vaiAbrir ? '1' : '0'); }catch(e){}
+
+  const seta = btn.querySelector('.dash-panel-seta');
+  if(seta) seta.classList.toggle('fechada', !vaiAbrir);
+  const tituloEl = btn.closest('.dash-panel-title-recolhivel');
+  if(tituloEl) tituloEl.style.marginBottom = vaiAbrir ? '' : '0';
+
+  const colapseEl = document.getElementById('dash-collapse-'+id);
+  if(!colapseEl) return;
+  const innerEl = colapseEl.querySelector('.dash-panel-collapse-inner');
+
+  if(vaiAbrir){
+    const alturaFinal = innerEl.scrollHeight;
+    colapseEl.style.maxHeight = alturaFinal + 'px';
+    colapseEl.addEventListener('transitionend', function liberar(e){
+      if(e.propertyName !== 'max-height') return;
+      if(painelDashboardAberto(id)) colapseEl.style.maxHeight = 'none'; // libera de vez, pro conteúdo poder crescer depois sem ficar cortado
+      colapseEl.removeEventListener('transitionend', liberar);
+    });
+  } else {
+    colapseEl.style.maxHeight = colapseEl.scrollHeight + 'px'; // trava num valor explícito — estava em "none", que não é animável
+    colapseEl.offsetHeight; // força o navegador a registrar esse valor antes da próxima mudança
+    requestAnimationFrame(()=>{
+      colapseEl.style.maxHeight = '0px';
+    });
+  }
 }
 function renderDashboardPage(){
   const m = dashMetrics();
@@ -5993,12 +6160,7 @@ function bindAppEvents(){
   const salvarMetaEquipeBtn = document.getElementById('meta-vendas-equipe-salvar');
   if(salvarMetaEquipeBtn) salvarMetaEquipeBtn.addEventListener('click', salvarMetaVendasEquipe);
   app.querySelectorAll('[data-action="toggle-painel-dashboard"]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const id = btn.dataset.painelId;
-      const aberto = painelDashboardAberto(id);
-      try{ localStorage.setItem('dash-painel-'+id, aberto ? '0' : '1'); }catch(e){}
-      renderApp();
-    });
+    btn.addEventListener('click', ()=> alternarPainelDashboard(btn.dataset.painelId, btn));
   });
 
   /* -- tarefas (usado no Dashboard e na página Tarefas) -- */
@@ -9365,6 +9527,7 @@ function closeConfirm(){ confirmState = null; document.getElementById('confirm-r
 
 /* ---------- start ---------- */
 if(getToken()){
+  renderAssistente();
   tratarRetornoDoGoogle();
   loadBoard();
   loadFunis();
