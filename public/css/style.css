@@ -828,3 +828,6 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 @media (max-width:480px){
   .assistente-painel{ width:calc(100vw - 24px); height:min(460px, 70vh); }
 }
+
+.pipeline-ordenar-row{ display:flex; align-items:center; gap:10px; margin:0 0 16px; font-size:13px; color:var(--ink-soft); }
+.pipeline-ordenar-row select{ font-size:13px; }
