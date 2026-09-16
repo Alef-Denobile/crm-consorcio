@@ -233,7 +233,19 @@ input[type=date]::-webkit-calendar-picker-indicator:hover, input[type=time]::-we
 .modal-foot{ display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-top:1px solid var(--line); }
 .delete-link{ background:none; border:none; color:var(--danger); font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; padding:10px 6px; min-height:40px; }
 .delete-link:hover{ text-decoration:underline; }
-.modal-foot-actions{ display:flex; gap:8px; }
+.modal-foot-actions{ display:flex; gap:8px; position:relative; }
+.mensagem-salvo-toast{
+  position:absolute; bottom:100%; right:0; margin-bottom:10px;
+  background:var(--ink); color:var(--paper); padding:8px 14px; border-radius:8px;
+  font-size:12px; font-weight:600; white-space:nowrap; pointer-events:none;
+  animation: mensagemSalvoAnim 1.3s ease forwards;
+}
+@keyframes mensagemSalvoAnim{
+  0%{ opacity:0; transform:translateY(8px); }
+  15%{ opacity:1; transform:translateY(0); }
+  75%{ opacity:1; transform:translateY(-4px); }
+  100%{ opacity:0; transform:translateY(-10px); }
+}
 .btn-outline{ padding:10px 16px; min-height:40px; border-radius:8px; border:1px solid var(--line); background:none; color:var(--ink-soft); font-size:12px; font-weight:600; cursor:pointer; }
 .btn-outline:hover{ border-color:var(--ink); color:var(--ink); }
 .btn-save{ padding:10px 16px; min-height:40px; border-radius:8px; border:none; background:var(--accent); color:#fff; font-size:12px; font-weight:600; cursor:pointer; }

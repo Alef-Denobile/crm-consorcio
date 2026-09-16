@@ -276,6 +276,9 @@ let historicoContatoEnviando = false;
 let tarefaRapidaTitulo = '';
 let tarefaRapidaData = '';
 let tarefaRapidaCriando = false;
+let salvandoCard = false;
+let mensagemSalvoCard = null; // texto da mensagem "Novo lead adicionado" enquanto ela anima
+let salvandoTask = false;
 let extrasTela = null; // null (fechado) | 'menu' | 'etiquetas' | 'anexos' | 'tarefas' | 'tarefas-lista' | 'historico'
 let etiquetaInputValor = '';
 let etiquetaEditandoOriginal = null; // texto original da etiqueta sendo editada, ou null se for uma nova
@@ -3694,10 +3697,14 @@ async function addColumn(){
 }
 
 async function saveCardFromModal(){
+  if(salvandoCard) return; // já tem um salvamento em andamento — ignora cliques repetidos
   const nomeFinal = (modalForm.tipoPessoa==='juridica' ? modalForm.clienteJuridica : modalForm.clienteFisica) || '';
   if(!nomeFinal.trim()) return;
+  const eraNovo = modalForm.__isNew;
   const { __isNew, id, clienteFisica, clienteJuridica, ...dados } = modalForm;
   dados.cliente = nomeFinal.trim();
+  salvandoCard = true;
+  renderModal();
   try{
     if(__isNew){
       const novoCard = await apiRequest('POST', '/cards', dados);
@@ -3707,15 +3714,29 @@ async function saveCardFromModal(){
       const idx = board.cards.findIndex(c=>c.id===id);
       if(idx>-1) board.cards[idx] = atualizado;
     }
+    salvandoCard = false;
+    if(eraNovo){
+      // mostra "Novo lead adicionado" por cima do botão (fade in, sobe um pouco, fade
+      // out) antes de fechar — assim a pessoa vê claramente que salvou, em vez de só
+      // sumir a tela de repente sem confirmação nenhuma.
+      mensagemSalvoCard = 'Novo lead adicionado';
+      renderModal();
+      await new Promise(resolve=> setTimeout(resolve, 1300));
+      mensagemSalvoCard = null;
+    }
     closeModal();
+    renderApp();
   }catch(e){
+    salvandoCard = false;
     errorMsg = 'Não foi possível salvar o cliente.';
+    renderModal();
+    renderApp();
   }
-  renderApp();
 }
 
 /* ---------- mutações: tarefas ---------- */
 async function saveTaskFromModal(){
+  if(salvandoTask) return; // já tem um salvamento em andamento — ignora cliques repetidos
   if(!taskModalForm.titulo.trim()) return;
   const { __isNew, id, hora, ...dados } = taskModalForm;
   if(!dados.leadId) dados.leadId = null;
@@ -3723,6 +3744,8 @@ async function saveTaskFromModal(){
     const combinado = new Date(`${dados.vencimento}T${hora}`);
     if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
   }
+  salvandoTask = true;
+  renderTaskModal();
   try{
     if(__isNew){
       const nova = await apiRequest('POST', '/tasks', dados);
@@ -3734,9 +3757,12 @@ async function saveTaskFromModal(){
       if(idx>-1) tasks[idx] = atualizada;
       atualizarTarefaNaAgendaLocal(atualizada);
     }
+    salvandoTask = false;
     closeTaskModal();
   }catch(e){
+    salvandoTask = false;
     errorMsg = 'Não foi possível salvar a tarefa.';
+    renderTaskModal();
   }
   renderApp();
 }
@@ -7787,8 +7813,9 @@ function renderModal(){
         <div class="modal-foot">
           ${!f.__isNew ? `<button class="delete-link" id="f-delete">🗑 Excluir</button>` : '<span></span>'}
           <div class="modal-foot-actions">
-            <button class="btn-outline" id="f-cancel">Cancelar</button>
-            <button class="btn-save" id="f-save">Salvar</button>
+            ${mensagemSalvoCard ? `<span class="mensagem-salvo-toast">${esc(mensagemSalvoCard)}</span>` : ''}
+            <button class="btn-outline" id="f-cancel" ${salvandoCard?'disabled':''}>Cancelar</button>
+            <button class="btn-save" id="f-save" ${salvandoCard?'disabled':''}>${salvandoCard?'Salvando…':'Salvar'}</button>
           </div>
         </div>
       </div>
@@ -8257,8 +8284,8 @@ function renderTaskModal(){
         <div class="modal-foot">
           ${!f.__isNew ? `<button class="delete-link" id="t-delete">🗑 Excluir</button>` : '<span></span>'}
           <div class="modal-foot-actions">
-            <button class="btn-outline" id="t-cancel">Cancelar</button>
-            <button class="btn-save" id="t-save">Salvar tarefa</button>
+            <button class="btn-outline" id="t-cancel" ${salvandoTask?'disabled':''}>Cancelar</button>
+            <button class="btn-save" id="t-save" ${salvandoTask?'disabled':''}>${salvandoTask?'Salvando…':'Salvar tarefa'}</button>
           </div>
         </div>
       </div>
