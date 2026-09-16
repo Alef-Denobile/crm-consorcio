@@ -85,6 +85,7 @@ const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none"
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_REORDER = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>`;
 const ICON_FUNNEL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>`;
+const ICON_BAU = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M4 8v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
 const ICON_CHECK = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
 const ICON_MOVE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 7 3 11 7 15"/><line x1="3" y1="11" x2="15" y2="11"/><polyline points="17 17 21 13 17 9"/><line x1="21" y1="13" x2="9" y2="13"/></svg>`;
@@ -5180,7 +5181,10 @@ function renderLeadsPage(){
         <h1>Leads</h1>
         <p>${board.cards.length} ${board.cards.length===1?'contato':'contatos'} na sua base</p>
       </div>
-      <button class="btn-primary" data-action="open-new-lead">+ Novo lead</button>
+      <div class="page-head-actions">
+        <button class="btn-outline ${mostrarArquivados?'active':''}" data-action="toggle-mostrar-arquivados" style="display:inline-flex; align-items:center; gap:6px;">${ICON_BAU} ${mostrarArquivados?'Voltar aos ativos':'Ver arquivados'}</button>
+        <button class="btn-primary" data-action="open-new-lead">+ Novo lead</button>
+      </div>
     </div>
 
     <div class="leads-toolbar">
@@ -5191,7 +5195,6 @@ function renderLeadsPage(){
       </select>
       ${renderBotaoOrdenar('leads', leadsOrdenarPor)}
       <button class="btn-outline" data-action="exportar-leads">Exportar</button>
-      <button class="btn-outline ${mostrarArquivados?'active':''}" data-action="toggle-mostrar-arquivados">${mostrarArquivados?'Voltar aos ativos':'📦 Ver arquivados'}</button>
     </div>
 
     ${leadsSelecionados.size ? `
