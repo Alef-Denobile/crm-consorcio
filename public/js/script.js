@@ -402,7 +402,7 @@ let eventoGoogleModalForm = null; // { eventId, titulo, data, hora } — edita o
 let confirmState = null;         // { message, onConfirm }
 
 /* ---------- comunicação com a API ---------- */
-async function apiRequest(method, path, body){
+async function apiRequest(method, path, body, timeoutMs){
   const opts = { method, headers: {} };
   const token = getToken();
   if(token) opts.headers['Authorization'] = 'Bearer ' + token;
@@ -411,7 +411,7 @@ async function apiRequest(method, path, body){
     opts.body = JSON.stringify(body);
   }
   const controller = new AbortController();
-  const timeoutId = setTimeout(()=> controller.abort(), 25000); // 25s — evita a tela travar pra sempre esperando o servidor
+  const timeoutId = setTimeout(()=> controller.abort(), timeoutMs || 25000); // 25s por padrão — evita a tela travar pra sempre esperando o servidor
   opts.signal = controller.signal;
   let res;
   try{
@@ -3175,6 +3175,10 @@ function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
     const valorParcela = Math.round((credito * 0.016 / 11) * 100) / 100;
     return { parcelas:11, parcelas1:11, value:valorParcela, value2:0 };
   }
+  if(tipoCarta === 'home_equity' || tipoCarta === 'car_equity'){
+    const valorParcela = Math.round(credito * 0.011 * 100) / 100;
+    return { parcelas:1, parcelas1:1, value:valorParcela, value2:0 };
+  }
   const { value1, value2 } = calcComissaoPreview(credito);
   return { parcelas:13, parcelas1:10, value:value1, value2 };
 }
@@ -4281,7 +4285,7 @@ async function enviarMensagemAssistente(){
   assistenteEnviando = true;
   renderAssistente();
   try{
-    const data = await apiRequest('POST', '/ai/assistente', { mensagens: assistenteMensagens });
+    const data = await apiRequest('POST', '/ai/assistente', { mensagens: assistenteMensagens }, 45000);
     assistenteMensagens.push({ role:'assistant', content: data.resposta || '(sem resposta)' });
   }catch(e){
     assistenteMensagens.push({ role:'assistant', content: 'Não consegui responder agora — ' + (e.message||'tenta de novo em instantes.') });
@@ -7255,6 +7259,7 @@ function openEditCard(id){
   historicoContatoTexto = '';
   tarefaRapidaTitulo = '';
   tarefaRapidaData = '';
+  tarefaRapidaCriando = false;
   renderModal();
   loadAnexosDoCard(id);
   loadHistoricoContato(id);
@@ -7264,11 +7269,12 @@ async function criarTarefaRapidaDoCard(){
   if(!titulo || !modalForm || modalForm.__isNew) return;
   const dataEscolhida = tarefaRapidaData || new Date().toISOString().slice(0,10);
   tarefaRapidaCriando = true;
-  renderApp();
+  renderModal();
   try{
     const nova = await apiRequest('POST', '/tasks', { titulo, vencimento: dataEscolhida, prioridade:'media', leadId: modalForm.id, descricao:'' });
     tasks.push(nova);
     atualizarTarefaNaAgendaLocal(nova);
+    tarefaRapidaCriando = false;
     closeModal();
     agendaMesAtual = dataEscolhida.slice(0,7);
     goToPage('tarefas');
@@ -7279,7 +7285,7 @@ async function criarTarefaRapidaDoCard(){
   }catch(e){
     errorMsg = 'Não foi possível criar a tarefa.';
     tarefaRapidaCriando = false;
-    renderApp();
+    renderModal();
   }
 }
 function closeModal(){ modalForm = null; document.getElementById('modal-root').innerHTML=''; }
@@ -7591,6 +7597,8 @@ function renderModal(){
               <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
               <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
               <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
+              <option value="home_equity" ${f.tipoCarta==='home_equity'?'selected':''}>Home Equity</option>
+              <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
             </select>
           </div>
           <div class="field">
@@ -8928,6 +8936,12 @@ function previewComissaoHtml(prev){
       Total: 11x parcelas · Total líquido da comissão: <b>${fmtBRL(prev.value * 11)}</b>
     `;
   }
+  if(prev.parcelas === 1 && prev.value2 === 0){
+    return `
+      🔹 Parcela única: <b>${fmtBRL(prev.value)}</b><br/>
+      Total líquido da comissão: <b>${fmtBRL(prev.value)}</b>
+    `;
+  }
   const total = prev.value*10 + prev.value2*3;
   return `
     🔹 10 primeiras parcelas: <b>${fmtBRL(prev.value)}</b> cada<br/>
@@ -8967,6 +8981,8 @@ function renderContratoModal(){
               <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
               <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
               <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
+              <option value="home_equity" ${f.tipoCarta==='home_equity'?'selected':''}>Home Equity</option>
+              <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
             </select>
           </div>
           <div class="field">
@@ -8979,6 +8995,10 @@ function renderContratoModal(){
           <div class="field">
             <label>Mês da 1ª parcela</label>
             <input type="month" id="c-mes" value="${(f.date||'').slice(0,7)}" />
+            <p class="settings-page-note" id="c-mes-nota">${(f.tipoCarta==='home_equity'||f.tipoCarta==='car_equity')
+              ? 'Home Equity e Car Equity podem demorar até 2 meses pra pagar — mudar o mês aqui não altera o mês do lead.'
+              : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — só Home Equity e Car Equity ficam independentes.'
+            }</p>
           </div>
           <div class="calc-preview" id="c-preview">
             ${previewComissaoHtml(preview)}
@@ -9017,6 +9037,11 @@ function renderContratoModal(){
     const prev = calcComissaoPreviewPorTipo(contratoModalForm.creditoValor, contratoModalForm.tipoCarta);
     const previewEl = document.getElementById('c-preview');
     if(previewEl) previewEl.innerHTML = previewComissaoHtml(prev);
+    const ehEquity = contratoModalForm.tipoCarta==='home_equity' || contratoModalForm.tipoCarta==='car_equity';
+    const notaMes = document.getElementById('c-mes-nota');
+    if(notaMes) notaMes.textContent = ehEquity
+      ? 'Home Equity e Car Equity podem demorar até 2 meses pra pagar — mudar o mês aqui não altera o mês do lead.'
+      : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — só Home Equity e Car Equity ficam independentes.';
   });
 
   const creditoInput = document.getElementById('c-credito');

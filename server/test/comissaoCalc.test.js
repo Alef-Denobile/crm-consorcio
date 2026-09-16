@@ -3,10 +3,12 @@ const assert = require('node:assert/strict');
 const {
   calcComissaoParcelas,
   calcComissaoVeiculo,
+  calcComissaoEquity,
   calcComissaoPorTipo,
   COMISSAO_PARCELAS_BLOCO1,
   COMISSAO_PARCELAS_BLOCO2,
   COMISSAO_VEICULO_PARCELAS,
+  COMISSAO_EQUITY_PARCELAS,
 } = require('../utils/comissaoCalc');
 
 describe('calcComissaoParcelas (Imóvel / Investimento / Serviços)', () => {
@@ -47,12 +49,40 @@ describe('calcComissaoVeiculo', () => {
   });
 });
 
+describe('calcComissaoEquity (Home Equity / Car Equity)', () => {
+  test('carta de R$100.000 gera 1,1% numa parcela só', () => {
+    const { valorParcela } = calcComissaoEquity(100000);
+    // 100.000 x 1,1% = 1.100,00
+    assert.equal(valorParcela, 1100);
+  });
+
+  test('carta de R$0 não gera parcela negativa nem NaN', () => {
+    const { valorParcela } = calcComissaoEquity(0);
+    assert.equal(valorParcela, 0);
+  });
+});
+
 describe('calcComissaoPorTipo — escolhe a fórmula certa conforme o tipo de carta', () => {
   test('tipo "veiculo" usa a fórmula de 11 parcelas iguais, sem segundo bloco', () => {
     const r = calcComissaoPorTipo(100000, 'veiculo');
     assert.equal(r.parcelas, COMISSAO_VEICULO_PARCELAS);
     assert.equal(r.parcelas1, COMISSAO_VEICULO_PARCELAS);
     assert.equal(r.value, 145.45);
+    assert.equal(r.value2, 0);
+  });
+
+  test('tipo "home_equity" usa 1 parcela só de 1,1%', () => {
+    const r = calcComissaoPorTipo(100000, 'home_equity');
+    assert.equal(r.parcelas, COMISSAO_EQUITY_PARCELAS);
+    assert.equal(r.parcelas1, COMISSAO_EQUITY_PARCELAS);
+    assert.equal(r.value, 1100);
+    assert.equal(r.value2, 0);
+  });
+
+  test('tipo "car_equity" usa a mesma fórmula de 1,1% numa parcela só', () => {
+    const r = calcComissaoPorTipo(100000, 'car_equity');
+    assert.equal(r.parcelas, COMISSAO_EQUITY_PARCELAS);
+    assert.equal(r.value, 1100);
     assert.equal(r.value2, 0);
   });
 

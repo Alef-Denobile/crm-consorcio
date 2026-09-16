@@ -8,6 +8,7 @@ const Task = require('../models/Task');
 const Fluxo = require('../models/Fluxo');
 const FluxoExecucao = require('../models/FluxoExecucao');
 const Anexo = require('../models/Anexo');
+const Contrato = require('../models/Contrato');
 const { registrarAuditoria } = require('../utils/auditoria');
 const { gerarComissaoAutomaticaSeGanho, cancelarComissaoSePerdidoAposGanho } = require('../utils/comissaoAutomatica');
 const { executarAcaoDeAutomacao } = require('../utils/executarAutomacao');
@@ -108,6 +109,18 @@ router.put('/:id', async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });
+
+    // Mesmo mecanismo de sincronização de mês da rota de comissões, no sentido
+    // contrário: editar o mês aqui no lead também atualiza o contrato vinculado —
+    // exceto pra Home Equity e Car Equity, que ficam soltos de propósito.
+    if (dados.mes && /^\d{4}-\d{2}$/.test(dados.mes)) {
+      const contratoVinculado = await Contrato.findOne({ cardId: card._id, userId: req.userId });
+      if (contratoVinculado && !['home_equity', 'car_equity'].includes(contratoVinculado.tipoCarta)) {
+        contratoVinculado.date = new Date(`${dados.mes}-01`);
+        await contratoVinculado.save();
+      }
+    }
+
     res.json(card.toJSON());
   } catch (err) {
     res.status(500).json({ error: 'Erro ao atualizar cliente.' });
