@@ -84,6 +84,7 @@ const ICON_IMPORT_EXPORT = `<svg width="17" height="17" viewBox="0 0 24 24" fill
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_REORDER = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>`;
+const ICON_FUNNEL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
 const ICON_CHECK = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
 const ICON_MOVE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 7 3 11 7 15"/><line x1="3" y1="11" x2="15" y2="11"/><polyline points="17 17 21 13 17 9"/><line x1="21" y1="13" x2="9" y2="13"/></svg>`;
@@ -177,6 +178,7 @@ let leadsOrdenarPor = 'padrao'; // 'padrao' | 'alfabetica' | 'recentes' | 'data-
 let pipelineOrdenarPor = 'padrao';
 let pipelineOrdenando = false;
 let comissoesOrdenarPor = 'padrao';
+let ordenarMenuAberto = null; // 'leads' | 'pipeline' | 'comissoes' | null
 let mostrarArquivados = false;
 let leadsSelecionados = new Set();
 let leadsBulkEtiquetaAberta = false;
@@ -3239,6 +3241,33 @@ function comissoesStats(){
 // Ordenação compartilhada entre Leads, Pipeline e Comissões. "data-referencia" usa o
 // campo que representa o mês de referência em cada tela (mes do lead, date do
 // contrato) — mesmo texto, campo diferente conforme onde é chamada.
+const OPCOES_ORDENACAO = [
+  ['padrao', 'Ordem padrão'],
+  ['alfabetica', 'Ordem alfabética'],
+  ['recentes', 'Adicionados recentemente'],
+  ['data-referencia', 'Data de referência'],
+];
+// Botão de funil que abre um menu com a ordenação atual marcada e as outras opções —
+// usado em Leads, Pipeline e Comissões. "menuId" identifica qual dos três é esse (só
+// um fica aberto por vez), e "rotuloPadrao" troca o texto da primeira opção conforme
+// o contexto (no Pipeline, por exemplo, deixa claro que o padrão é a ordem manual).
+function renderBotaoOrdenar(menuId, valorAtual, rotuloPadrao){
+  const aberto = ordenarMenuAberto === menuId;
+  const opcoes = rotuloPadrao ? [[OPCOES_ORDENACAO[0][0], rotuloPadrao], ...OPCOES_ORDENACAO.slice(1)] : OPCOES_ORDENACAO;
+  return `
+    <div class="ordenar-wrap">
+      <button type="button" class="icon-btn ${valorAtual!=='padrao'?'ordenar-ativo':''}" data-action="toggle-ordenar-menu" data-menu-id="${menuId}" title="Ordenar">${ICON_FUNNEL}</button>
+      ${aberto ? `
+        <div class="date-menu ordenar-menu">
+          <div class="date-menu-title">Ordenar por</div>
+          <div class="date-menu-list">
+            ${opcoes.map(([val,label])=>`<button class="date-menu-item ${valorAtual===val?'active':''}" data-action="escolher-ordenar" data-menu-id="${menuId}" data-valor="${val}">${label}</button>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
 function ordenarPorCriterio(lista, criterio, campoNome, campoData){
   if(criterio === 'alfabetica') return [...lista].sort((a,b)=> (a[campoNome]||'').localeCompare(b[campoNome]||'', 'pt-BR'));
   if(criterio === 'recentes') return [...lista].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0));
@@ -4885,13 +4914,7 @@ function renderPipelinePage(){
     </div>
 
     <div class="pipeline-ordenar-row">
-      <label for="pipeline-ordenar">Ordenar cards:</label>
-      <select class="leads-filter" id="pipeline-ordenar" ${pipelineOrdenando?'disabled':''}>
-        <option value="padrao" ${pipelineOrdenarPor==='padrao'?'selected':''}>Ordem manual (arrastar)</option>
-        <option value="alfabetica" ${pipelineOrdenarPor==='alfabetica'?'selected':''}>Ordem alfabética</option>
-        <option value="recentes" ${pipelineOrdenarPor==='recentes'?'selected':''}>Adicionados recentemente</option>
-        <option value="data-referencia" ${pipelineOrdenarPor==='data-referencia'?'selected':''}>Data de referência</option>
-      </select>
+      ${renderBotaoOrdenar('pipeline', pipelineOrdenarPor, 'Ordem manual (arrastar)')}
       ${pipelineOrdenando ? `<span class="settings-page-note">Reordenando…</span>` : ''}
     </div>
 
@@ -5140,12 +5163,7 @@ function renderLeadsPage(){
         <option value="">Todos os status</option>
         ${board.columns.map(c=>`<option value="${c.id}" ${leadsStatusFilter===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
       </select>
-      <select class="leads-filter" id="leads-ordenar">
-        <option value="padrao" ${leadsOrdenarPor==='padrao'?'selected':''}>Ordem padrão</option>
-        <option value="alfabetica" ${leadsOrdenarPor==='alfabetica'?'selected':''}>Ordem alfabética</option>
-        <option value="recentes" ${leadsOrdenarPor==='recentes'?'selected':''}>Adicionados recentemente</option>
-        <option value="data-referencia" ${leadsOrdenarPor==='data-referencia'?'selected':''}>Data de referência</option>
-      </select>
+      ${renderBotaoOrdenar('leads', leadsOrdenarPor)}
       <button class="btn-outline" data-action="exportar-leads">Exportar</button>
       <button class="btn-outline ${mostrarArquivados?'active':''}" data-action="toggle-mostrar-arquivados">${mostrarArquivados?'Voltar aos ativos':'📦 Ver arquivados'}</button>
     </div>
@@ -5586,12 +5604,7 @@ function renderComissoesPage(){
           <span>${monthLabel(comissoesMonth, true)}</span>
           <button class="icon-btn" data-action="comissoes-mes" data-delta="1" title="Próximo mês">›</button>
         </div>
-        <select class="leads-filter" id="comissoes-ordenar">
-          <option value="padrao" ${comissoesOrdenarPor==='padrao'?'selected':''}>Ordem padrão</option>
-          <option value="alfabetica" ${comissoesOrdenarPor==='alfabetica'?'selected':''}>Ordem alfabética</option>
-          <option value="recentes" ${comissoesOrdenarPor==='recentes'?'selected':''}>Adicionados recentemente</option>
-          <option value="data-referencia" ${comissoesOrdenarPor==='data-referencia'?'selected':''}>Data de referência</option>
-        </select>
+        ${renderBotaoOrdenar('comissoes', comissoesOrdenarPor)}
         <button class="btn-primary" data-action="open-new-contrato">+ Novo contrato</button>
       </div>
     </div>
@@ -6588,8 +6601,6 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="comissoes-mes"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ comissoesMonth = addMonthsKey(comissoesMonth, parseInt(btn.dataset.delta,10)); renderApp(); });
   });
-  const comissoesOrdenarSelect = document.getElementById('comissoes-ordenar');
-  if(comissoesOrdenarSelect) comissoesOrdenarSelect.addEventListener('change', (e)=>{ comissoesOrdenarPor = e.target.value; renderApp(); });
   const openNewContratoBtn = app.querySelector('[data-action="open-new-contrato"]');
   if(openNewContratoBtn) openNewContratoBtn.addEventListener('click', openNewContrato);
   app.querySelectorAll('[data-action="open-edit-contrato"]').forEach(btn=>{
@@ -6820,12 +6831,27 @@ function bindAppEvents(){
   });
   const leadsFilterSelect = document.getElementById('leads-status-filter');
   if(leadsFilterSelect) leadsFilterSelect.addEventListener('change', (e)=>{ leadsStatusFilter = e.target.value; renderApp(); });
-  const leadsOrdenarSelect = document.getElementById('leads-ordenar');
-  if(leadsOrdenarSelect) leadsOrdenarSelect.addEventListener('change', (e)=>{ leadsOrdenarPor = e.target.value; renderApp(); });
+
+  /* -- botão de funil de ordenação, compartilhado entre Leads, Pipeline e Comissões -- */
+  app.querySelectorAll('[data-action="toggle-ordenar-menu"]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      ordenarMenuAberto = ordenarMenuAberto === btn.dataset.menuId ? null : btn.dataset.menuId;
+      renderApp();
+    });
+  });
+  app.querySelectorAll('[data-action="escolher-ordenar"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const menuId = btn.dataset.menuId;
+      const valor = btn.dataset.valor;
+      ordenarMenuAberto = null;
+      if(menuId === 'leads'){ leadsOrdenarPor = valor; renderApp(); }
+      else if(menuId === 'comissoes'){ comissoesOrdenarPor = valor; renderApp(); }
+      else if(menuId === 'pipeline'){ aplicarOrdenacaoPipeline(valor); }
+    });
+  });
 
   /* -- Pipeline: funis -- */
-  const pipelineOrdenarSelect = document.getElementById('pipeline-ordenar');
-  if(pipelineOrdenarSelect) pipelineOrdenarSelect.addEventListener('change', (e)=> aplicarOrdenacaoPipeline(e.target.value));
   app.querySelectorAll('[data-action="set-funil"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       funilAtualId = btn.dataset.funilId;
@@ -7264,6 +7290,9 @@ function closeMenusOnOutsideClick(e){
   }
   if(notifOpen && !e.target.closest('.notif-panel') && !e.target.closest('[data-action="toggle-notif"]')){
     notifOpen = false; renderApp();
+  }
+  if(ordenarMenuAberto && !e.target.closest('.ordenar-wrap')){
+    ordenarMenuAberto = null; renderApp();
   }
 }
 

@@ -830,4 +830,7 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 }
 
 .pipeline-ordenar-row{ display:flex; align-items:center; gap:10px; margin:0 0 16px; font-size:13px; color:var(--ink-soft); }
-.pipeline-ordenar-row select{ font-size:13px; }
+
+.ordenar-wrap{ position:relative; }
+.ordenar-menu{ top:40px; width:220px; }
+.ordenar-ativo{ color:var(--accent); }
