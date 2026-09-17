@@ -119,6 +119,16 @@ router.put('/:id', async (req, res) => {
       const coluna = await Column.findOne({ _id: dados.columnId, userId: req.userId });
       if (!coluna) return res.status(404).json({ error: 'Coluna inválida.' });
     }
+
+    // guarda o estado anterior do "mês de venda" só quando ele está sendo alterado
+    // nessa edição — usado depois pra saber se está passando de vazio pra
+    // preenchido de verdade (não simplesmente sendo reenviado igual)
+    let mesAntesDoUpdate = null;
+    if (dados.mes !== undefined) {
+      const cardAntes = await Card.findOne({ _id: req.params.id, userId: req.userId }).select('mes');
+      mesAntesDoUpdate = cardAntes ? cardAntes.mes : null;
+    }
+
     const card = await Card.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },
       dados,
@@ -136,6 +146,23 @@ router.put('/:id', async (req, res) => {
       if (contratoVinculado && !['home_equity', 'car_equity'].includes(contratoVinculado.tipoCarta)) {
         contratoVinculado.date = new Date(Number(dados.mes.slice(0, 4)), Number(dados.mes.slice(5, 7)) - 1, 1);
         await contratoVinculado.save();
+      }
+    }
+
+    // Preencher a data de venda pela primeira vez leva o lead direto pra "Ganho" —
+    // só dispara na transição de vazio pra preenchido (nunca em leads que já tinham
+    // esse campo preenchido antes de agora, então não afeta leads antigos à toa).
+    if (mesAntesDoUpdate !== null && !mesAntesDoUpdate && dados.mes && /^\d{4}-\d{2}/.test(dados.mes)) {
+      const colunaAtual = await Column.findOne({ _id: card.columnId, userId: req.userId });
+      if (colunaAtual && colunaAtual.tipo !== 'ganho') {
+        const colunaGanho = await Column.findOne({ userId: req.userId, funilId: colunaAtual.funilId, tipo: 'ganho' });
+        if (colunaGanho) {
+          const ultimoCard = await Card.findOne({ columnId: colunaGanho._id, userId: req.userId }).sort('-ordem');
+          card.columnId = colunaGanho._id;
+          card.ordem = ultimoCard ? ultimoCard.ordem + 1000 : 1000;
+          await card.save();
+          gerarComissaoAutomaticaSeGanho(req.userId, card, colunaGanho._id);
+        }
       }
     }
 

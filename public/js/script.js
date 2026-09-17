@@ -177,7 +177,7 @@ let openMoveMenuCardId = null;
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
-let leadsOrdenarPor = 'padrao'; // 'padrao' | 'alfabetica' | 'recentes' | 'data-referencia'
+let leadsOrdenarPor = 'padrao'; // 'padrao' | 'alfabetica' | 'recentes' | 'data-inicio' | 'data-venda'
 let pipelineOrdenarPor = 'padrao';
 let pipelineOrdenando = false;
 let comissoesOrdenarPor = 'padrao';
@@ -3231,9 +3231,10 @@ function monthsBetween(anchorYM, targetYM){
 // Descreve o tempo entre o início do contato e o mês de venda, pra dar uma noção
 // rápida do ciclo de venda daquele cliente direto no formulário.
 function textoCicloDeVenda(mesInicio, mesVenda){
-  if(!mesInicio || !mesVenda) return '';
+  if(!mesInicio) return '';
+  if(!mesVenda) return '🟡 Ciclo aberto — ainda não fechou.';
   const diferenca = monthsBetween(mesInicio, mesVenda);
-  if(diferenca < 0) return '⚠️ O mês de venda é anterior ao início do contato — confira as datas.';
+  if(diferenca < 0) return '⚠️ A data de venda é anterior ao início do contato — confira as datas.';
   if(diferenca === 0) return '🔵 Ciclo de venda: fechou no mesmo mês do primeiro contato.';
   return `🔵 Ciclo de venda: ${diferenca} ${diferenca===1?'mês':'meses'} até fechar.`;
 }
@@ -3282,22 +3283,26 @@ function comissoesStats(){
 }
 
 /* ---------- derivações (Leads) ---------- */
-// Ordenação compartilhada entre Leads, Pipeline e Comissões. "data-referencia" usa o
-// campo que representa o mês de referência em cada tela (mes do lead, date do
-// contrato) — mesmo texto, campo diferente conforme onde é chamada.
+// Ordenação compartilhada entre Leads, Pipeline e Comissões. "data-inicio" e
+// "data-venda" usam os campos que representam cada uma dessas datas em cada tela —
+// leads/pipeline têm as duas (mesInicioContato/mes), comissões só tem uma (date).
 const OPCOES_ORDENACAO = [
   ['padrao', 'Ordem padrão'],
   ['alfabetica', 'Ordem alfabética'],
   ['recentes', 'Adicionados recentemente'],
-  ['data-referencia', 'Data de referência'],
+  ['data-inicio', 'Data de início de contato'],
+  ['data-venda', 'Data de venda'],
 ];
 // Botão de funil que abre um menu com a ordenação atual marcada e as outras opções —
 // usado em Leads, Pipeline e Comissões. "menuId" identifica qual dos três é esse (só
-// um fica aberto por vez), e "rotuloPadrao" troca o texto da primeira opção conforme
-// o contexto (no Pipeline, por exemplo, deixa claro que o padrão é a ordem manual).
-function renderBotaoOrdenar(menuId, valorAtual, rotuloPadrao){
+// um fica aberto por vez), "rotuloPadrao" troca o texto da primeira opção conforme
+// o contexto (no Pipeline, por exemplo, deixa claro que o padrão é a ordem manual),
+// e "ocultarInicio" tira a opção de início de contato pra Comissões, que não tem
+// esse campo.
+function renderBotaoOrdenar(menuId, valorAtual, rotuloPadrao, ocultarInicio){
   const aberto = ordenarMenuAberto === menuId;
-  const opcoes = rotuloPadrao ? [[OPCOES_ORDENACAO[0][0], rotuloPadrao], ...OPCOES_ORDENACAO.slice(1)] : OPCOES_ORDENACAO;
+  let opcoes = rotuloPadrao ? [[OPCOES_ORDENACAO[0][0], rotuloPadrao], ...OPCOES_ORDENACAO.slice(1)] : OPCOES_ORDENACAO;
+  if(ocultarInicio) opcoes = opcoes.filter(([val])=> val !== 'data-inicio');
   return `
     <div class="ordenar-wrap">
       <button type="button" class="icon-btn ${valorAtual!=='padrao'?'ordenar-ativo':''}" data-action="toggle-ordenar-menu" data-menu-id="${menuId}" title="Ordenar">${ICON_FUNNEL}</button>
@@ -3312,10 +3317,11 @@ function renderBotaoOrdenar(menuId, valorAtual, rotuloPadrao){
     </div>
   `;
 }
-function ordenarPorCriterio(lista, criterio, campoNome, campoData){
+function ordenarPorCriterio(lista, criterio, campoNome, campoInicio, campoVenda){
   if(criterio === 'alfabetica') return [...lista].sort((a,b)=> (a[campoNome]||'').localeCompare(b[campoNome]||'', 'pt-BR'));
   if(criterio === 'recentes') return [...lista].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0));
-  if(criterio === 'data-referencia') return [...lista].sort((a,b)=> String(a[campoData]||'').localeCompare(String(b[campoData]||'')));
+  if(criterio === 'data-inicio') return [...lista].sort((a,b)=> String(a[campoInicio]||'').localeCompare(String(b[campoInicio]||'')));
+  if(criterio === 'data-venda') return [...lista].sort((a,b)=> String(a[campoVenda]||'').localeCompare(String(b[campoVenda]||'')));
   return lista; // 'padrao' — não mexe na ordem
 }
 // Reordena de verdade (e salva) os cards de cada coluna do funil atual, conforme o
@@ -3337,7 +3343,7 @@ function aplicarOrdenacaoPipeline(criterio){
       try{
         for(const col of colunasDoFunil){
           const cardsDaColuna = cardsOf(col.id);
-          const ordenados = ordenarPorCriterio(cardsDaColuna, criterio, 'cliente', 'mes');
+          const ordenados = ordenarPorCriterio(cardsDaColuna, criterio, 'cliente', 'mesInicioContato', 'mes');
           await Promise.all(ordenados.map((card, i)=>{
             const novaOrdem = (i+1)*1000;
             card.ordem = novaOrdem; // otimista
@@ -3360,7 +3366,7 @@ function filteredLeads(){
     const q = leadsSearch.trim().toLowerCase();
     list = list.filter(c=> (c.cliente||'').toLowerCase().includes(q) || (c.telefone||'').toLowerCase().includes(q));
   }
-  list = ordenarPorCriterio(list, leadsOrdenarPor, 'cliente', 'mes');
+  list = ordenarPorCriterio(list, leadsOrdenarPor, 'cliente', 'mesInicioContato', 'mes');
   return list;
 }
 
@@ -5675,7 +5681,7 @@ function renderComissoesPage(){
           <span>${monthLabel(comissoesMonth, true)}</span>
           <button class="icon-btn" data-action="comissoes-mes" data-delta="1" title="Próximo mês">›</button>
         </div>
-        ${renderBotaoOrdenar('comissoes', comissoesOrdenarPor)}
+        ${renderBotaoOrdenar('comissoes', comissoesOrdenarPor, null, true)}
         <button class="btn-primary" data-action="open-new-contrato">+ Novo contrato</button>
       </div>
     </div>
@@ -5697,7 +5703,7 @@ function renderComissoesPage(){
 
     ${contratos.length ? `
       <div class="contratos-list">
-        ${ordenarPorCriterio(contratos, comissoesOrdenarPor, 'desc', 'date').map(c=>renderContratoCard(c)).join('')}
+        ${ordenarPorCriterio(contratos, comissoesOrdenarPor, 'desc', null, 'date').map(c=>renderContratoCard(c)).join('')}
       </div>
     ` : `<div class="tasks-empty">Nenhum contrato de comissão cadastrado ainda.</div>`}
   `;
@@ -7890,7 +7896,7 @@ function renderModal(){
               <input type="date" id="f-mes-inicio-contato" value="${f.mesInicioContato || ''}" />
             </div>
             <div class="field">
-              <label>Mês de venda (referência)</label>
+              <label>Mês de venda</label>
               <input type="date" id="f-mes" value="${f.mes || ''}" />
             </div>
           </div>
