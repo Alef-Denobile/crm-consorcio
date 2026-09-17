@@ -7854,16 +7854,18 @@ function renderModal(){
               <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
             </select>
           </div>
-          <div class="field">
-            <label>Mês de início de contato</label>
-            <input type="month" id="f-mes-inicio-contato" value="${f.mesInicioContato || ''}" />
-            <p class="settings-page-note">Quando você começou a conversar com esse cliente — opcional, ajuda a documentar quanto tempo leva até fechar.</p>
+          <div class="field-row">
+            <div class="field">
+              <label>Mês de início de contato</label>
+              <input type="month" id="f-mes-inicio-contato" value="${f.mesInicioContato || ''}" />
+            </div>
+            <div class="field">
+              <label>Mês de venda (referência)</label>
+              <input type="month" id="f-mes" value="${f.mes || currentMonthKey()}" />
+            </div>
           </div>
-          <div class="field">
-            <label>Mês de venda (referência)</label>
-            <input type="month" id="f-mes" value="${f.mes || currentMonthKey()}" />
-            <p class="settings-page-note" id="f-ciclo-venda-nota" style="${f.mesInicioContato?'':'display:none;'}">${textoCicloDeVenda(f.mesInicioContato, f.mes)}</p>
-          </div>
+          <p class="settings-page-note">O início de contato é opcional — ajuda a documentar quanto tempo leva até fechar.</p>
+          <p class="settings-page-note" id="f-ciclo-venda-nota" style="${f.mesInicioContato?'':'display:none;'}">${textoCicloDeVenda(f.mesInicioContato, f.mes)}</p>
           <div class="field">
             <label>Qualificação</label>
             <div class="temp-toggle" id="f-temp-toggle">
