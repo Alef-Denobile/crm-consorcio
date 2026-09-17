@@ -112,11 +112,13 @@ router.put('/:id', async (req, res) => {
 
     // Mesmo mecanismo de sincronização de mês da rota de comissões, no sentido
     // contrário: editar o mês aqui no lead também atualiza o contrato vinculado —
-    // exceto pra Home Equity e Car Equity, que ficam soltos de propósito.
-    if (dados.mes && /^\d{4}-\d{2}$/.test(dados.mes)) {
+    // exceto pra Home Equity e Car Equity, que ficam soltos de propósito. Aceita
+    // tanto "YYYY-MM" quanto "YYYY-MM-DD" (com dia) — a comissão sempre usa o dia 1
+    // do mês correspondente, já que trabalha em parcelas mensais.
+    if (dados.mes && /^\d{4}-\d{2}/.test(dados.mes)) {
       const contratoVinculado = await Contrato.findOne({ cardId: card._id, userId: req.userId });
       if (contratoVinculado && !['home_equity', 'car_equity'].includes(contratoVinculado.tipoCarta)) {
-        contratoVinculado.date = new Date(`${dados.mes}-01`);
+        contratoVinculado.date = new Date(Number(dados.mes.slice(0, 4)), Number(dados.mes.slice(5, 7)) - 1, 1);
         await contratoVinculado.save();
       }
     }

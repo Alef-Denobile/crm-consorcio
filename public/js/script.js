@@ -2703,7 +2703,7 @@ function relatoriosDadosMensais(mesesAtras, cardsBase){
       if(bucket) bucket.novos++;
     }
     if(c.mes){
-      const bucketGanho = porKey.get(c.mes);
+      const bucketGanho = porKey.get(c.mes.slice(0,7));
       const col = board.columns.find(k=>k.id===c.columnId);
       if(bucketGanho && col && col.tipo==='ganho'){
         bucketGanho.ganhoValor += Number(c.valor)||0;
@@ -2971,11 +2971,11 @@ function tratarRetornoDoGoogle(){
 
 /* ---------- derivações (Pipeline) ---------- */
 function monthsList(){
-  const set = new Set([currentMonthKey(), ...board.cards.map(c=>c.mes).filter(Boolean)]);
+  const set = new Set([currentMonthKey(), ...board.cards.map(c=>c.mesInicioContato).filter(Boolean).map(d=>d.slice(0,7))]);
   return Array.from(set).sort((a,b)=> a<b?1:-1);
 }
 function visibleCards(){
-  let cards = filterMonth ? board.cards.filter(c=>c.mes===filterMonth) : board.cards;
+  let cards = filterMonth ? board.cards.filter(c=>c.mesInicioContato && c.mesInicioContato.slice(0,7)===filterMonth) : board.cards;
   cards = cards.filter(c=>!c.arquivado);
   if(filtroEsfriando){
     const limite = Date.now() - 7*24*60*60*1000;
@@ -3199,7 +3199,7 @@ function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
 }
 function atualizarNotaCicloDeVenda(){
   const nota = document.getElementById('f-ciclo-venda-nota');
-  if(!nota || !modalForm) return;
+  if(!nota || !modalForm || modalForm.__isNew) return;
   const texto = textoCicloDeVenda(modalForm.mesInicioContato, modalForm.mes);
   nota.textContent = texto;
   nota.style.display = texto ? '' : 'none';
@@ -5149,7 +5149,7 @@ function ativarArrasteHorizontal(){
 }
 function renderCard(card){
   const temp = TEMPS[card.temperatura] || TEMPS.frio;
-  const showMonth = filterMonth === null && card.mes;
+  const showMonth = filterMonth === null && card.mesInicioContato;
   return `
     <div class="card" draggable="true" data-card-id="${card.id}">
       <div class="card-drag-handle" title="Arraste para mover">
@@ -5171,7 +5171,7 @@ function renderCard(card){
           </div>
           <div class="card-value-row">
             <span class="card-value">${fmtBRL(card.valor)}</span>
-            ${showMonth ? `<span class="month-badge">${monthLabel(card.mes)}</span>` : ''}
+            ${showMonth ? `<span class="month-badge">${monthLabel(card.mesInicioContato)}</span>` : ''}
           </div>
           ${(card.telefone || card.obs) ? `
             <div class="card-extra">
@@ -7401,10 +7401,13 @@ function renderEscolhaTipoPessoaModal(){
   });
 }
 function abrirNovoCardComTipo(columnId, tipoPessoa){
+  // se a pessoa estiver vendo um mês específico no Pipeline, começa nesse mês (dia 1);
+  // se estiver em "Geral", usa a data de hoje mesmo, com o dia certinho
+  const dataInicial = filterMonth ? `${filterMonth}-01` : new Date().toISOString().slice(0,10);
   modalForm = {
     __isNew: true, id:null, columnId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
-    mes: filterMonth || currentMonthKey(),
+    mes: dataInicial, mesInicioContato: dataInicial, // um lead novo começa agora — os dois nascem iguais, e "mês de venda" muda depois quando a venda realmente acontecer
     etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
     tipoPessoa, clienteFisica:'', clienteJuridica:'',
     cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
@@ -7857,15 +7860,15 @@ function renderModal(){
           <div class="field-row">
             <div class="field">
               <label>Mês de início de contato</label>
-              <input type="month" id="f-mes-inicio-contato" value="${f.mesInicioContato || ''}" />
+              <input type="date" id="f-mes-inicio-contato" value="${f.mesInicioContato || ''}" />
             </div>
             <div class="field">
               <label>Mês de venda (referência)</label>
-              <input type="month" id="f-mes" value="${f.mes || currentMonthKey()}" />
+              <input type="date" id="f-mes" value="${f.mes || new Date().toISOString().slice(0,10)}" />
             </div>
           </div>
           <p class="settings-page-note">O início de contato é opcional — ajuda a documentar quanto tempo leva até fechar.</p>
-          <p class="settings-page-note" id="f-ciclo-venda-nota" style="${f.mesInicioContato?'':'display:none;'}">${textoCicloDeVenda(f.mesInicioContato, f.mes)}</p>
+          <p class="settings-page-note" id="f-ciclo-venda-nota" style="${(f.mesInicioContato && !f.__isNew)?'':'display:none;'}">${textoCicloDeVenda(f.mesInicioContato, f.mes)}</p>
           <div class="field">
             <label>Qualificação</label>
             <div class="temp-toggle" id="f-temp-toggle">
@@ -9557,7 +9560,7 @@ async function confirmarMoverLeadsParaColuna(){
         const copia = await apiRequest('POST', '/cards', {
           columnId: colId, cliente: original.cliente, valor: original.valor,
           temperatura: original.temperatura, telefone: original.telefone,
-          obs: original.obs, mes: original.mes,
+          obs: original.obs, mes: original.mes, mesInicioContato: original.mesInicioContato,
         });
         board.cards.push(copia);
       } else {

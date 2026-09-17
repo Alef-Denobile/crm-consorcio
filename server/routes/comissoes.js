@@ -97,7 +97,7 @@ router.put('/:id', async (req, res) => {
     // pra Home Equity e Car Equity, que ficam soltos de propósito (o pagamento deles
     // pode demorar até 2 meses a mais que o mês em que o negócio foi fechado).
     if (date && contrato.cardId && !TIPOS_MES_INDEPENDENTE.includes(contrato.tipoCarta)) {
-      const novoMes = contrato.date.toISOString().slice(0, 7);
+      const novoMes = contrato.date.toISOString().slice(0, 10); // "YYYY-MM-DD" — o contrato sempre usa o dia 1, mas mantém o formato de data completa igual ao do lead
       await Card.findOneAndUpdate({ _id: contrato.cardId, userId: req.userId }, { mes: novoMes });
     }
 

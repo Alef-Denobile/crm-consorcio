@@ -20,8 +20,10 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
 
     const { parcelas, parcelas1, value, value2 } = calcComissaoPorTipo(credito, card.tipoCarta);
     // Usa o "mês" que a pessoa definiu no lead como referência — só cai pra data de hoje
-    // se o lead não tiver esse campo preenchido (formato esperado: "YYYY-MM").
-    const mesValido = /^\d{4}-\d{2}$/.test(card.mes || '');
+    // se o lead não tiver esse campo preenchido. Aceita tanto "YYYY-MM" (formato antigo)
+    // quanto "YYYY-MM-DD" (com dia, formato atual) — sempre usa o dia 1 do mês
+    // correspondente, já que a comissão sempre trabalha em parcelas mensais.
+    const mesValido = /^\d{4}-\d{2}/.test(card.mes || '');
     const hoje = new Date();
     const dataReferencia = mesValido
       ? new Date(Number(card.mes.slice(0, 4)), Number(card.mes.slice(5, 7)) - 1, 1)
