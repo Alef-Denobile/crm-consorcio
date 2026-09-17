@@ -1,5 +1,6 @@
 const Contrato = require('../models/Contrato');
 const Column = require('../models/Column');
+const Card = require('../models/Card');
 const { calcComissaoPorTipo } = require('./comissaoCalc');
 
 // Quando um cliente entra numa coluna do tipo "ganho" (fechado), gera a comissão
@@ -28,6 +29,12 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
     const dataReferencia = mesValido
       ? new Date(Number(card.mes.slice(0, 4)), Number(card.mes.slice(5, 7)) - 1, 1)
       : new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    if (!mesValido) {
+      // o lead ganhou sem "mês de venda" preenchido — registra a data de hoje ali
+      // também, pra ficar visível no próprio lead, não só escondida na comissão
+      const mesDeHoje = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+      await Card.updateOne({ _id: card._id, userId }, { mes: mesDeHoje });
+    }
     await Contrato.create({
       userId,
       cardId: card._id,

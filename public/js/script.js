@@ -382,6 +382,8 @@ let contratoModalForm = null;
 let nomeNovoVal = '';
 let nomeMsg = null;
 let verificandoAtualizacao = false;
+let preenchendoMesInicioContato = false;
+let mesInicioContatoMsg = null;
 let backupGerando = false;
 let backupImportando = false;
 let backupMsg = null;
@@ -2927,6 +2929,23 @@ async function baixarBackupCompleto(){
   backupGerando = false;
   renderApp();
   if(backupModalAberto) renderBackupModal();
+}
+async function preencherMesInicioContatoAntigos(){
+  preenchendoMesInicioContato = true;
+  mesInicioContatoMsg = null;
+  renderApp();
+  try{
+    const data = await apiRequest('POST', '/cards/preencher-mes-inicio-contato');
+    // atualiza localmente também, sem precisar recarregar tudo do servidor de novo
+    board.cards.forEach(c=>{ if(!c.mesInicioContato && c.mes) c.mesInicioContato = c.mes; });
+    mesInicioContatoMsg = { tipo:'ok', texto: data.atualizados
+      ? `${data.atualizados} lead(s) atualizado(s).`
+      : 'Nenhum lead precisava de atualização — todos já tinham esse campo preenchido.' };
+  }catch(e){
+    mesInicioContatoMsg = { tipo:'erro', texto:'Não foi possível preencher os leads antigos agora.' };
+  }
+  preenchendoMesInicioContato = false;
+  renderApp();
 }
 async function verificarAtualizacaoApp(){
   verificandoAtualizacao = true;
@@ -6144,6 +6163,12 @@ function renderConfigManutencao(){
       <button class="btn-outline" data-action="abrir-backup-modal">📦 Backup</button>
     </div>
     <div class="settings-page-section">
+      <h3>Início de contato nos leads antigos</h3>
+      <p class="settings-page-note">Preenche automaticamente o "mês de início de contato" dos seus leads que ainda não têm esse campo, usando o mês de venda que já estava cadastrado como ponto de partida. Não altera leads que você já preencheu manualmente, e pode ser usado quantas vezes quiser.</p>
+      ${mesInicioContatoMsg ? `<p class="settings-page-msg ${mesInicioContatoMsg.tipo}">${esc(mesInicioContatoMsg.texto)}</p>` : ''}
+      <button class="btn-outline" data-action="preencher-mes-inicio-contato" ${preenchendoMesInicioContato?'disabled':''}>${preenchendoMesInicioContato?'Preenchendo…':'Preencher automaticamente'}</button>
+    </div>
+    <div class="settings-page-section">
       <h3>Atualizações</h3>
       <p class="settings-page-note">Se o painel parecer desatualizado (algo que já mudou e não aparece), use esse botão pra forçar buscar a versão mais nova — principalmente útil no app instalado no celular.</p>
       ${atualizacaoMsg ? `<p class="settings-page-msg ${atualizacaoMsg.tipo}">${esc(atualizacaoMsg.texto)}</p>` : ''}
@@ -6222,6 +6247,8 @@ function bindAppEvents(){
   });
   const verificarAtualizacaoBtn = app.querySelector('[data-action="verificar-atualizacao"]');
   if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
+  const preencherMesInicioBtn = app.querySelector('[data-action="preencher-mes-inicio-contato"]');
+  if(preencherMesInicioBtn) preencherMesInicioBtn.addEventListener('click', preencherMesInicioContatoAntigos);
   const abrirBackupModalBtn = app.querySelector('[data-action="abrir-backup-modal"]');
   if(abrirBackupModalBtn) abrirBackupModalBtn.addEventListener('click', abrirBackupModal);
 
@@ -7407,7 +7434,7 @@ function abrirNovoCardComTipo(columnId, tipoPessoa){
   modalForm = {
     __isNew: true, id:null, columnId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
-    mes: dataInicial, mesInicioContato: dataInicial, // um lead novo começa agora — os dois nascem iguais, e "mês de venda" muda depois quando a venda realmente acontecer
+    mes: '', mesInicioContato: dataInicial, // início de contato já vem preenchido (é agora); mês de venda fica em branco até a venda acontecer de verdade
     etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
     tipoPessoa, clienteFisica:'', clienteJuridica:'',
     cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
@@ -7864,7 +7891,7 @@ function renderModal(){
             </div>
             <div class="field">
               <label>Mês de venda (referência)</label>
-              <input type="date" id="f-mes" value="${f.mes || new Date().toISOString().slice(0,10)}" />
+              <input type="date" id="f-mes" value="${f.mes || ''}" />
             </div>
           </div>
           <p class="settings-page-note">O início de contato é opcional — ajuda a documentar quanto tempo leva até fechar.</p>
