@@ -86,6 +86,8 @@ const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" s
 const ICON_REORDER = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>`;
 const ICON_FUNNEL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>`;
 const ICON_BAU = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M4 8v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
+const ICON_CANCELAR = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>`;
+const ICON_REATIVAR = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 12l1.8 1.8L15 10.2"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
 const ICON_CHECK = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
 const ICON_MOVE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 7 3 11 7 15"/><line x1="3" y1="11" x2="15" y2="11"/><polyline points="17 17 21 13 17 9"/><line x1="21" y1="13" x2="9" y2="13"/></svg>`;
@@ -5689,7 +5691,7 @@ function renderContratoCard(c){
           </p>
         </div>
         <div class="contrato-card-actions">
-          <button class="icon-btn" data-action="${c.canceladoNoMes?'reativar-contrato':'cancelar-contrato'}" data-contrato-id="${c.id}" title="${c.canceladoNoMes?'Reativar comissão':'Marcar como cancelada'}">${c.canceladoNoMes?'↩️':'🚫'}</button>
+          <button class="icon-btn" data-action="${c.canceladoNoMes?'reativar-contrato':'cancelar-contrato'}" data-contrato-id="${c.id}" title="${c.canceladoNoMes?'Reativar comissão':'Marcar como cancelada'}">${c.canceladoNoMes?ICON_REATIVAR:ICON_CANCELAR}</button>
           <button class="icon-btn" data-action="open-edit-contrato" data-contrato-id="${c.id}" title="Editar">${ICON_EDIT}</button>
           <button class="icon-btn" data-action="delete-contrato" data-contrato-id="${c.id}" title="Excluir">${ICON_TRASH}</button>
         </div>
@@ -7025,7 +7027,7 @@ function bindAppEvents(){
       e.dataTransfer.setData('text/x-crm-card', cardEl.dataset.cardId);
       cardEl.classList.add('dragging');
     });
-    cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); limparIndicadorDeInsercao(); });
+    cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); limparIndicadorDeInsercao(); document.querySelectorAll('.column.coluna-drag-alvo').forEach(c=> c.classList.remove('coluna-drag-alvo')); });
 
     // Arrastar por toque no card inteiro — usa Pointer Events com setPointerCapture.
     // O CSS do .card já trava touch-action:none desde o início (precisa ser assim,
@@ -7113,13 +7115,25 @@ function bindAppEvents(){
       e.preventDefault();
       atualizarAutoScrollDoArrasto(e.clientX, e.clientY, colEl);
       const cardArrastandoEl = document.querySelector('.card.dragging');
-      if(cardArrastandoEl) mostrarIndicadorDeInsercao(colEl, e.clientY, cardArrastandoEl.dataset.cardId);
+      if(cardArrastandoEl){
+        mostrarIndicadorDeInsercao(colEl, e.clientY, cardArrastandoEl.dataset.cardId);
+        // mesmo destaque cinza que já existia no arrastar por toque — dá a mesma
+        // confirmação visual clara de "aqui vai soltar" também no mouse
+        document.querySelectorAll('.column.coluna-drag-alvo').forEach(c=>{ if(c!==colEl) c.classList.remove('coluna-drag-alvo'); });
+        colEl.classList.add('coluna-drag-alvo');
+      }
     });
-    colEl.addEventListener('dragleave', ()=> clearInterval(autoScrollDoArrastoInterval));
+    colEl.addEventListener('dragleave', (e)=>{
+      clearInterval(autoScrollDoArrastoInterval);
+      // só tira o destaque se o mouse realmente saiu da coluna (não só passou por cima
+      // de um card filho dentro dela, o que também dispara dragleave por engano)
+      if(!colEl.contains(e.relatedTarget)) colEl.classList.remove('coluna-drag-alvo');
+    });
     colEl.addEventListener('drop', (e)=>{
       e.preventDefault();
       clearInterval(autoScrollDoArrastoInterval);
       limparIndicadorDeInsercao();
+      colEl.classList.remove('coluna-drag-alvo');
       const colId = e.dataTransfer.getData('text/x-crm-column');
       const cardId = e.dataTransfer.getData('text/x-crm-card');
       if(colId) reorderColumns(colId, colEl.dataset.colId);
@@ -7178,9 +7192,9 @@ function atualizarArrastoDeCard(x, y){
     if(!cardTouchDrag) return;
     const xAtual = cardTouchDrag.ultimoXCalculo, yAtual = cardTouchDrag.ultimoYCalculo;
     const colAlvo = encontrarColunaMaisProxima(xAtual);
-    document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+    document.querySelectorAll('.column.coluna-drag-alvo').forEach(c=> c.classList.remove('coluna-drag-alvo'));
     if(colAlvo){
-      colAlvo.classList.add('coluna-touch-alvo');
+      colAlvo.classList.add('coluna-drag-alvo');
       mostrarIndicadorDeInsercao(colAlvo, yAtual, cardTouchDrag.cardId);
     }
     atualizarAutoScrollDoArrasto(xAtual, yAtual, colAlvo);
@@ -7263,7 +7277,7 @@ function limparVisualDoArrasto(){
   clearInterval(autoScrollDoArrastoInterval);
   cardTouchDrag.cardEl.classList.remove('card-touch-arrastando');
   if(cardTouchDrag.fantasmaEl) cardTouchDrag.fantasmaEl.remove();
-  document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+  document.querySelectorAll('.column.coluna-drag-alvo').forEach(c=> c.classList.remove('coluna-drag-alvo'));
   limparIndicadorDeInsercao();
 }
 function renderFloatingMoveMenu(){
