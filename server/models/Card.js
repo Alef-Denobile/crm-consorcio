@@ -21,7 +21,8 @@ const cardSchema = new mongoose.Schema(
     instagramId: { type: String, default: null, index: true }, // ID do remetente no Instagram — usado pra casar mensagens de DM
     obs: { type: String, default: '' },
     tipoCarta: { type: String, enum: ['imovel', 'veiculo', 'investimento', 'servicos', 'home_equity', 'car_equity'], default: 'imovel' },
-    mes: { type: String, default: '' }, // formato "YYYY-MM"
+    mes: { type: String, default: '' }, // formato "YYYY-MM" — mês de referência/venda (já usado pra filtrar o Pipeline e sincronizar com Comissões)
+    mesInicioContato: { type: String, default: '' }, // formato "YYYY-MM" — quando o contato com esse cliente começou, pra documentar o ciclo de venda
     colunaDesde: { type: Date, default: Date.now }, // quando entrou na coluna atual — usado pelas automações por tempo
     automacoesDisparadas: { type: [mongoose.Schema.Types.ObjectId], default: [] }, // evita repetir a mesma automação por tempo no mesmo card
     sugestaoIA: {

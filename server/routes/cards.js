@@ -55,7 +55,7 @@ async function executarAutomacoesDaColuna(userId, colunaId, card) {
   }
 }
 
-const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'etiquetas', 'camposPersonalizados', 'tipoCarta', 'tipoPessoa', 'cnpj', 'razaoSocial', 'inscricaoEstadual', 'ramoAtividade', 'contatoNome', 'contatoCargo'];
+const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'mesInicioContato', 'etiquetas', 'camposPersonalizados', 'tipoCarta', 'tipoPessoa', 'cnpj', 'razaoSocial', 'inscricaoEstadual', 'ramoAtividade', 'contatoNome', 'contatoCargo'];
 function filtrarCampos(body) {
   const dados = {};
   for (const campo of CAMPOS_PERMITIDOS) {

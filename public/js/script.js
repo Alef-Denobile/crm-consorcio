@@ -84,6 +84,10 @@ const ICON_IMPORT_EXPORT = `<svg width="17" height="17" viewBox="0 0 24 24" fill
 const ICON_LOGOUT = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`;
 const ICON_EDIT = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 const ICON_REORDER = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>`;
+const ICON_FUNNEL = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>`;
+const ICON_BAU = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M4 8v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
+const ICON_CANCELAR = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>`;
+const ICON_REATIVAR = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 12l1.8 1.8L15 10.2"/></svg>`;
 const ICON_TRASH = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
 const ICON_CHECK = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
 const ICON_MOVE = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 7 3 11 7 15"/><line x1="3" y1="11" x2="15" y2="11"/><polyline points="17 17 21 13 17 9"/><line x1="21" y1="13" x2="9" y2="13"/></svg>`;
@@ -173,6 +177,11 @@ let openMoveMenuCardId = null;
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
+let leadsOrdenarPor = 'padrao'; // 'padrao' | 'alfabetica' | 'recentes' | 'data-referencia'
+let pipelineOrdenarPor = 'padrao';
+let pipelineOrdenando = false;
+let comissoesOrdenarPor = 'padrao';
+let ordenarMenuAberto = null; // 'leads' | 'pipeline' | 'comissoes' | null
 let mostrarArquivados = false;
 let leadsSelecionados = new Set();
 let leadsBulkEtiquetaAberta = false;
@@ -267,9 +276,11 @@ let historicoContatoCarregado = false;
 let historicoContatoItens = [];
 let historicoContatoTexto = '';
 let historicoContatoEnviando = false;
-let tarefaRapidaTitulo = '';
-let tarefaRapidaData = '';
+let tarefasRapidasLista = [{ titulo:'', data:'' }]; // sempre começa com uma linha vazia
 let tarefaRapidaCriando = false;
+let salvandoCard = false;
+let mensagemSalvoCard = null; // texto da mensagem "Novo lead adicionado" enquanto ela anima
+let salvandoTask = false;
 let extrasTela = null; // null (fechado) | 'menu' | 'etiquetas' | 'anexos' | 'tarefas' | 'tarefas-lista' | 'historico'
 let etiquetaInputValor = '';
 let etiquetaEditandoOriginal = null; // texto original da etiqueta sendo editada, ou null se for uma nova
@@ -1572,6 +1583,7 @@ async function loadMonitoramento(){
 async function limparMonitoramento(){
   showConfirm({
     message: 'Limpar todo o log de erros registrado? Não afeta o funcionamento do sistema, só apaga o histórico.',
+    confirmLabel: 'Limpar',
     onConfirm: async ()=>{
       closeConfirm();
       try{
@@ -2298,6 +2310,7 @@ async function toggleWebhookSaida(id, ativo){
 async function excluirWebhookSaida(id){
   showConfirm({
     message: 'Remover esse webhook? Ele para de disparar imediatamente.',
+    confirmLabel: 'Remover',
     onConfirm: async ()=>{
       closeConfirm();
       try{
@@ -2854,6 +2867,8 @@ async function importarArquivoBackup(file){
   if(!file) return;
   showConfirm({
     message: 'Restaurar esse backup? Isso atualiza clientes, tarefas e outros dados que já existirem com o mesmo identificador, e cria o que estiver faltando. Nada é apagado.',
+    confirmLabel: 'Restaurar',
+    danger: false,
     onConfirm: async ()=>{
       closeConfirm();
       backupImportando = true;
@@ -3182,10 +3197,26 @@ function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
   const { value1, value2 } = calcComissaoPreview(credito);
   return { parcelas:13, parcelas1:10, value:value1, value2 };
 }
+function atualizarNotaCicloDeVenda(){
+  const nota = document.getElementById('f-ciclo-venda-nota');
+  if(!nota || !modalForm) return;
+  const texto = textoCicloDeVenda(modalForm.mesInicioContato, modalForm.mes);
+  nota.textContent = texto;
+  nota.style.display = texto ? '' : 'none';
+}
 function monthsBetween(anchorYM, targetYM){
   const [ay,am] = anchorYM.split('-').map(Number);
   const [ty,tm] = targetYM.split('-').map(Number);
   return (ty-ay)*12 + (tm-am);
+}
+// Descreve o tempo entre o início do contato e o mês de venda, pra dar uma noção
+// rápida do ciclo de venda daquele cliente direto no formulário.
+function textoCicloDeVenda(mesInicio, mesVenda){
+  if(!mesInicio || !mesVenda) return '';
+  const diferenca = monthsBetween(mesInicio, mesVenda);
+  if(diferenca < 0) return '⚠️ O mês de venda é anterior ao início do contato — confira as datas.';
+  if(diferenca === 0) return '🔵 Ciclo de venda: fechou no mesmo mês do primeiro contato.';
+  return `🔵 Ciclo de venda: ${diferenca} ${diferenca===1?'mês':'meses'} até fechar.`;
 }
 function addMonthsKey(ym, delta){
   const [y,m] = ym.split('-').map(Number);
@@ -3232,6 +3263,76 @@ function comissoesStats(){
 }
 
 /* ---------- derivações (Leads) ---------- */
+// Ordenação compartilhada entre Leads, Pipeline e Comissões. "data-referencia" usa o
+// campo que representa o mês de referência em cada tela (mes do lead, date do
+// contrato) — mesmo texto, campo diferente conforme onde é chamada.
+const OPCOES_ORDENACAO = [
+  ['padrao', 'Ordem padrão'],
+  ['alfabetica', 'Ordem alfabética'],
+  ['recentes', 'Adicionados recentemente'],
+  ['data-referencia', 'Data de referência'],
+];
+// Botão de funil que abre um menu com a ordenação atual marcada e as outras opções —
+// usado em Leads, Pipeline e Comissões. "menuId" identifica qual dos três é esse (só
+// um fica aberto por vez), e "rotuloPadrao" troca o texto da primeira opção conforme
+// o contexto (no Pipeline, por exemplo, deixa claro que o padrão é a ordem manual).
+function renderBotaoOrdenar(menuId, valorAtual, rotuloPadrao){
+  const aberto = ordenarMenuAberto === menuId;
+  const opcoes = rotuloPadrao ? [[OPCOES_ORDENACAO[0][0], rotuloPadrao], ...OPCOES_ORDENACAO.slice(1)] : OPCOES_ORDENACAO;
+  return `
+    <div class="ordenar-wrap">
+      <button type="button" class="icon-btn ${valorAtual!=='padrao'?'ordenar-ativo':''}" data-action="toggle-ordenar-menu" data-menu-id="${menuId}" title="Ordenar">${ICON_FUNNEL}</button>
+      ${aberto ? `
+        <div class="date-menu ordenar-menu">
+          <div class="date-menu-title">Ordenar por</div>
+          <div class="date-menu-list">
+            ${opcoes.map(([val,label])=>`<button class="date-menu-item ${valorAtual===val?'active':''}" data-action="escolher-ordenar" data-menu-id="${menuId}" data-valor="${val}">${label}</button>`).join('')}
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+function ordenarPorCriterio(lista, criterio, campoNome, campoData){
+  if(criterio === 'alfabetica') return [...lista].sort((a,b)=> (a[campoNome]||'').localeCompare(b[campoNome]||'', 'pt-BR'));
+  if(criterio === 'recentes') return [...lista].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0));
+  if(criterio === 'data-referencia') return [...lista].sort((a,b)=> String(a[campoData]||'').localeCompare(String(b[campoData]||'')));
+  return lista; // 'padrao' — não mexe na ordem
+}
+// Reordena de verdade (e salva) os cards de cada coluna do funil atual, conforme o
+// critério escolhido. Como isso sobrescreve a ordem manual que a pessoa possa ter
+// arrastado com cuidado, confirma antes — exceto ao voltar pra "padrao", que não
+// mexe em nada, só para de aplicar ordenação automática daqui pra frente.
+function aplicarOrdenacaoPipeline(criterio){
+  if(criterio === 'padrao'){ pipelineOrdenarPor = 'padrao'; renderApp(); return; }
+  showConfirm({
+    message: 'Isso vai reordenar automaticamente os clientes dentro de cada coluna. Se você tiver organizado numa ordem específica que funciona melhor pra você, ela será substituída. Continuar?',
+    confirmLabel: 'Reordenar',
+    danger: false,
+    onConfirm: async ()=>{
+      closeConfirm();
+      pipelineOrdenarPor = criterio;
+      pipelineOrdenando = true;
+      renderApp();
+      const colunasDoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
+      try{
+        for(const col of colunasDoFunil){
+          const cardsDaColuna = cardsOf(col.id);
+          const ordenados = ordenarPorCriterio(cardsDaColuna, criterio, 'cliente', 'mes');
+          await Promise.all(ordenados.map((card, i)=>{
+            const novaOrdem = (i+1)*1000;
+            card.ordem = novaOrdem; // otimista
+            return apiRequest('PUT', `/cards/${card.id}/move`, { columnId: col.id, ordem: novaOrdem });
+          }));
+        }
+      }catch(e){
+        errorMsg = 'Não foi possível reordenar todos os clientes. Tenta de novo em instantes.';
+      }
+      pipelineOrdenando = false;
+      renderApp();
+    },
+  });
+}
 function filteredLeads(){
   let list = board.cards;
   list = list.filter(c=> mostrarArquivados ? c.arquivado : !c.arquivado);
@@ -3240,6 +3341,7 @@ function filteredLeads(){
     const q = leadsSearch.trim().toLowerCase();
     list = list.filter(c=> (c.cliente||'').toLowerCase().includes(q) || (c.telefone||'').toLowerCase().includes(q));
   }
+  list = ordenarPorCriterio(list, leadsOrdenarPor, 'cliente', 'mes');
   return list;
 }
 
@@ -3253,6 +3355,24 @@ function goToPage(page){
   addingCol = false;
   editingColId = null;
   sidebarOpen = false;
+  // fecha qualquer modal que tenha ficado aberto na página anterior — vários modais
+  // diferentes (dia da agenda, editar lead, tarefa, contrato, proposta, etc.) usam o
+  // mesmo #modal-root; sem isso, um modal esquecido aberto ficava por cima da nova
+  // página, escondido mas ainda funcionando, respondendo a cliques que pareciam ser
+  // da página nova.
+  modalForm = null;
+  extrasTela = null;
+  agendaDiaSelecionado = null;
+  taskModalForm = null;
+  propostaModalForm = null;
+  completarLeadModalForm = null;
+  agendamentoModalForm = null;
+  templateModalForm = null;
+  eventoGoogleModalForm = null;
+  contratoModalForm = null;
+  automacaoModalForm = null;
+  fluxoModalForm = null;
+  document.getElementById('modal-root').innerHTML = '';
   renderApp();
   if(page === 'tarefas'){
     if(!agendaLoaded) loadAgendaMes(agendaMesAtual); // só busca do zero — depois disso, a tela se mantém atualizada sozinha com as próprias ações, e o Google só é consultado de novo no botão "Sincronizar Agenda"
@@ -3601,10 +3721,14 @@ async function addColumn(){
 }
 
 async function saveCardFromModal(){
+  if(salvandoCard) return; // já tem um salvamento em andamento — ignora cliques repetidos
   const nomeFinal = (modalForm.tipoPessoa==='juridica' ? modalForm.clienteJuridica : modalForm.clienteFisica) || '';
   if(!nomeFinal.trim()) return;
+  const eraNovo = modalForm.__isNew;
   const { __isNew, id, clienteFisica, clienteJuridica, ...dados } = modalForm;
   dados.cliente = nomeFinal.trim();
+  salvandoCard = true;
+  renderModal();
   try{
     if(__isNew){
       const novoCard = await apiRequest('POST', '/cards', dados);
@@ -3614,15 +3738,29 @@ async function saveCardFromModal(){
       const idx = board.cards.findIndex(c=>c.id===id);
       if(idx>-1) board.cards[idx] = atualizado;
     }
+    salvandoCard = false;
+    if(eraNovo){
+      // mostra "Novo lead adicionado" por cima do botão (fade in, sobe um pouco, fade
+      // out) antes de fechar — assim a pessoa vê claramente que salvou, em vez de só
+      // sumir a tela de repente sem confirmação nenhuma.
+      mensagemSalvoCard = 'Novo lead adicionado';
+      renderModal();
+      await new Promise(resolve=> setTimeout(resolve, 1300));
+      mensagemSalvoCard = null;
+    }
     closeModal();
+    renderApp();
   }catch(e){
+    salvandoCard = false;
     errorMsg = 'Não foi possível salvar o cliente.';
+    renderModal();
+    renderApp();
   }
-  renderApp();
 }
 
 /* ---------- mutações: tarefas ---------- */
 async function saveTaskFromModal(){
+  if(salvandoTask) return; // já tem um salvamento em andamento — ignora cliques repetidos
   if(!taskModalForm.titulo.trim()) return;
   const { __isNew, id, hora, ...dados } = taskModalForm;
   if(!dados.leadId) dados.leadId = null;
@@ -3630,6 +3768,8 @@ async function saveTaskFromModal(){
     const combinado = new Date(`${dados.vencimento}T${hora}`);
     if(!isNaN(combinado.getTime())) dados.vencimento = combinado.toISOString();
   }
+  salvandoTask = true;
+  renderTaskModal();
   try{
     if(__isNew){
       const nova = await apiRequest('POST', '/tasks', dados);
@@ -3641,9 +3781,12 @@ async function saveTaskFromModal(){
       if(idx>-1) tasks[idx] = atualizada;
       atualizarTarefaNaAgendaLocal(atualizada);
     }
+    salvandoTask = false;
     closeTaskModal();
   }catch(e){
+    salvandoTask = false;
     errorMsg = 'Não foi possível salvar a tarefa.';
+    renderTaskModal();
   }
   renderApp();
 }
@@ -4820,6 +4963,11 @@ function renderPipelinePage(){
       ` : ''}
     </div>
 
+    <div class="pipeline-ordenar-row">
+      ${renderBotaoOrdenar('pipeline', pipelineOrdenarPor, 'Ordem manual (arrastar)')}
+      ${pipelineOrdenando ? `<span class="settings-page-note">Reordenando…</span>` : ''}
+    </div>
+
     <main class="pipeline-main">
       <div class="board">
         ${columnsDoFunil.map(col => renderColumn(col)).join('')}
@@ -5056,7 +5204,10 @@ function renderLeadsPage(){
         <h1>Leads</h1>
         <p>${board.cards.length} ${board.cards.length===1?'contato':'contatos'} na sua base</p>
       </div>
-      <button class="btn-primary" data-action="open-new-lead">+ Novo lead</button>
+      <div class="page-head-actions">
+        <button class="btn-outline ${mostrarArquivados?'active':''}" data-action="toggle-mostrar-arquivados" style="display:inline-flex; align-items:center; gap:6px;">${ICON_BAU} ${mostrarArquivados?'Voltar aos ativos':'Ver arquivados'}</button>
+        <button class="btn-primary" data-action="open-new-lead">+ Novo lead</button>
+      </div>
     </div>
 
     <div class="leads-toolbar">
@@ -5065,8 +5216,8 @@ function renderLeadsPage(){
         <option value="">Todos os status</option>
         ${board.columns.map(c=>`<option value="${c.id}" ${leadsStatusFilter===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
       </select>
+      ${renderBotaoOrdenar('leads', leadsOrdenarPor)}
       <button class="btn-outline" data-action="exportar-leads">Exportar</button>
-      <button class="btn-outline ${mostrarArquivados?'active':''}" data-action="toggle-mostrar-arquivados">${mostrarArquivados?'Voltar aos ativos':'📦 Ver arquivados'}</button>
     </div>
 
     ${leadsSelecionados.size ? `
@@ -5505,6 +5656,7 @@ function renderComissoesPage(){
           <span>${monthLabel(comissoesMonth, true)}</span>
           <button class="icon-btn" data-action="comissoes-mes" data-delta="1" title="Próximo mês">›</button>
         </div>
+        ${renderBotaoOrdenar('comissoes', comissoesOrdenarPor)}
         <button class="btn-primary" data-action="open-new-contrato">+ Novo contrato</button>
       </div>
     </div>
@@ -5526,7 +5678,7 @@ function renderComissoesPage(){
 
     ${contratos.length ? `
       <div class="contratos-list">
-        ${contratos.map(c=>renderContratoCard(c)).join('')}
+        ${ordenarPorCriterio(contratos, comissoesOrdenarPor, 'desc', 'date').map(c=>renderContratoCard(c)).join('')}
       </div>
     ` : `<div class="tasks-empty">Nenhum contrato de comissão cadastrado ainda.</div>`}
   `;
@@ -5560,7 +5712,7 @@ function renderContratoCard(c){
           </p>
         </div>
         <div class="contrato-card-actions">
-          <button class="icon-btn" data-action="${c.canceladoNoMes?'reativar-contrato':'cancelar-contrato'}" data-contrato-id="${c.id}" title="${c.canceladoNoMes?'Reativar comissão':'Marcar como cancelada'}">${c.canceladoNoMes?'↩️':'🚫'}</button>
+          <button class="icon-btn" data-action="${c.canceladoNoMes?'reativar-contrato':'cancelar-contrato'}" data-contrato-id="${c.id}" title="${c.canceladoNoMes?'Reativar comissão':'Marcar como cancelada'}">${c.canceladoNoMes?ICON_REATIVAR:ICON_CANCELAR}</button>
           <button class="icon-btn" data-action="open-edit-contrato" data-contrato-id="${c.id}" title="Editar">${ICON_EDIT}</button>
           <button class="icon-btn" data-action="delete-contrato" data-contrato-id="${c.id}" title="Excluir">${ICON_TRASH}</button>
         </div>
@@ -6357,6 +6509,7 @@ function bindAppEvents(){
       if(f && !f.ativo && temMensagem){
         showConfirm({
           message: `Ativar o fluxo "${f.nome}"? Ele tem etapa(s) de envio de WhatsApp automático, sem revisão sua antes de mandar.`,
+          confirmLabel: 'Ativar mesmo assim',
           onConfirm: ()=>{ toggleFluxoAtivo(id); closeConfirm(); },
         });
       } else {
@@ -6396,6 +6549,7 @@ function bindAppEvents(){
       const id = btn.dataset.leadId;
       showConfirm({
         message: 'Descartar esse possível lead? Ele não vira cliente.',
+        confirmLabel: 'Descartar',
         onConfirm: ()=>{ descartarPossivelLead(id); closeConfirm(); },
       });
     });
@@ -6409,6 +6563,7 @@ function bindAppEvents(){
       const id = btn.dataset.agendamentoId;
       showConfirm({
         message: 'Cancelar essa mensagem agendada?',
+        confirmLabel: 'Cancelar mensagem',
         onConfirm: ()=>{ cancelarAgendamento(id); closeConfirm(); },
       });
     });
@@ -6444,6 +6599,7 @@ function bindAppEvents(){
   if(sairEquipeBtn) sairEquipeBtn.addEventListener('click', ()=>{
     showConfirm({
       message: 'Sair dessa equipe? Você perde acesso ao chat interno e à supervisão dela — seu funil continua intocado.',
+      confirmLabel: 'Sair da equipe',
       onConfirm: ()=>{ sairDaEquipe(); closeConfirm(); },
     });
   });
@@ -6520,6 +6676,7 @@ function bindAppEvents(){
       const id = btn.dataset.contratoId;
       showConfirm({
         message: `Marcar esse contrato como cancelado a partir de ${monthLabel(comissoesMonth, true)}? As parcelas desse mês em diante param de contar — os meses anteriores continuam valendo.`,
+        confirmLabel: 'Cancelar comissão',
         onConfirm: ()=>{ cancelarContrato(id); closeConfirm(); },
       });
     });
@@ -6548,6 +6705,7 @@ function bindAppEvents(){
   if(logoutAllBtn) logoutAllBtn.addEventListener('click', ()=>{
     showConfirm({
       message: 'Desconectar todos os dispositivos, incluindo este? Você vai precisar fazer login de novo.',
+      confirmLabel: 'Desconectar',
       onConfirm: ()=>{ desconectarTodosDispositivos(); closeConfirm(); },
     });
   });
@@ -6610,6 +6768,7 @@ function bindAppEvents(){
     if(!agenteIaAtivo){
       showConfirm({
         message: 'Ativar o agente de IA? Ele vai responder mensagens de WhatsApp automaticamente, sem você revisar antes de enviar. Sempre que você responder um cliente manualmente, o agente fica em silêncio por 30 minutos naquela conversa. Pode desativar a qualquer momento.',
+        confirmLabel: 'Ativar mesmo assim',
         onConfirm: ()=>{ definirAgenteIa(true); closeConfirm(); },
       });
     } else {
@@ -6648,6 +6807,7 @@ function bindAppEvents(){
     if(menuTriagem.ativo){
       showConfirm({
         message: 'Salvar e manter o menu de triagem ativo? Ele vai responder automaticamente qualquer contato novo no WhatsApp, sem revisão sua.',
+        confirmLabel: 'Manter ativo',
         onConfirm: ()=>{ salvarMenuTriagem(); closeConfirm(); },
       });
     } else {
@@ -6731,6 +6891,25 @@ function bindAppEvents(){
   });
   const leadsFilterSelect = document.getElementById('leads-status-filter');
   if(leadsFilterSelect) leadsFilterSelect.addEventListener('change', (e)=>{ leadsStatusFilter = e.target.value; renderApp(); });
+
+  /* -- botão de funil de ordenação, compartilhado entre Leads, Pipeline e Comissões -- */
+  app.querySelectorAll('[data-action="toggle-ordenar-menu"]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      ordenarMenuAberto = ordenarMenuAberto === btn.dataset.menuId ? null : btn.dataset.menuId;
+      renderApp();
+    });
+  });
+  app.querySelectorAll('[data-action="escolher-ordenar"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const menuId = btn.dataset.menuId;
+      const valor = btn.dataset.valor;
+      ordenarMenuAberto = null;
+      if(menuId === 'leads'){ leadsOrdenarPor = valor; renderApp(); }
+      else if(menuId === 'comissoes'){ comissoesOrdenarPor = valor; renderApp(); }
+      else if(menuId === 'pipeline'){ aplicarOrdenacaoPipeline(valor); }
+    });
+  });
 
   /* -- Pipeline: funis -- */
   app.querySelectorAll('[data-action="set-funil"]').forEach(btn=>{
@@ -6877,7 +7056,7 @@ function bindAppEvents(){
       e.dataTransfer.setData('text/x-crm-card', cardEl.dataset.cardId);
       cardEl.classList.add('dragging');
     });
-    cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); limparIndicadorDeInsercao(); });
+    cardEl.addEventListener('dragend', ()=>{ cardEl.classList.remove('dragging'); clearInterval(autoScrollDoArrastoInterval); limparIndicadorDeInsercao(); document.querySelectorAll('.column.coluna-drag-alvo').forEach(c=> c.classList.remove('coluna-drag-alvo')); });
 
     // Arrastar por toque no card inteiro — usa Pointer Events com setPointerCapture.
     // O CSS do .card já trava touch-action:none desde o início (precisa ser assim,
@@ -6965,13 +7144,25 @@ function bindAppEvents(){
       e.preventDefault();
       atualizarAutoScrollDoArrasto(e.clientX, e.clientY, colEl);
       const cardArrastandoEl = document.querySelector('.card.dragging');
-      if(cardArrastandoEl) mostrarIndicadorDeInsercao(colEl, e.clientY, cardArrastandoEl.dataset.cardId);
+      if(cardArrastandoEl){
+        mostrarIndicadorDeInsercao(colEl, e.clientY, cardArrastandoEl.dataset.cardId);
+        // mesmo destaque cinza que já existia no arrastar por toque — dá a mesma
+        // confirmação visual clara de "aqui vai soltar" também no mouse
+        document.querySelectorAll('.column.coluna-drag-alvo').forEach(c=>{ if(c!==colEl) c.classList.remove('coluna-drag-alvo'); });
+        colEl.classList.add('coluna-drag-alvo');
+      }
     });
-    colEl.addEventListener('dragleave', ()=> clearInterval(autoScrollDoArrastoInterval));
+    colEl.addEventListener('dragleave', (e)=>{
+      clearInterval(autoScrollDoArrastoInterval);
+      // só tira o destaque se o mouse realmente saiu da coluna (não só passou por cima
+      // de um card filho dentro dela, o que também dispara dragleave por engano)
+      if(!colEl.contains(e.relatedTarget)) colEl.classList.remove('coluna-drag-alvo');
+    });
     colEl.addEventListener('drop', (e)=>{
       e.preventDefault();
       clearInterval(autoScrollDoArrastoInterval);
       limparIndicadorDeInsercao();
+      colEl.classList.remove('coluna-drag-alvo');
       const colId = e.dataTransfer.getData('text/x-crm-column');
       const cardId = e.dataTransfer.getData('text/x-crm-card');
       if(colId) reorderColumns(colId, colEl.dataset.colId);
@@ -7030,9 +7221,9 @@ function atualizarArrastoDeCard(x, y){
     if(!cardTouchDrag) return;
     const xAtual = cardTouchDrag.ultimoXCalculo, yAtual = cardTouchDrag.ultimoYCalculo;
     const colAlvo = encontrarColunaMaisProxima(xAtual);
-    document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+    document.querySelectorAll('.column.coluna-drag-alvo').forEach(c=> c.classList.remove('coluna-drag-alvo'));
     if(colAlvo){
-      colAlvo.classList.add('coluna-touch-alvo');
+      colAlvo.classList.add('coluna-drag-alvo');
       mostrarIndicadorDeInsercao(colAlvo, yAtual, cardTouchDrag.cardId);
     }
     atualizarAutoScrollDoArrasto(xAtual, yAtual, colAlvo);
@@ -7115,7 +7306,7 @@ function limparVisualDoArrasto(){
   clearInterval(autoScrollDoArrastoInterval);
   cardTouchDrag.cardEl.classList.remove('card-touch-arrastando');
   if(cardTouchDrag.fantasmaEl) cardTouchDrag.fantasmaEl.remove();
-  document.querySelectorAll('.column.coluna-touch-alvo').forEach(c=> c.classList.remove('coluna-touch-alvo'));
+  document.querySelectorAll('.column.coluna-drag-alvo').forEach(c=> c.classList.remove('coluna-drag-alvo'));
   limparIndicadorDeInsercao();
 }
 function renderFloatingMoveMenu(){
@@ -7172,6 +7363,9 @@ function closeMenusOnOutsideClick(e){
   if(notifOpen && !e.target.closest('.notif-panel') && !e.target.closest('[data-action="toggle-notif"]')){
     notifOpen = false; renderApp();
   }
+  if(ordenarMenuAberto && !e.target.closest('.ordenar-wrap')){
+    ordenarMenuAberto = null; renderApp();
+  }
 }
 
 /* ---------- modal do cliente ---------- */
@@ -7216,6 +7410,9 @@ function abrirNovoCardComTipo(columnId, tipoPessoa){
     cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
   };
   tipoPessoaDropdownAberto = false;
+  extrasTela = null; // sem isso, se a última coisa vista tivesse sido a tela de Extras
+                      // de outro cliente, o formulário de novo lead nascia mostrando
+                      // aquela tela por engano, em vez do formulário de verdade
   renderModal();
 }
 async function toggleArquivarCard(){
@@ -7257,36 +7454,73 @@ function openEditCard(id){
   historicoContatoCarregado = false;
   historicoContatoItens = [];
   historicoContatoTexto = '';
-  tarefaRapidaTitulo = '';
-  tarefaRapidaData = '';
+  tarefasRapidasLista = [{ titulo:'', data:'' }];
   tarefaRapidaCriando = false;
   renderModal();
   loadAnexosDoCard(id);
   loadHistoricoContato(id);
 }
-async function criarTarefaRapidaDoCard(){
-  const titulo = tarefaRapidaTitulo.trim();
-  if(!titulo || !modalForm || modalForm.__isNew) return;
-  const dataEscolhida = tarefaRapidaData || new Date().toISOString().slice(0,10);
-  tarefaRapidaCriando = true;
+function abrirMaisUmaLinhaDeTarefa(){
+  tarefasRapidasLista.push({ titulo:'', data:'' });
   renderModal();
-  try{
-    const nova = await apiRequest('POST', '/tasks', { titulo, vencimento: dataEscolhida, prioridade:'media', leadId: modalForm.id, descricao:'' });
-    tasks.push(nova);
-    atualizarTarefaNaAgendaLocal(nova);
-    tarefaRapidaCriando = false;
-    closeModal();
-    agendaMesAtual = dataEscolhida.slice(0,7);
-    goToPage('tarefas');
-    await loadAgendaMes(agendaMesAtual);
-    agendaDiaSelecionado = dataEscolhida;
-    agendaDiaDestacado = dataEscolhida;
-    renderAgendaDiaModal();
-  }catch(e){
-    errorMsg = 'Não foi possível criar a tarefa.';
-    tarefaRapidaCriando = false;
-    renderModal();
-  }
+  const novoInput = document.querySelector(`.tarefa-rapida-titulo-input[data-idx="${tarefasRapidasLista.length-1}"]`);
+  if(novoInput) novoInput.focus();
+}
+function removerLinhaDeTarefa(idx){
+  if(tarefasRapidasLista.length <= 1) return; // sempre sobra pelo menos uma linha
+  tarefasRapidasLista.splice(idx, 1);
+  renderModal();
+}
+async function criarTarefaRapidaDoCard(){
+  if(!modalForm || modalForm.__isNew) return;
+  const validas = tarefasRapidasLista
+    .map(t=> ({ titulo: t.titulo.trim(), data: t.data || new Date().toISOString().slice(0,10) }))
+    .filter(t=> t.titulo);
+  if(!validas.length) return;
+
+  showConfirm({
+    message: validas.length===1
+      ? `Confirmar a criação da tarefa "${validas[0].titulo}"?`
+      : `Confirmar a criação dessas ${validas.length} tarefas?`,
+    confirmLabel: 'Confirmar',
+    danger: false,
+    onConfirm: async ()=>{
+      closeConfirm();
+      tarefaRapidaCriando = true;
+      renderModal();
+      try{
+        for(const t of validas){
+          const nova = await apiRequest('POST', '/tasks', { titulo: t.titulo, vencimento: t.data, prioridade:'media', leadId: modalForm.id, descricao:'' });
+          tasks.push(nova);
+          atualizarTarefaNaAgendaLocal(nova);
+        }
+        tarefaRapidaCriando = false;
+        tarefasRapidasLista = [{ titulo:'', data:'' }]; // volta pro estado inicial — "segmento acima"
+        renderModal();
+        const dataMaisCedo = validas.map(t=>t.data).sort()[0];
+        showConfirm({
+          message: validas.length===1 ? 'Tarefa criada! Quer ir pra Agenda ver ela?' : 'Tarefas criadas! Quer ir pra Agenda ver elas?',
+          confirmLabel: 'Ir pra Agenda',
+          cancelLabel: 'Continuar aqui',
+          danger: false,
+          onConfirm: async ()=>{
+            closeConfirm();
+            closeModal();
+            agendaMesAtual = dataMaisCedo.slice(0,7);
+            goToPage('tarefas');
+            await loadAgendaMes(agendaMesAtual);
+            agendaDiaSelecionado = dataMaisCedo;
+            agendaDiaDestacado = dataMaisCedo;
+            renderAgendaDiaModal();
+          },
+        });
+      }catch(e){
+        errorMsg = 'Não foi possível criar as tarefas.';
+        tarefaRapidaCriando = false;
+        renderModal();
+      }
+    },
+  });
 }
 function closeModal(){ modalForm = null; document.getElementById('modal-root').innerHTML=''; }
 
@@ -7341,12 +7575,18 @@ function renderExtrasOverlayHtml(f){
     const qtd = tasks.filter(t=>t.leadId===f.id).length;
     corpo = `
       <div class="field">
-        <label>Nova tarefa</label>
-        <div class="field-row-flex">
-          <input type="text" id="tarefa-rapida-titulo" value="${esc(tarefaRapidaTitulo)}" placeholder="Ex: Ligar amanhã de manhã" />
-          <input type="date" id="tarefa-rapida-data" value="${tarefaRapidaData || new Date().toISOString().slice(0,10)}" style="max-width:160px;" />
-          <button type="button" class="btn-primary" id="tarefa-rapida-criar-btn" ${tarefaRapidaCriando?'disabled':''}>${tarefaRapidaCriando?'Criando…':'Criar'}</button>
-        </div>
+        <label>Nova(s) tarefa(s)</label>
+        ${tarefasRapidasLista.map((t,i)=>`
+          <div class="field-row-flex tarefa-rapida-linha">
+            <input type="text" class="tarefa-rapida-titulo-input" data-idx="${i}" value="${esc(t.titulo)}" placeholder="Ex: Ligar amanhã de manhã" />
+            <input type="date" class="tarefa-rapida-data-input" data-idx="${i}" value="${t.data || new Date().toISOString().slice(0,10)}" style="max-width:160px;" />
+            ${i === tarefasRapidasLista.length-1
+              ? `<button type="button" class="icon-btn" data-action="tarefa-rapida-add-linha" title="Adicionar outra tarefa">+</button>`
+              : `<button type="button" class="icon-btn" data-action="tarefa-rapida-remover-linha" data-idx="${i}" title="Remover essa tarefa">✕</button>`
+            }
+          </div>
+        `).join('')}
+        <button type="button" class="btn-primary" style="width:100%; margin-top:8px;" id="tarefa-rapida-criar-btn" ${tarefaRapidaCriando?'disabled':''}>${tarefaRapidaCriando?'Criando…':'Confirmar'}</button>
       </div>
       <button type="button" class="btn-outline" style="width:100%;" data-action="extras-ir" data-tela="tarefas-lista">Ver tarefas existentes (${qtd})</button>
     `;
@@ -7440,10 +7680,17 @@ function ligarBindingsExtras(){
   });
 
   // Tarefas
-  const tarefaRapidaTituloInput = document.getElementById('tarefa-rapida-titulo');
-  if(tarefaRapidaTituloInput) tarefaRapidaTituloInput.addEventListener('input', (e)=> tarefaRapidaTitulo = e.target.value);
-  const tarefaRapidaDataInput = document.getElementById('tarefa-rapida-data');
-  if(tarefaRapidaDataInput) tarefaRapidaDataInput.addEventListener('input', (e)=> tarefaRapidaData = e.target.value);
+  document.querySelectorAll('.tarefa-rapida-titulo-input').forEach(input=>{
+    input.addEventListener('input', (e)=>{ tarefasRapidasLista[Number(input.dataset.idx)].titulo = e.target.value; });
+  });
+  document.querySelectorAll('.tarefa-rapida-data-input').forEach(input=>{
+    input.addEventListener('input', (e)=>{ tarefasRapidasLista[Number(input.dataset.idx)].data = e.target.value; });
+  });
+  const tarefaRapidaAddBtn = document.querySelector('[data-action="tarefa-rapida-add-linha"]');
+  if(tarefaRapidaAddBtn) tarefaRapidaAddBtn.addEventListener('click', abrirMaisUmaLinhaDeTarefa);
+  document.querySelectorAll('[data-action="tarefa-rapida-remover-linha"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> removerLinhaDeTarefa(Number(btn.dataset.idx)));
+  });
   const tarefaRapidaCriarBtn = document.getElementById('tarefa-rapida-criar-btn');
   if(tarefaRapidaCriarBtn) tarefaRapidaCriarBtn.addEventListener('click', criarTarefaRapidaDoCard);
   document.querySelectorAll('[data-action="extras-perguntar-conclusao-tarefa"]').forEach(btn=>{
@@ -7456,6 +7703,8 @@ function ligarBindingsExtras(){
         : `A tarefa "${task.titulo}" foi concluída?`;
       showConfirm({
         message: mensagem,
+        confirmLabel: task.concluida ? 'Desmarcar' : 'Concluída',
+        danger: false,
         onConfirm: async ()=>{
           closeConfirm();
           await toggleTaskConcluida(taskId);
@@ -7515,7 +7764,11 @@ function renderModal(){
   if(!modalForm){ root.innerHTML=''; return; }
   const f = modalForm;
 
-  if(extrasTela){
+  // Extras (etiquetas/anexos/tarefas/histórico) só faz sentido pra um card que já
+  // existe de verdade — um card novo não tem id ainda pra buscar nada disso. Essa
+  // checagem extra evita mostrar a tela de Extras por engano caso extrasTela tenha
+  // ficado "grudado" de uma interação anterior com outro cliente.
+  if(extrasTela && !f.__isNew){
     root.innerHTML = renderExtrasOverlayHtml(f);
     ligarBindingsExtras();
     return;
@@ -7602,8 +7855,14 @@ function renderModal(){
             </select>
           </div>
           <div class="field">
-            <label>Mês de referência</label>
+            <label>Mês de início de contato</label>
+            <input type="month" id="f-mes-inicio-contato" value="${f.mesInicioContato || ''}" />
+            <p class="settings-page-note">Quando você começou a conversar com esse cliente — opcional, ajuda a documentar quanto tempo leva até fechar.</p>
+          </div>
+          <div class="field">
+            <label>Mês de venda (referência)</label>
             <input type="month" id="f-mes" value="${f.mes || currentMonthKey()}" />
+            <p class="settings-page-note" id="f-ciclo-venda-nota" style="${f.mesInicioContato?'':'display:none;'}">${textoCicloDeVenda(f.mesInicioContato, f.mes)}</p>
           </div>
           <div class="field">
             <label>Qualificação</label>
@@ -7665,8 +7924,9 @@ function renderModal(){
         <div class="modal-foot">
           ${!f.__isNew ? `<button class="delete-link" id="f-delete">🗑 Excluir</button>` : '<span></span>'}
           <div class="modal-foot-actions">
-            <button class="btn-outline" id="f-cancel">Cancelar</button>
-            <button class="btn-save" id="f-save">Salvar</button>
+            ${mensagemSalvoCard ? `<span class="mensagem-salvo-toast">${esc(mensagemSalvoCard)}</span>` : ''}
+            <button class="btn-outline" id="f-cancel" ${salvandoCard?'disabled':''}>Cancelar</button>
+            <button class="btn-save" id="f-save" ${salvandoCard?'disabled':''}>${salvandoCard?'Salvando…':'Salvar'}</button>
           </div>
         </div>
       </div>
@@ -7746,7 +8006,15 @@ function renderModal(){
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
   const tipoCartaEl = document.getElementById('f-tipo-carta');
   if(tipoCartaEl) tipoCartaEl.addEventListener('change', (e)=> modalForm.tipoCarta = e.target.value);
-  document.getElementById('f-mes').addEventListener('change', (e)=> modalForm.mes = e.target.value);
+  document.getElementById('f-mes').addEventListener('change', (e)=>{
+    modalForm.mes = e.target.value;
+    atualizarNotaCicloDeVenda();
+  });
+  const mesInicioContatoInput = document.getElementById('f-mes-inicio-contato');
+  if(mesInicioContatoInput) mesInicioContatoInput.addEventListener('change', (e)=>{
+    modalForm.mesInicioContato = e.target.value;
+    atualizarNotaCicloDeVenda();
+  });
 
   const valorInput = document.getElementById('f-valor');
   valorInput.addEventListener('input', (e)=>{
@@ -8135,8 +8403,8 @@ function renderTaskModal(){
         <div class="modal-foot">
           ${!f.__isNew ? `<button class="delete-link" id="t-delete">🗑 Excluir</button>` : '<span></span>'}
           <div class="modal-foot-actions">
-            <button class="btn-outline" id="t-cancel">Cancelar</button>
-            <button class="btn-save" id="t-save">Salvar tarefa</button>
+            <button class="btn-outline" id="t-cancel" ${salvandoTask?'disabled':''}>Cancelar</button>
+            <button class="btn-save" id="t-save" ${salvandoTask?'disabled':''}>${salvandoTask?'Salvando…':'Salvar tarefa'}</button>
           </div>
         </div>
       </div>
@@ -9471,6 +9739,7 @@ function bindFluxoModalEvents(){
     if(fluxoModalForm.__isNew && temMensagem){
       showConfirm({
         message: 'Este fluxo já nasce ativo e tem etapa(s) de envio de WhatsApp automático, sem revisão sua antes de mandar. Quer criar mesmo assim?',
+        confirmLabel: 'Criar mesmo assim',
         onConfirm: ()=>{ salvarFluxo(); closeConfirm(); },
       });
     } else {
@@ -9530,16 +9799,19 @@ function renderFluxoModal(){
 }
 
 /* ---------- confirmação genérica ---------- */
-function showConfirm({ message, onConfirm }){
+function showConfirm({ message, onConfirm, confirmLabel, cancelLabel, danger }){
   confirmState = { message, onConfirm };
   const root = document.getElementById('confirm-root');
+  const rotuloConfirmar = confirmLabel || 'Excluir'; // "Excluir" continua sendo o padrão, pra não quebrar quem já chama sem passar isso
+  const rotuloCancelar = cancelLabel || 'Cancelar';
+  const classeConfirmar = danger===false ? 'btn-primary' : 'btn-danger';
   root.innerHTML = `
     <div class="overlay" id="confirm-overlay" style="z-index:90">
       <div class="confirm-box">
         <p>${esc(message)}</p>
         <div class="confirm-actions">
-          <button class="btn-outline" id="confirm-cancel">Cancelar</button>
-          <button class="btn-danger" id="confirm-ok">Excluir</button>
+          <button class="btn-outline" id="confirm-cancel">${esc(rotuloCancelar)}</button>
+          <button class="${classeConfirmar}" id="confirm-ok">${esc(rotuloConfirmar)}</button>
         </div>
       </div>
     </div>
