@@ -276,8 +276,7 @@ let historicoContatoCarregado = false;
 let historicoContatoItens = [];
 let historicoContatoTexto = '';
 let historicoContatoEnviando = false;
-let tarefaRapidaTitulo = '';
-let tarefaRapidaData = '';
+let tarefasRapidasLista = [{ titulo:'', data:'' }]; // sempre começa com uma linha vazia
 let tarefaRapidaCriando = false;
 let salvandoCard = false;
 let mensagemSalvoCard = null; // texto da mensagem "Novo lead adicionado" enquanto ela anima
@@ -1584,6 +1583,7 @@ async function loadMonitoramento(){
 async function limparMonitoramento(){
   showConfirm({
     message: 'Limpar todo o log de erros registrado? Não afeta o funcionamento do sistema, só apaga o histórico.',
+    confirmLabel: 'Limpar',
     onConfirm: async ()=>{
       closeConfirm();
       try{
@@ -2310,6 +2310,7 @@ async function toggleWebhookSaida(id, ativo){
 async function excluirWebhookSaida(id){
   showConfirm({
     message: 'Remover esse webhook? Ele para de disparar imediatamente.',
+    confirmLabel: 'Remover',
     onConfirm: async ()=>{
       closeConfirm();
       try{
@@ -2866,6 +2867,8 @@ async function importarArquivoBackup(file){
   if(!file) return;
   showConfirm({
     message: 'Restaurar esse backup? Isso atualiza clientes, tarefas e outros dados que já existirem com o mesmo identificador, e cria o que estiver faltando. Nada é apagado.',
+    confirmLabel: 'Restaurar',
+    danger: false,
     onConfirm: async ()=>{
       closeConfirm();
       backupImportando = true;
@@ -3288,6 +3291,8 @@ function aplicarOrdenacaoPipeline(criterio){
   if(criterio === 'padrao'){ pipelineOrdenarPor = 'padrao'; renderApp(); return; }
   showConfirm({
     message: 'Isso vai reordenar automaticamente os clientes dentro de cada coluna. Se você tiver organizado numa ordem específica que funciona melhor pra você, ela será substituída. Continuar?',
+    confirmLabel: 'Reordenar',
+    danger: false,
     onConfirm: async ()=>{
       closeConfirm();
       pipelineOrdenarPor = criterio;
@@ -6488,6 +6493,7 @@ function bindAppEvents(){
       if(f && !f.ativo && temMensagem){
         showConfirm({
           message: `Ativar o fluxo "${f.nome}"? Ele tem etapa(s) de envio de WhatsApp automático, sem revisão sua antes de mandar.`,
+          confirmLabel: 'Ativar mesmo assim',
           onConfirm: ()=>{ toggleFluxoAtivo(id); closeConfirm(); },
         });
       } else {
@@ -6527,6 +6533,7 @@ function bindAppEvents(){
       const id = btn.dataset.leadId;
       showConfirm({
         message: 'Descartar esse possível lead? Ele não vira cliente.',
+        confirmLabel: 'Descartar',
         onConfirm: ()=>{ descartarPossivelLead(id); closeConfirm(); },
       });
     });
@@ -6540,6 +6547,7 @@ function bindAppEvents(){
       const id = btn.dataset.agendamentoId;
       showConfirm({
         message: 'Cancelar essa mensagem agendada?',
+        confirmLabel: 'Cancelar mensagem',
         onConfirm: ()=>{ cancelarAgendamento(id); closeConfirm(); },
       });
     });
@@ -6575,6 +6583,7 @@ function bindAppEvents(){
   if(sairEquipeBtn) sairEquipeBtn.addEventListener('click', ()=>{
     showConfirm({
       message: 'Sair dessa equipe? Você perde acesso ao chat interno e à supervisão dela — seu funil continua intocado.',
+      confirmLabel: 'Sair da equipe',
       onConfirm: ()=>{ sairDaEquipe(); closeConfirm(); },
     });
   });
@@ -6651,6 +6660,7 @@ function bindAppEvents(){
       const id = btn.dataset.contratoId;
       showConfirm({
         message: `Marcar esse contrato como cancelado a partir de ${monthLabel(comissoesMonth, true)}? As parcelas desse mês em diante param de contar — os meses anteriores continuam valendo.`,
+        confirmLabel: 'Cancelar comissão',
         onConfirm: ()=>{ cancelarContrato(id); closeConfirm(); },
       });
     });
@@ -6679,6 +6689,7 @@ function bindAppEvents(){
   if(logoutAllBtn) logoutAllBtn.addEventListener('click', ()=>{
     showConfirm({
       message: 'Desconectar todos os dispositivos, incluindo este? Você vai precisar fazer login de novo.',
+      confirmLabel: 'Desconectar',
       onConfirm: ()=>{ desconectarTodosDispositivos(); closeConfirm(); },
     });
   });
@@ -6741,6 +6752,7 @@ function bindAppEvents(){
     if(!agenteIaAtivo){
       showConfirm({
         message: 'Ativar o agente de IA? Ele vai responder mensagens de WhatsApp automaticamente, sem você revisar antes de enviar. Sempre que você responder um cliente manualmente, o agente fica em silêncio por 30 minutos naquela conversa. Pode desativar a qualquer momento.',
+        confirmLabel: 'Ativar mesmo assim',
         onConfirm: ()=>{ definirAgenteIa(true); closeConfirm(); },
       });
     } else {
@@ -6779,6 +6791,7 @@ function bindAppEvents(){
     if(menuTriagem.ativo){
       showConfirm({
         message: 'Salvar e manter o menu de triagem ativo? Ele vai responder automaticamente qualquer contato novo no WhatsApp, sem revisão sua.',
+        confirmLabel: 'Manter ativo',
         onConfirm: ()=>{ salvarMenuTriagem(); closeConfirm(); },
       });
     } else {
@@ -7422,36 +7435,73 @@ function openEditCard(id){
   historicoContatoCarregado = false;
   historicoContatoItens = [];
   historicoContatoTexto = '';
-  tarefaRapidaTitulo = '';
-  tarefaRapidaData = '';
+  tarefasRapidasLista = [{ titulo:'', data:'' }];
   tarefaRapidaCriando = false;
   renderModal();
   loadAnexosDoCard(id);
   loadHistoricoContato(id);
 }
-async function criarTarefaRapidaDoCard(){
-  const titulo = tarefaRapidaTitulo.trim();
-  if(!titulo || !modalForm || modalForm.__isNew) return;
-  const dataEscolhida = tarefaRapidaData || new Date().toISOString().slice(0,10);
-  tarefaRapidaCriando = true;
+function abrirMaisUmaLinhaDeTarefa(){
+  tarefasRapidasLista.push({ titulo:'', data:'' });
   renderModal();
-  try{
-    const nova = await apiRequest('POST', '/tasks', { titulo, vencimento: dataEscolhida, prioridade:'media', leadId: modalForm.id, descricao:'' });
-    tasks.push(nova);
-    atualizarTarefaNaAgendaLocal(nova);
-    tarefaRapidaCriando = false;
-    closeModal();
-    agendaMesAtual = dataEscolhida.slice(0,7);
-    goToPage('tarefas');
-    await loadAgendaMes(agendaMesAtual);
-    agendaDiaSelecionado = dataEscolhida;
-    agendaDiaDestacado = dataEscolhida;
-    renderAgendaDiaModal();
-  }catch(e){
-    errorMsg = 'Não foi possível criar a tarefa.';
-    tarefaRapidaCriando = false;
-    renderModal();
-  }
+  const novoInput = document.querySelector(`.tarefa-rapida-titulo-input[data-idx="${tarefasRapidasLista.length-1}"]`);
+  if(novoInput) novoInput.focus();
+}
+function removerLinhaDeTarefa(idx){
+  if(tarefasRapidasLista.length <= 1) return; // sempre sobra pelo menos uma linha
+  tarefasRapidasLista.splice(idx, 1);
+  renderModal();
+}
+async function criarTarefaRapidaDoCard(){
+  if(!modalForm || modalForm.__isNew) return;
+  const validas = tarefasRapidasLista
+    .map(t=> ({ titulo: t.titulo.trim(), data: t.data || new Date().toISOString().slice(0,10) }))
+    .filter(t=> t.titulo);
+  if(!validas.length) return;
+
+  showConfirm({
+    message: validas.length===1
+      ? `Confirmar a criação da tarefa "${validas[0].titulo}"?`
+      : `Confirmar a criação dessas ${validas.length} tarefas?`,
+    confirmLabel: 'Confirmar',
+    danger: false,
+    onConfirm: async ()=>{
+      closeConfirm();
+      tarefaRapidaCriando = true;
+      renderModal();
+      try{
+        for(const t of validas){
+          const nova = await apiRequest('POST', '/tasks', { titulo: t.titulo, vencimento: t.data, prioridade:'media', leadId: modalForm.id, descricao:'' });
+          tasks.push(nova);
+          atualizarTarefaNaAgendaLocal(nova);
+        }
+        tarefaRapidaCriando = false;
+        tarefasRapidasLista = [{ titulo:'', data:'' }]; // volta pro estado inicial — "segmento acima"
+        renderModal();
+        const dataMaisCedo = validas.map(t=>t.data).sort()[0];
+        showConfirm({
+          message: validas.length===1 ? 'Tarefa criada! Quer ir pra Agenda ver ela?' : 'Tarefas criadas! Quer ir pra Agenda ver elas?',
+          confirmLabel: 'Ir pra Agenda',
+          cancelLabel: 'Continuar aqui',
+          danger: false,
+          onConfirm: async ()=>{
+            closeConfirm();
+            closeModal();
+            agendaMesAtual = dataMaisCedo.slice(0,7);
+            goToPage('tarefas');
+            await loadAgendaMes(agendaMesAtual);
+            agendaDiaSelecionado = dataMaisCedo;
+            agendaDiaDestacado = dataMaisCedo;
+            renderAgendaDiaModal();
+          },
+        });
+      }catch(e){
+        errorMsg = 'Não foi possível criar as tarefas.';
+        tarefaRapidaCriando = false;
+        renderModal();
+      }
+    },
+  });
 }
 function closeModal(){ modalForm = null; document.getElementById('modal-root').innerHTML=''; }
 
@@ -7506,12 +7556,18 @@ function renderExtrasOverlayHtml(f){
     const qtd = tasks.filter(t=>t.leadId===f.id).length;
     corpo = `
       <div class="field">
-        <label>Nova tarefa</label>
-        <div class="field-row-flex">
-          <input type="text" id="tarefa-rapida-titulo" value="${esc(tarefaRapidaTitulo)}" placeholder="Ex: Ligar amanhã de manhã" />
-          <input type="date" id="tarefa-rapida-data" value="${tarefaRapidaData || new Date().toISOString().slice(0,10)}" style="max-width:160px;" />
-          <button type="button" class="btn-primary" id="tarefa-rapida-criar-btn" ${tarefaRapidaCriando?'disabled':''}>${tarefaRapidaCriando?'Criando…':'Criar'}</button>
-        </div>
+        <label>Nova(s) tarefa(s)</label>
+        ${tarefasRapidasLista.map((t,i)=>`
+          <div class="field-row-flex tarefa-rapida-linha">
+            <input type="text" class="tarefa-rapida-titulo-input" data-idx="${i}" value="${esc(t.titulo)}" placeholder="Ex: Ligar amanhã de manhã" />
+            <input type="date" class="tarefa-rapida-data-input" data-idx="${i}" value="${t.data || new Date().toISOString().slice(0,10)}" style="max-width:160px;" />
+            ${i === tarefasRapidasLista.length-1
+              ? `<button type="button" class="icon-btn" data-action="tarefa-rapida-add-linha" title="Adicionar outra tarefa">+</button>`
+              : `<button type="button" class="icon-btn" data-action="tarefa-rapida-remover-linha" data-idx="${i}" title="Remover essa tarefa">✕</button>`
+            }
+          </div>
+        `).join('')}
+        <button type="button" class="btn-primary" style="width:100%; margin-top:8px;" id="tarefa-rapida-criar-btn" ${tarefaRapidaCriando?'disabled':''}>${tarefaRapidaCriando?'Criando…':'Confirmar'}</button>
       </div>
       <button type="button" class="btn-outline" style="width:100%;" data-action="extras-ir" data-tela="tarefas-lista">Ver tarefas existentes (${qtd})</button>
     `;
@@ -7605,10 +7661,17 @@ function ligarBindingsExtras(){
   });
 
   // Tarefas
-  const tarefaRapidaTituloInput = document.getElementById('tarefa-rapida-titulo');
-  if(tarefaRapidaTituloInput) tarefaRapidaTituloInput.addEventListener('input', (e)=> tarefaRapidaTitulo = e.target.value);
-  const tarefaRapidaDataInput = document.getElementById('tarefa-rapida-data');
-  if(tarefaRapidaDataInput) tarefaRapidaDataInput.addEventListener('input', (e)=> tarefaRapidaData = e.target.value);
+  document.querySelectorAll('.tarefa-rapida-titulo-input').forEach(input=>{
+    input.addEventListener('input', (e)=>{ tarefasRapidasLista[Number(input.dataset.idx)].titulo = e.target.value; });
+  });
+  document.querySelectorAll('.tarefa-rapida-data-input').forEach(input=>{
+    input.addEventListener('input', (e)=>{ tarefasRapidasLista[Number(input.dataset.idx)].data = e.target.value; });
+  });
+  const tarefaRapidaAddBtn = document.querySelector('[data-action="tarefa-rapida-add-linha"]');
+  if(tarefaRapidaAddBtn) tarefaRapidaAddBtn.addEventListener('click', abrirMaisUmaLinhaDeTarefa);
+  document.querySelectorAll('[data-action="tarefa-rapida-remover-linha"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> removerLinhaDeTarefa(Number(btn.dataset.idx)));
+  });
   const tarefaRapidaCriarBtn = document.getElementById('tarefa-rapida-criar-btn');
   if(tarefaRapidaCriarBtn) tarefaRapidaCriarBtn.addEventListener('click', criarTarefaRapidaDoCard);
   document.querySelectorAll('[data-action="extras-perguntar-conclusao-tarefa"]').forEach(btn=>{
@@ -7621,6 +7684,8 @@ function ligarBindingsExtras(){
         : `A tarefa "${task.titulo}" foi concluída?`;
       showConfirm({
         message: mensagem,
+        confirmLabel: task.concluida ? 'Desmarcar' : 'Concluída',
+        danger: false,
         onConfirm: async ()=>{
           closeConfirm();
           await toggleTaskConcluida(taskId);
@@ -9637,6 +9702,7 @@ function bindFluxoModalEvents(){
     if(fluxoModalForm.__isNew && temMensagem){
       showConfirm({
         message: 'Este fluxo já nasce ativo e tem etapa(s) de envio de WhatsApp automático, sem revisão sua antes de mandar. Quer criar mesmo assim?',
+        confirmLabel: 'Criar mesmo assim',
         onConfirm: ()=>{ salvarFluxo(); closeConfirm(); },
       });
     } else {
@@ -9696,16 +9762,19 @@ function renderFluxoModal(){
 }
 
 /* ---------- confirmação genérica ---------- */
-function showConfirm({ message, onConfirm }){
+function showConfirm({ message, onConfirm, confirmLabel, cancelLabel, danger }){
   confirmState = { message, onConfirm };
   const root = document.getElementById('confirm-root');
+  const rotuloConfirmar = confirmLabel || 'Excluir'; // "Excluir" continua sendo o padrão, pra não quebrar quem já chama sem passar isso
+  const rotuloCancelar = cancelLabel || 'Cancelar';
+  const classeConfirmar = danger===false ? 'btn-primary' : 'btn-danger';
   root.innerHTML = `
     <div class="overlay" id="confirm-overlay" style="z-index:90">
       <div class="confirm-box">
         <p>${esc(message)}</p>
         <div class="confirm-actions">
-          <button class="btn-outline" id="confirm-cancel">Cancelar</button>
-          <button class="btn-danger" id="confirm-ok">Excluir</button>
+          <button class="btn-outline" id="confirm-cancel">${esc(rotuloCancelar)}</button>
+          <button class="${classeConfirmar}" id="confirm-ok">${esc(rotuloConfirmar)}</button>
         </div>
       </div>
     </div>
