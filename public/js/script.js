@@ -3231,6 +3231,7 @@ function monthsBetween(anchorYM, targetYM){
 }
 // Descreve o tempo entre o início do contato e o mês de venda, pra dar uma noção
 // rápida do ciclo de venda daquele cliente direto no formulário.
+<<<<<<< HEAD
 // Leads bem antigos podem ter "mes"/"mesInicioContato" guardados como "YYYY-MM" (de
 // antes de existir o dia) — um <input type="date"> não consegue exibir isso e mostra
 // vazio, mas a string ainda existe e conta como "preenchida" em qualquer checagem
@@ -3245,6 +3246,9 @@ function normalizarData(valor){
 function textoCicloDeVenda(mesInicio, mesVenda){
   mesInicio = normalizarData(mesInicio);
   mesVenda = normalizarData(mesVenda);
+=======
+function textoCicloDeVenda(mesInicio, mesVenda){
+>>>>>>> 417251221052db67027db428b6a7e3fe7661d3e3
   if(!mesInicio) return '';
   if(!mesVenda) return '🟡 Ciclo aberto — ainda não fechou.';
   const diferenca = monthsBetween(mesInicio, mesVenda);
@@ -7907,11 +7911,19 @@ function renderModal(){
           <div class="field-row">
             <div class="field">
               <label>Mês de início de contato</label>
+<<<<<<< HEAD
               <input type="date" id="f-mes-inicio-contato" value="${normalizarData(f.mesInicioContato)}" />
             </div>
             <div class="field">
               <label>Mês de venda</label>
               <input type="date" id="f-mes" value="${normalizarData(f.mes)}" />
+=======
+              <input type="date" id="f-mes-inicio-contato" value="${f.mesInicioContato || ''}" />
+            </div>
+            <div class="field">
+              <label>Mês de venda</label>
+              <input type="date" id="f-mes" value="${f.mes || ''}" />
+>>>>>>> 417251221052db67027db428b6a7e3fe7661d3e3
             </div>
           </div>
           <p class="settings-page-note">O início de contato é opcional — ajuda a documentar quanto tempo leva até fechar.</p>
