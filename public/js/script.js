@@ -177,7 +177,7 @@ let openMoveMenuCardId = null;
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
-let leadsOrdenarPor = 'padrao'; // 'padrao' | 'alfabetica' | 'recentes' | 'data-referencia'
+let leadsOrdenarPor = 'padrao'; // 'padrao' | 'alfabetica' | 'recentes' | 'data-inicio' | 'data-venda'
 let pipelineOrdenarPor = 'padrao';
 let pipelineOrdenando = false;
 let comissoesOrdenarPor = 'padrao';
@@ -382,6 +382,8 @@ let contratoModalForm = null;
 let nomeNovoVal = '';
 let nomeMsg = null;
 let verificandoAtualizacao = false;
+let preenchendoMesInicioContato = false;
+let mesInicioContatoMsg = null;
 let backupGerando = false;
 let backupImportando = false;
 let backupMsg = null;
@@ -2703,7 +2705,7 @@ function relatoriosDadosMensais(mesesAtras, cardsBase){
       if(bucket) bucket.novos++;
     }
     if(c.mes){
-      const bucketGanho = porKey.get(c.mes);
+      const bucketGanho = porKey.get(c.mes.slice(0,7));
       const col = board.columns.find(k=>k.id===c.columnId);
       if(bucketGanho && col && col.tipo==='ganho'){
         bucketGanho.ganhoValor += Number(c.valor)||0;
@@ -2714,7 +2716,7 @@ function relatoriosDadosMensais(mesesAtras, cardsBase){
   return buckets;
 }
 function baixarCsv(cards, nomeArquivo){
-  const linhas = [['Nome','Telefone','Valor','Coluna','Temperatura','Mês'].join(',')];
+  const linhas = [['Nome','Telefone','Valor','Coluna','Temperatura','Início de contato','Mês de venda'].join(',')];
   cards.forEach(c=>{
     const col = board.columns.find(k=>k.id===c.columnId);
     linhas.push([
@@ -2723,6 +2725,7 @@ function baixarCsv(cards, nomeArquivo){
       c.valor||0,
       `"${col?col.nome.replace(/"/g,'""'):''}"`,
       c.temperatura||'',
+      c.mesInicioContato||'',
       c.mes||'',
     ].join(','));
   });
@@ -2928,6 +2931,23 @@ async function baixarBackupCompleto(){
   renderApp();
   if(backupModalAberto) renderBackupModal();
 }
+async function preencherMesInicioContatoAntigos(){
+  preenchendoMesInicioContato = true;
+  mesInicioContatoMsg = null;
+  renderApp();
+  try{
+    const data = await apiRequest('POST', '/cards/preencher-mes-inicio-contato');
+    // atualiza localmente também, sem precisar recarregar tudo do servidor de novo
+    board.cards.forEach(c=>{ if(!c.mesInicioContato && c.mes) c.mesInicioContato = c.mes; });
+    mesInicioContatoMsg = { tipo:'ok', texto: data.atualizados
+      ? `${data.atualizados} lead(s) atualizado(s).`
+      : 'Nenhum lead precisava de atualização — todos já tinham esse campo preenchido.' };
+  }catch(e){
+    mesInicioContatoMsg = { tipo:'erro', texto:'Não foi possível preencher os leads antigos agora.' };
+  }
+  preenchendoMesInicioContato = false;
+  renderApp();
+}
 async function verificarAtualizacaoApp(){
   verificandoAtualizacao = true;
   atualizacaoMsg = null;
@@ -2971,11 +2991,11 @@ function tratarRetornoDoGoogle(){
 
 /* ---------- derivações (Pipeline) ---------- */
 function monthsList(){
-  const set = new Set([currentMonthKey(), ...board.cards.map(c=>c.mes).filter(Boolean)]);
+  const set = new Set([currentMonthKey(), ...board.cards.map(c=>c.mesInicioContato).filter(Boolean).map(d=>d.slice(0,7))]);
   return Array.from(set).sort((a,b)=> a<b?1:-1);
 }
 function visibleCards(){
-  let cards = filterMonth ? board.cards.filter(c=>c.mes===filterMonth) : board.cards;
+  let cards = filterMonth ? board.cards.filter(c=>c.mesInicioContato && c.mesInicioContato.slice(0,7)===filterMonth) : board.cards;
   cards = cards.filter(c=>!c.arquivado);
   if(filtroEsfriando){
     const limite = Date.now() - 7*24*60*60*1000;
@@ -3197,10 +3217,40 @@ function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
   const { value1, value2 } = calcComissaoPreview(credito);
   return { parcelas:13, parcelas1:10, value:value1, value2 };
 }
+function atualizarNotaCicloDeVenda(){
+  const nota = document.getElementById('f-ciclo-venda-nota');
+  if(!nota || !modalForm || modalForm.__isNew) return;
+  const texto = textoCicloDeVenda(modalForm.mesInicioContato, modalForm.mes);
+  nota.textContent = texto;
+  nota.style.display = texto ? '' : 'none';
+}
 function monthsBetween(anchorYM, targetYM){
   const [ay,am] = anchorYM.split('-').map(Number);
   const [ty,tm] = targetYM.split('-').map(Number);
   return (ty-ay)*12 + (tm-am);
+}
+// Descreve o tempo entre o início do contato e o mês de venda, pra dar uma noção
+// rápida do ciclo de venda daquele cliente direto no formulário.
+// Leads bem antigos podem ter "mes"/"mesInicioContato" guardados como "YYYY-MM" (de
+// antes de existir o dia) — um <input type="date"> não consegue exibir isso e mostra
+// vazio, mas a string ainda existe e conta como "preenchida" em qualquer checagem
+// direta. Isso normaliza pro dia 1 daquele mês, deixando a exibição e os cálculos
+// consistentes com o valor de verdade salvo.
+function normalizarData(valor){
+  if(!valor) return '';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(valor)) return valor;
+  if(/^\d{4}-\d{2}$/.test(valor)) return `${valor}-01`;
+  return valor;
+}
+function textoCicloDeVenda(mesInicio, mesVenda){
+  mesInicio = normalizarData(mesInicio);
+  mesVenda = normalizarData(mesVenda);
+  if(!mesInicio) return '';
+  if(!mesVenda) return '🟡 Ciclo aberto — ainda não fechou.';
+  const diferenca = monthsBetween(mesInicio, mesVenda);
+  if(diferenca < 0) return '⚠️ A data de venda é anterior ao início do contato — confira as datas.';
+  if(diferenca === 0) return '🔵 Ciclo de venda: fechou no mesmo mês do primeiro contato.';
+  return `🔵 Ciclo de venda: ${diferenca} ${diferenca===1?'mês':'meses'} até fechar.`;
 }
 function addMonthsKey(ym, delta){
   const [y,m] = ym.split('-').map(Number);
@@ -3247,22 +3297,26 @@ function comissoesStats(){
 }
 
 /* ---------- derivações (Leads) ---------- */
-// Ordenação compartilhada entre Leads, Pipeline e Comissões. "data-referencia" usa o
-// campo que representa o mês de referência em cada tela (mes do lead, date do
-// contrato) — mesmo texto, campo diferente conforme onde é chamada.
+// Ordenação compartilhada entre Leads, Pipeline e Comissões. "data-inicio" e
+// "data-venda" usam os campos que representam cada uma dessas datas em cada tela —
+// leads/pipeline têm as duas (mesInicioContato/mes), comissões só tem uma (date).
 const OPCOES_ORDENACAO = [
   ['padrao', 'Ordem padrão'],
   ['alfabetica', 'Ordem alfabética'],
   ['recentes', 'Adicionados recentemente'],
-  ['data-referencia', 'Data de referência'],
+  ['data-inicio', 'Data de início de contato'],
+  ['data-venda', 'Data de venda'],
 ];
 // Botão de funil que abre um menu com a ordenação atual marcada e as outras opções —
 // usado em Leads, Pipeline e Comissões. "menuId" identifica qual dos três é esse (só
-// um fica aberto por vez), e "rotuloPadrao" troca o texto da primeira opção conforme
-// o contexto (no Pipeline, por exemplo, deixa claro que o padrão é a ordem manual).
-function renderBotaoOrdenar(menuId, valorAtual, rotuloPadrao){
+// um fica aberto por vez), "rotuloPadrao" troca o texto da primeira opção conforme
+// o contexto (no Pipeline, por exemplo, deixa claro que o padrão é a ordem manual),
+// e "ocultarInicio" tira a opção de início de contato pra Comissões, que não tem
+// esse campo.
+function renderBotaoOrdenar(menuId, valorAtual, rotuloPadrao, ocultarInicio){
   const aberto = ordenarMenuAberto === menuId;
-  const opcoes = rotuloPadrao ? [[OPCOES_ORDENACAO[0][0], rotuloPadrao], ...OPCOES_ORDENACAO.slice(1)] : OPCOES_ORDENACAO;
+  let opcoes = rotuloPadrao ? [[OPCOES_ORDENACAO[0][0], rotuloPadrao], ...OPCOES_ORDENACAO.slice(1)] : OPCOES_ORDENACAO;
+  if(ocultarInicio) opcoes = opcoes.filter(([val])=> val !== 'data-inicio');
   return `
     <div class="ordenar-wrap">
       <button type="button" class="icon-btn ${valorAtual!=='padrao'?'ordenar-ativo':''}" data-action="toggle-ordenar-menu" data-menu-id="${menuId}" title="Ordenar">${ICON_FUNNEL}</button>
@@ -3277,10 +3331,11 @@ function renderBotaoOrdenar(menuId, valorAtual, rotuloPadrao){
     </div>
   `;
 }
-function ordenarPorCriterio(lista, criterio, campoNome, campoData){
+function ordenarPorCriterio(lista, criterio, campoNome, campoInicio, campoVenda){
   if(criterio === 'alfabetica') return [...lista].sort((a,b)=> (a[campoNome]||'').localeCompare(b[campoNome]||'', 'pt-BR'));
   if(criterio === 'recentes') return [...lista].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0));
-  if(criterio === 'data-referencia') return [...lista].sort((a,b)=> String(a[campoData]||'').localeCompare(String(b[campoData]||'')));
+  if(criterio === 'data-inicio') return [...lista].sort((a,b)=> String(a[campoInicio]||'').localeCompare(String(b[campoInicio]||'')));
+  if(criterio === 'data-venda') return [...lista].sort((a,b)=> String(a[campoVenda]||'').localeCompare(String(b[campoVenda]||'')));
   return lista; // 'padrao' — não mexe na ordem
 }
 // Reordena de verdade (e salva) os cards de cada coluna do funil atual, conforme o
@@ -3302,7 +3357,7 @@ function aplicarOrdenacaoPipeline(criterio){
       try{
         for(const col of colunasDoFunil){
           const cardsDaColuna = cardsOf(col.id);
-          const ordenados = ordenarPorCriterio(cardsDaColuna, criterio, 'cliente', 'mes');
+          const ordenados = ordenarPorCriterio(cardsDaColuna, criterio, 'cliente', 'mesInicioContato', 'mes');
           await Promise.all(ordenados.map((card, i)=>{
             const novaOrdem = (i+1)*1000;
             card.ordem = novaOrdem; // otimista
@@ -3325,7 +3380,7 @@ function filteredLeads(){
     const q = leadsSearch.trim().toLowerCase();
     list = list.filter(c=> (c.cliente||'').toLowerCase().includes(q) || (c.telefone||'').toLowerCase().includes(q));
   }
-  list = ordenarPorCriterio(list, leadsOrdenarPor, 'cliente', 'mes');
+  list = ordenarPorCriterio(list, leadsOrdenarPor, 'cliente', 'mesInicioContato', 'mes');
   return list;
 }
 
@@ -5133,7 +5188,7 @@ function ativarArrasteHorizontal(){
 }
 function renderCard(card){
   const temp = TEMPS[card.temperatura] || TEMPS.frio;
-  const showMonth = filterMonth === null && card.mes;
+  const showMonth = filterMonth === null && card.mesInicioContato;
   return `
     <div class="card" draggable="true" data-card-id="${card.id}">
       <div class="card-drag-handle" title="Arraste para mover">
@@ -5155,7 +5210,7 @@ function renderCard(card){
           </div>
           <div class="card-value-row">
             <span class="card-value">${fmtBRL(card.valor)}</span>
-            ${showMonth ? `<span class="month-badge">${monthLabel(card.mes)}</span>` : ''}
+            ${showMonth ? `<span class="month-badge">${monthLabel(card.mesInicioContato)}</span>` : ''}
           </div>
           ${(card.telefone || card.obs) ? `
             <div class="card-extra">
@@ -5640,7 +5695,7 @@ function renderComissoesPage(){
           <span>${monthLabel(comissoesMonth, true)}</span>
           <button class="icon-btn" data-action="comissoes-mes" data-delta="1" title="Próximo mês">›</button>
         </div>
-        ${renderBotaoOrdenar('comissoes', comissoesOrdenarPor)}
+        ${renderBotaoOrdenar('comissoes', comissoesOrdenarPor, null, true)}
         <button class="btn-primary" data-action="open-new-contrato">+ Novo contrato</button>
       </div>
     </div>
@@ -5662,7 +5717,7 @@ function renderComissoesPage(){
 
     ${contratos.length ? `
       <div class="contratos-list">
-        ${ordenarPorCriterio(contratos, comissoesOrdenarPor, 'desc', 'date').map(c=>renderContratoCard(c)).join('')}
+        ${ordenarPorCriterio(contratos, comissoesOrdenarPor, 'desc', null, 'date').map(c=>renderContratoCard(c)).join('')}
       </div>
     ` : `<div class="tasks-empty">Nenhum contrato de comissão cadastrado ainda.</div>`}
   `;
@@ -6128,6 +6183,12 @@ function renderConfigManutencao(){
       <button class="btn-outline" data-action="abrir-backup-modal">📦 Backup</button>
     </div>
     <div class="settings-page-section">
+      <h3>Início de contato nos leads antigos</h3>
+      <p class="settings-page-note">Preenche automaticamente o "mês de início de contato" dos seus leads que ainda não têm esse campo, usando o mês de venda que já estava cadastrado como ponto de partida. Não altera leads que você já preencheu manualmente, e pode ser usado quantas vezes quiser.</p>
+      ${mesInicioContatoMsg ? `<p class="settings-page-msg ${mesInicioContatoMsg.tipo}">${esc(mesInicioContatoMsg.texto)}</p>` : ''}
+      <button class="btn-outline" data-action="preencher-mes-inicio-contato" ${preenchendoMesInicioContato?'disabled':''}>${preenchendoMesInicioContato?'Preenchendo…':'Preencher automaticamente'}</button>
+    </div>
+    <div class="settings-page-section">
       <h3>Atualizações</h3>
       <p class="settings-page-note">Se o painel parecer desatualizado (algo que já mudou e não aparece), use esse botão pra forçar buscar a versão mais nova — principalmente útil no app instalado no celular.</p>
       ${atualizacaoMsg ? `<p class="settings-page-msg ${atualizacaoMsg.tipo}">${esc(atualizacaoMsg.texto)}</p>` : ''}
@@ -6206,6 +6267,8 @@ function bindAppEvents(){
   });
   const verificarAtualizacaoBtn = app.querySelector('[data-action="verificar-atualizacao"]');
   if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
+  const preencherMesInicioBtn = app.querySelector('[data-action="preencher-mes-inicio-contato"]');
+  if(preencherMesInicioBtn) preencherMesInicioBtn.addEventListener('click', preencherMesInicioContatoAntigos);
   const abrirBackupModalBtn = app.querySelector('[data-action="abrir-backup-modal"]');
   if(abrirBackupModalBtn) abrirBackupModalBtn.addEventListener('click', abrirBackupModal);
 
@@ -7385,15 +7448,21 @@ function renderEscolhaTipoPessoaModal(){
   });
 }
 function abrirNovoCardComTipo(columnId, tipoPessoa){
+  // se a pessoa estiver vendo um mês específico no Pipeline, começa nesse mês (dia 1);
+  // se estiver em "Geral", usa a data de hoje mesmo, com o dia certinho
+  const dataInicial = filterMonth ? `${filterMonth}-01` : new Date().toISOString().slice(0,10);
   modalForm = {
     __isNew: true, id:null, columnId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
-    mes: filterMonth || currentMonthKey(),
+    mes: '', mesInicioContato: dataInicial, // início de contato já vem preenchido (é agora); mês de venda fica em branco até a venda acontecer de verdade
     etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
     tipoPessoa, clienteFisica:'', clienteJuridica:'',
     cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
   };
   tipoPessoaDropdownAberto = false;
+  extrasTela = null; // sem isso, se a última coisa vista tivesse sido a tela de Extras
+                      // de outro cliente, o formulário de novo lead nascia mostrando
+                      // aquela tela por engano, em vez do formulário de verdade
   renderModal();
 }
 async function toggleArquivarCard(){
@@ -7745,7 +7814,11 @@ function renderModal(){
   if(!modalForm){ root.innerHTML=''; return; }
   const f = modalForm;
 
-  if(extrasTela){
+  // Extras (etiquetas/anexos/tarefas/histórico) só faz sentido pra um card que já
+  // existe de verdade — um card novo não tem id ainda pra buscar nada disso. Essa
+  // checagem extra evita mostrar a tela de Extras por engano caso extrasTela tenha
+  // ficado "grudado" de uma interação anterior com outro cliente.
+  if(extrasTela && !f.__isNew){
     root.innerHTML = renderExtrasOverlayHtml(f);
     ligarBindingsExtras();
     return;
@@ -7831,10 +7904,18 @@ function renderModal(){
               <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
             </select>
           </div>
-          <div class="field">
-            <label>Mês de referência</label>
-            <input type="month" id="f-mes" value="${f.mes || currentMonthKey()}" />
+          <div class="field-row">
+            <div class="field">
+              <label>Mês de início de contato</label>
+              <input type="date" id="f-mes-inicio-contato" value="${normalizarData(f.mesInicioContato)}" />
+            </div>
+            <div class="field">
+              <label>Mês de venda</label>
+              <input type="date" id="f-mes" value="${normalizarData(f.mes)}" />
+            </div>
           </div>
+          <p class="settings-page-note">O início de contato é opcional — ajuda a documentar quanto tempo leva até fechar.</p>
+          <p class="settings-page-note" id="f-ciclo-venda-nota" style="${(f.mesInicioContato && !f.__isNew)?'':'display:none;'}">${textoCicloDeVenda(f.mesInicioContato, f.mes)}</p>
           <div class="field">
             <label>Qualificação</label>
             <div class="temp-toggle" id="f-temp-toggle">
@@ -7977,7 +8058,15 @@ function renderModal(){
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
   const tipoCartaEl = document.getElementById('f-tipo-carta');
   if(tipoCartaEl) tipoCartaEl.addEventListener('change', (e)=> modalForm.tipoCarta = e.target.value);
-  document.getElementById('f-mes').addEventListener('change', (e)=> modalForm.mes = e.target.value);
+  document.getElementById('f-mes').addEventListener('change', (e)=>{
+    modalForm.mes = e.target.value;
+    atualizarNotaCicloDeVenda();
+  });
+  const mesInicioContatoInput = document.getElementById('f-mes-inicio-contato');
+  if(mesInicioContatoInput) mesInicioContatoInput.addEventListener('change', (e)=>{
+    modalForm.mesInicioContato = e.target.value;
+    atualizarNotaCicloDeVenda();
+  });
 
   const valorInput = document.getElementById('f-valor');
   valorInput.addEventListener('input', (e)=>{
@@ -9518,7 +9607,7 @@ async function confirmarMoverLeadsParaColuna(){
         const copia = await apiRequest('POST', '/cards', {
           columnId: colId, cliente: original.cliente, valor: original.valor,
           temperatura: original.temperatura, telefone: original.telefone,
-          obs: original.obs, mes: original.mes,
+          obs: original.obs, mes: original.mes, mesInicioContato: original.mesInicioContato,
         });
         board.cards.push(copia);
       } else {

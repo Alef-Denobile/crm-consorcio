@@ -55,7 +55,7 @@ async function executarAutomacoesDaColuna(userId, colunaId, card) {
   }
 }
 
-const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'etiquetas', 'camposPersonalizados', 'tipoCarta', 'tipoPessoa', 'cnpj', 'razaoSocial', 'inscricaoEstadual', 'ramoAtividade', 'contatoNome', 'contatoCargo'];
+const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'mesInicioContato', 'etiquetas', 'camposPersonalizados', 'tipoCarta', 'tipoPessoa', 'cnpj', 'razaoSocial', 'inscricaoEstadual', 'ramoAtividade', 'contatoNome', 'contatoCargo'];
 function filtrarCampos(body) {
   const dados = {};
   for (const campo of CAMPOS_PERMITIDOS) {
@@ -63,6 +63,22 @@ function filtrarCampos(body) {
   }
   return dados;
 }
+
+// POST /api/cards/preencher-mes-inicio-contato -> pra leads antigos (de antes desse
+// campo existir): copia o "mês de venda" pro "mês de início de contato" onde esse
+// último ainda estiver vazio. Nunca sobrescreve um valor que a pessoa já tenha
+// preenchido, então pode ser chamada mais de uma vez sem problema.
+router.post('/preencher-mes-inicio-contato', async (req, res) => {
+  try {
+    const resultado = await Card.updateMany(
+      { userId: req.userId, $or: [{ mesInicioContato: { $exists: false } }, { mesInicioContato: '' }], mes: { $nin: [null, ''] } },
+      [{ $set: { mesInicioContato: '$mes' } }]
+    );
+    res.json({ atualizados: resultado.modifiedCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao preencher o início de contato dos leads antigos.' });
+  }
+});
 
 // POST /api/cards -> cria um novo cliente/card para o usuário logado
 router.post('/', async (req, res) => {
@@ -103,6 +119,16 @@ router.put('/:id', async (req, res) => {
       const coluna = await Column.findOne({ _id: dados.columnId, userId: req.userId });
       if (!coluna) return res.status(404).json({ error: 'Coluna inválida.' });
     }
+
+    // guarda o estado anterior do "mês de venda" só quando ele está sendo alterado
+    // nessa edição — usado depois pra saber se está passando de vazio pra
+    // preenchido de verdade (não simplesmente sendo reenviado igual)
+    let mesAntesDoUpdate = null;
+    if (dados.mes !== undefined) {
+      const cardAntes = await Card.findOne({ _id: req.params.id, userId: req.userId }).select('mes');
+      mesAntesDoUpdate = cardAntes ? cardAntes.mes : null;
+    }
+
     const card = await Card.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },
       dados,
@@ -112,12 +138,31 @@ router.put('/:id', async (req, res) => {
 
     // Mesmo mecanismo de sincronização de mês da rota de comissões, no sentido
     // contrário: editar o mês aqui no lead também atualiza o contrato vinculado —
-    // exceto pra Home Equity e Car Equity, que ficam soltos de propósito.
-    if (dados.mes && /^\d{4}-\d{2}$/.test(dados.mes)) {
+    // exceto pra Home Equity e Car Equity, que ficam soltos de propósito. Aceita
+    // tanto "YYYY-MM" quanto "YYYY-MM-DD" (com dia) — a comissão sempre usa o dia 1
+    // do mês correspondente, já que trabalha em parcelas mensais.
+    if (dados.mes && /^\d{4}-\d{2}/.test(dados.mes)) {
       const contratoVinculado = await Contrato.findOne({ cardId: card._id, userId: req.userId });
       if (contratoVinculado && !['home_equity', 'car_equity'].includes(contratoVinculado.tipoCarta)) {
-        contratoVinculado.date = new Date(`${dados.mes}-01`);
+        contratoVinculado.date = new Date(Number(dados.mes.slice(0, 4)), Number(dados.mes.slice(5, 7)) - 1, 1);
         await contratoVinculado.save();
+      }
+    }
+
+    // Preencher a data de venda pela primeira vez leva o lead direto pra "Ganho" —
+    // só dispara na transição de vazio pra preenchido (nunca em leads que já tinham
+    // esse campo preenchido antes de agora, então não afeta leads antigos à toa).
+    if (mesAntesDoUpdate !== null && !mesAntesDoUpdate && dados.mes && /^\d{4}-\d{2}/.test(dados.mes)) {
+      const colunaAtual = await Column.findOne({ _id: card.columnId, userId: req.userId });
+      if (colunaAtual && colunaAtual.tipo !== 'ganho') {
+        const colunaGanho = await Column.findOne({ userId: req.userId, funilId: colunaAtual.funilId, tipo: 'ganho' });
+        if (colunaGanho) {
+          const ultimoCard = await Card.findOne({ columnId: colunaGanho._id, userId: req.userId }).sort('-ordem');
+          card.columnId = colunaGanho._id;
+          card.ordem = ultimoCard ? ultimoCard.ordem + 1000 : 1000;
+          await card.save();
+          gerarComissaoAutomaticaSeGanho(req.userId, card, colunaGanho._id);
+        }
       }
     }
 
