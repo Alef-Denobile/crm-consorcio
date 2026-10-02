@@ -1,8 +1,10 @@
 const express = require('express');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const { CLIENT_ID, CLIENT_SECRET, listarEventosPrimario, chamarCalendarApi } = require('../utils/calendarSync');
+const { gerarIcs } = require('../utils/icsFeed');
 const Task = require('../models/Task');
 const EventoGoogleExtra = require('../models/EventoGoogleExtra');
 
@@ -11,6 +13,9 @@ const JWT_SECRET = auth.JWT_SECRET;
 
 function redirectUriDe(req) {
   return `${req.protocol}://${req.get('host')}/api/calendar/callback`;
+}
+function urlFeedIcsDe(req, token) {
+  return `${req.protocol}://${req.get('host')}/api/calendar/ics/${token}.ics`;
 }
 
 // GET /api/calendar/status -> diz se o usuário logado já conectou a Google Agenda
@@ -217,6 +222,71 @@ router.delete('/eventos/:eventId', auth, async (req, res) => {
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: err.message || 'Erro ao excluir o evento do Google Agenda.' });
+  }
+});
+
+/* ---------- link de agenda (.ics) — alternativa que não depende do Google ----------
+   Qualquer app de calendário (Google, Apple, Outlook…) consegue "assinar" essa URL e ver
+   as tarefas automaticamente, sem precisar conectar conta nenhuma nem configurar nada no
+   servidor. Pensado pra quando o painel for usado fora da operação original (ver o botão
+   "Regras de comissão" — essa e aquela mudança vieram da mesma conversa sobre deixar o
+   sistema independente de integrações específicas). */
+
+// GET /api/calendar/ics-status -> se esse usuário já tem um link de agenda ativo
+router.get('/ics-status', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('icsToken');
+    const ativo = !!(user && user.icsToken);
+    res.json({ ativo, url: ativo ? urlFeedIcsDe(req, user.icsToken) : null });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao verificar o link de agenda.' });
+  }
+});
+
+// POST /api/calendar/ics/gerar -> cria (ou substitui) o link secreto do feed de agenda
+router.post('/ics/gerar', auth, async (req, res) => {
+  try {
+    const token = crypto.randomBytes(24).toString('hex');
+    await User.findByIdAndUpdate(req.userId, { icsToken: token });
+    res.json({ ativo: true, url: urlFeedIcsDe(req, token) });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao gerar o link de agenda.' });
+  }
+});
+
+// POST /api/calendar/ics/revogar -> invalida o link atual — apps que já assinaram param
+// de conseguir atualizar; pra voltar a usar, precisa gerar um link novo
+router.post('/ics/revogar', auth, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.userId, { icsToken: null });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao revogar o link de agenda.' });
+  }
+});
+
+// GET /api/calendar/ics/:token.ics -> feed público (sem login) — o "segredo" é o próprio
+// token, longo e aleatório, difícil de adivinhar; é assim que Google/Apple/Outlook também
+// fazem esse tipo de link ("assinar por URL")
+router.get('/ics/:token', async (req, res) => {
+  try {
+    const token = req.params.token.replace(/\.ics$/i, '');
+    const user = await User.findOne({ icsToken: token }).select('_id nome');
+    if (!user) return res.status(404).type('text/plain; charset=utf-8').send('Link de agenda inválido ou revogado.');
+
+    const agora = new Date();
+    const inicio = new Date(agora.getFullYear(), agora.getMonth() - 1, 1);
+    const fim = new Date(agora.getFullYear(), agora.getMonth() + 6, 0, 23, 59, 59);
+    const tarefas = await Task.find({
+      userId: user._id,
+      vencimento: { $gte: inicio, $lte: fim },
+    }).select('titulo vencimento descricao concluida leadId').populate('leadId', 'cliente');
+
+    res.type('text/calendar; charset=utf-8');
+    res.set('Content-Disposition', 'inline; filename="agenda-painel-crm.ics"');
+    res.send(gerarIcs(tarefas, user.nome ? `Agenda — ${user.nome}` : 'Agenda — Painel CRM'));
+  } catch (err) {
+    res.status(500).type('text/plain; charset=utf-8').send('Erro ao gerar o feed de agenda.');
   }
 });
 

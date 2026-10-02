@@ -69,6 +69,7 @@ const userSchema = new mongoose.Schema(
       colunaDestinoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Column', default: null }, // onde o lead novo entra no funil
     },
     tokenVersion: { type: Number, default: 0 }, // incrementar invalida todos os tokens já emitidos (logout geral)
+    icsToken: { type: String, default: null, unique: true, sparse: true }, // segredo do link de agenda (.ics) — ver server/routes/calendar.js
     avatarUrl: { type: String, default: null }, // imagem pequena em base64 (data URL)
     twoFactorSecret: { type: String, default: null }, // segredo TOTP — só existe enquanto ativado ou em processo de ativação
     twoFactorEnabled: { type: Boolean, default: false },
@@ -90,6 +91,8 @@ const userSchema = new mongoose.Schema(
         delete ret.whatsappBusiness; // token de acesso nunca sai do servidor
         ret.instagramConnected = !!(ret.instagramLeads && ret.instagramLeads.pageAccessToken && ret.instagramLeads.pageId);
         delete ret.instagramLeads; // token de acesso nunca sai do servidor
+        ret.icsAtivo = !!ret.icsToken;
+        delete ret.icsToken; // o token só é devolvido pela rota dedicada (GET /api/calendar/ics-status), nunca aqui
         ret.equipeId = ret.equipeId ? ret.equipeId.toString() : null;
         if (ret.menuTriagem && Array.isArray(ret.menuTriagem.opcoes)) {
           ret.menuTriagem.opcoes.forEach((op) => {

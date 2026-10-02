@@ -217,6 +217,13 @@ let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de e
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
 let calendarConnected = false;
 let calendarSyncing = false;
+// Integrações que dependem de credenciais do servidor (não do usuário) — otimista por
+// padrão (tudo true) até a checagem real chegar, pra nunca esconder nada à toa por causa
+// de uma resposta lenta. Ver server/routes/config.js.
+let integracoesConfig = { googleAgenda:true, assistenteIA:true, whatsappWebhook:true, instagramWebhook:true, telegramAlerta:true };
+let icsStatus = null; // { ativo, url } — link de agenda (.ics), alternativa ao Google Agenda
+let icsCarregando = false;
+let icsGerando = false;
 let whatsappConnected = false;
 let whatsappSalvando = false;
 let whatsappConfigMsg = null;
@@ -365,6 +372,10 @@ let dmTexto = '';
 let dmEnviando = false;
 let supervisaoMembros = [];
 let supervisaoLoaded = false;
+let visualizandoDashboardDe = null; // { userId, nome } | null — quando setado, o Dashboard mostra os dados desse membro, em modo leitura
+let boardBackupGestor = null;
+let tasksBackupGestor = null;
+let metaVendasValorBackupGestor = null;
 let automacoes = [];
 let automacoesLoaded = false;
 let automacaoModalForm = null;
@@ -379,6 +390,10 @@ let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
 let contratoModalForm = null;
+let regrasComissao = [];
+let regrasComissaoLoaded = false;
+let regrasModalAberto = false; // lista de regras de comissão (abre pela engrenagem em Comissões)
+let regraEditForm = null; // editor de uma regra específica, dentro do modal de regras
 let nomeNovoVal = '';
 let nomeMsg = null;
 let verificandoAtualizacao = false;
@@ -1106,6 +1121,19 @@ async function loadContratos(){
   contratosLoaded = true;
   renderApp();
 }
+// Regras de comissão (engrenagem em Comissões) — na 1ª vez, o servidor já cria as
+// regras padrão (Imóvel, Veículo, Investimento, Serviços, Home Equity, Car Equity)
+// com a mesma matemática que sempre existiu, então nada muda pra quem nunca mexer nisso.
+async function loadRegrasComissao(){
+  try{
+    const data = await apiRequest('GET', '/regras-comissao');
+    regrasComissao = data.regras;
+  }catch(e){
+    regrasComissao = [];
+  }
+  regrasComissaoLoaded = true;
+  renderApp();
+}
 
 /* ---------- Google Agenda ---------- */
 async function loadCalendarStatus(){
@@ -1116,6 +1144,58 @@ async function loadCalendarStatus(){
     calendarConnected = false;
   }
   renderApp();
+}
+// Quais integrações que dependem do servidor (não do usuário) estão configuradas nesse
+// ambiente — chamada 1x no início, pra decidir o que mostrar em Configurações. Pública,
+// não exige estar logado (mas não tem problema mandar o token também).
+async function loadIntegracoesConfig(){
+  try{
+    const data = await apiRequest('GET', '/config/integracoes');
+    integracoesConfig = { ...integracoesConfig, ...data };
+  }catch(e){
+    // se não conseguir checar, mantém tudo visível (otimista) — melhor mostrar um botão
+    // que às vezes falha do que esconder uma integração que na verdade está configurada
+  }
+  renderApp();
+  renderAssistente();
+}
+/* ---------- Agenda por link (.ics) — alternativa ao Google Agenda ---------- */
+async function loadIcsStatus(){
+  icsCarregando = true;
+  try{
+    icsStatus = await apiRequest('GET', '/calendar/ics-status');
+  }catch(e){
+    icsStatus = null;
+  }
+  icsCarregando = false;
+  renderApp();
+}
+async function gerarLinkIcs(){
+  icsGerando = true;
+  renderApp();
+  try{
+    icsStatus = await apiRequest('POST', '/calendar/ics/gerar');
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível gerar o link de agenda.';
+  }
+  icsGerando = false;
+  renderApp();
+}
+function revogarLinkIcs(){
+  showConfirm({
+    message: 'Revogar o link de agenda atual? Quem já assinou esse link (Google, Apple, Outlook…) para de receber atualizações. Você pode gerar um link novo a qualquer momento.',
+    confirmLabel: 'Revogar',
+    onConfirm: async ()=>{
+      closeConfirm();
+      try{
+        await apiRequest('POST', '/calendar/ics/revogar');
+        icsStatus = { ativo:false, url:null };
+      }catch(e){
+        errorMsg = e.message || 'Não foi possível revogar o link de agenda.';
+      }
+      renderApp();
+    },
+  });
 }
 
 /* ---------- WhatsApp Business API ---------- */
@@ -1607,6 +1687,31 @@ async function loadSupervisao(){
     supervisaoMembros = [];
   }
   supervisaoLoaded = true;
+  renderApp();
+}
+// Troca temporariamente os dados em tela (board, tarefas, meta) pelos de um membro da
+// equipe, pro gestor ver o Dashboard dele exatamente como ele vê o próprio — sem
+// nenhuma ação de edição disponível. sairDashboardDeMembro() devolve tudo como estava.
+async function abrirDashboardDeMembro(userId, nome){
+  try{
+    const data = await apiRequest('GET', `/equipe/supervisao/${userId}/dashboard`);
+    boardBackupGestor = board;
+    tasksBackupGestor = tasks;
+    metaVendasValorBackupGestor = metaVendasValor;
+    board = { columns: data.columns || [], cards: data.cards || [] };
+    tasks = data.tasks || [];
+    tasksLoaded = true;
+    metaVendasValor = data.metaVendasValor || 0;
+    visualizandoDashboardDe = { userId, nome: data.nome || nome };
+    goToPage('dashboard');
+  }catch(e){
+    errorMsg = 'Não foi possível carregar o dashboard desse membro.';
+    renderApp();
+  }
+}
+function sairDashboardDeMembro(){
+  goToPage('equipe'); // a própria goToPage já restaura board/tasks/meta ao sair do dashboard
+  equipeSubTab = 'supervisao';
   renderApp();
 }
 
@@ -3196,26 +3301,65 @@ const ESCOPOS = {
   Pessoal: { label:'Pessoal', color:'var(--ink-soft)', bg:'var(--badge-neutral-bg)' },
   Empresa: { label:'Empresa', color:'#FFFFFF',         bg:'var(--accent)' },
 };
-// mesma regra fixa do back-end: Imóvel/Investimento/Serviços = 10 parcelas a 0,00103388 + 3 a
-// 0,00190561; Veículo = 1,6% do valor da carta, dividido em 11 parcelas iguais.
-function calcComissaoPreview(creditoValor){
-  const credito = parseFloat(creditoValor) || 0;
-  const value1 = Math.round(credito * (1033.88/1000000) * 100) / 100;
-  const value2 = Math.round(credito * (1905.61/1000000) * 100) / 100;
-  return { value1, value2 };
+const REGRAS_COMISSAO_FALLBACK_NOMES = { imovel:'Imóvel', investimento:'Investimento', servicos:'Serviços', veiculo:'Veículo', home_equity:'Home Equity', car_equity:'Car Equity' };
+// Gera as <option> de tipo de carta a partir das regras de comissão carregadas — usado
+// tanto no formulário do lead quanto no modal de contrato. Enquanto as regras ainda não
+// carregaram (ou pra um valor salvo que não bate com nenhuma regra atual, ex: regra
+// excluída depois), garante que a opção escolhida sempre apareça, sem sumir do <select>.
+// Confere se a regra desse tipo de carta marca o mês como independente do lead — olha
+// as regras carregadas do servidor e, se ainda não carregaram, cai no padrão conhecido
+// (só Home Equity e Car Equity, historicamente).
+function mesIndependenteDoTipo(tipoCarta){
+  const regra = regrasComissao.find(r=>r.chave===tipoCarta);
+  if(regra) return !!regra.mesIndependente;
+  return tipoCarta==='home_equity' || tipoCarta==='car_equity';
 }
-function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
+function textoNotaMesContrato(tipoCarta){
+  return mesIndependenteDoTipo(tipoCarta)
+    ? 'Essa regra marca o mês como independente (pra pagamentos que podem demorar a acontecer) — mudar o mês aqui não altera o mês do lead.'
+    : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — a não ser que a regra desse tipo marque o mês como independente.';
+}
+function renderOpcoesTipoCarta(valorAtual){
+  const lista = regrasComissao.length
+    ? regrasComissao
+    : Object.keys(REGRAS_COMISSAO_FALLBACK_NOMES).map(chave=>({ chave, nome: REGRAS_COMISSAO_FALLBACK_NOMES[chave] }));
+  const opcoes = (valorAtual && !lista.some(r=>r.chave===valorAtual))
+    ? [...lista, { chave: valorAtual, nome: valorAtual }]
+    : lista;
+  return opcoes.map(r=>`<option value="${esc(r.chave)}" ${r.chave===valorAtual?'selected':''}>${esc(r.nome)}</option>`).join('');
+}
+// Motor genérico por blocos — espelha exatamente o back-end (comissaoCalc.js:
+// calcComissaoPorBlocos). Cada bloco é "N parcelas de X% da carta cada". Serve tanto pra
+// pré-visualizar um contrato quanto pra simular uma regra sendo editada na engrenagem.
+function calcComissaoPorBlocosPreview(creditoValor, blocos){
   const credito = parseFloat(creditoValor) || 0;
-  if(tipoCarta === 'veiculo'){
-    const valorParcela = Math.round((credito * 0.016 / 11) * 100) / 100;
-    return { parcelas:11, parcelas1:11, value:valorParcela, value2:0 };
-  }
-  if(tipoCarta === 'home_equity' || tipoCarta === 'car_equity'){
-    const valorParcela = Math.round(credito * 0.011 * 100) / 100;
-    return { parcelas:1, parcelas1:1, value:valorParcela, value2:0 };
-  }
-  const { value1, value2 } = calcComissaoPreview(credito);
-  return { parcelas:13, parcelas1:10, value:value1, value2 };
+  const lista = Array.isArray(blocos) && blocos.length ? blocos : [{ parcelas:1, percentual:0 }];
+  return lista.map(b=>({
+    parcelas: Math.max(1, parseInt(b.parcelas,10) || 1),
+    value: Math.round(credito * (parseFloat(b.percentual)||0) * 100) / 100,
+  }));
+}
+function resumoDeBlocosPreview(blocosCalculados){
+  const total = blocosCalculados.reduce((s,b)=> s + b.value*b.parcelas, 0);
+  const parcelas = blocosCalculados.reduce((s,b)=> s + b.parcelas, 0);
+  const primeiro = blocosCalculados[0] || { parcelas:0, value:0 };
+  const segundo = blocosCalculados[1];
+  return { blocos:blocosCalculados, parcelas, parcelas1:primeiro.parcelas, value:primeiro.value, value2: segundo?segundo.value:0, total: Math.round(total*100)/100 };
+}
+// Regras padrão do sistema, só como fallback enquanto as regras do usuário ainda não
+// carregaram do servidor (loadRegrasComissao) — assim que carregam, elas mandam.
+const REGRAS_COMISSAO_FALLBACK = {
+  imovel: [{ parcelas:10, percentual:1033.88/1000000 }, { parcelas:3, percentual:1905.61/1000000 }],
+  investimento: [{ parcelas:10, percentual:1033.88/1000000 }, { parcelas:3, percentual:1905.61/1000000 }],
+  servicos: [{ parcelas:10, percentual:1033.88/1000000 }, { parcelas:3, percentual:1905.61/1000000 }],
+  veiculo: [{ parcelas:11, percentual:0.016/11 }],
+  home_equity: [{ parcelas:1, percentual:0.011 }],
+  car_equity: [{ parcelas:1, percentual:0.011 }],
+};
+function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
+  const regra = regrasComissao.find(r=>r.chave===tipoCarta);
+  const blocos = regra ? regra.blocos : (REGRAS_COMISSAO_FALLBACK[tipoCarta] || [{ parcelas:1, percentual:0 }]);
+  return resumoDeBlocosPreview(calcComissaoPorBlocosPreview(creditoValor, blocos));
 }
 function atualizarNotaCicloDeVenda(){
   const nota = document.getElementById('f-ciclo-venda-nota');
@@ -3257,7 +3401,19 @@ function addMonthsKey(ym, delta){
   const d = new Date(y, m-1+delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
+// Descobre o valor da parcela de índice "idx" (0 = primeira) dentro de um contrato,
+// percorrendo os blocos da regra em ordem até achar em qual bloco esse índice cai.
+// Contratos criados antes das regras editáveis não têm "blocos" detalhado — pra esses,
+// cai no formato antigo de até 2 blocos (parcelas1/value + value2).
 function parcelaValue(c, idx){
+  if(Array.isArray(c.blocos) && c.blocos.length){
+    let acumulado = 0;
+    for(const b of c.blocos){
+      if(idx < acumulado + b.parcelas) return b.value;
+      acumulado += b.parcelas;
+    }
+    return c.blocos[c.blocos.length-1].value;
+  }
   return idx < c.parcelas1 ? c.value : c.value2;
 }
 // A partir de qual índice de parcela o contrato foi cancelado (Infinity = nunca cancelado)
@@ -3387,6 +3543,19 @@ function filteredLeads(){
 /* ---------- navegação entre páginas ---------- */
 function goToPage(page){
   if(currentPage === page) return;
+  // se o gestor estiver vendo o dashboard de outro membro e navegar pra qualquer
+  // outra página (não só clicando em "Voltar"), restaura os próprios dados antes —
+  // sem isso, ele acabaria vendo os leads/tarefas de outra pessoa numa tela como o
+  // Pipeline, que permite editar de verdade
+  if(visualizandoDashboardDe && page !== 'dashboard'){
+    if(boardBackupGestor) board = boardBackupGestor;
+    if(tasksBackupGestor) tasks = tasksBackupGestor;
+    if(metaVendasValorBackupGestor !== null) metaVendasValor = metaVendasValorBackupGestor;
+    boardBackupGestor = null;
+    tasksBackupGestor = null;
+    metaVendasValorBackupGestor = null;
+    visualizandoDashboardDe = null;
+  }
   if(currentPage === 'conversas') pararPollingConversa();
   currentPage = page;
   dateMenuOpen = false;
@@ -3409,6 +3578,8 @@ function goToPage(page){
   templateModalForm = null;
   eventoGoogleModalForm = null;
   contratoModalForm = null;
+  regrasModalAberto = false;
+  regraEditForm = null;
   automacaoModalForm = null;
   fluxoModalForm = null;
   document.getElementById('modal-root').innerHTML = '';
@@ -3426,6 +3597,7 @@ function goToPage(page){
     auditoriaCarregada = false;
     loadAuditoria();
     refreshCurrentUser();
+    loadIcsStatus();
   }
   if(page === 'equipe'){
     equipeMsg = null;
@@ -3437,6 +3609,7 @@ function goToPage(page){
   }
   if(page === 'comissoes'){
     loadContratos(); // recarrega sempre, pra pegar comissões que o Pipeline gerou automaticamente
+    if(!regrasComissaoLoaded) loadRegrasComissao();
   }
 }
 async function refreshCurrentUser(){
@@ -4413,6 +4586,7 @@ function renderAssistente(){
   const root = document.getElementById('assistente-root');
   if(!root) return;
   if(!getToken()){ root.innerHTML=''; return; } // só aparece logado
+  if(!integracoesConfig.assistenteIA){ root.innerHTML=''; return; } // servidor sem ANTHROPIC_API_KEY configurada
 
   const posBolha = assistenteBolhaX!=null ? `left:${assistenteBolhaX}px; top:${assistenteBolhaY}px; right:auto; bottom:auto;` : '';
 
@@ -4802,10 +4976,18 @@ function renderDashboardPage(){
   const maxStage = Math.max(1, ...stages.map(s=>s.total));
   const recentes = [...cardsInPeriod()].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0)).slice(0,5);
   const tarefasSemHora = tasksLoaded ? tasks.filter(t=>!t.concluida && !horaLocalDaTarefaOuNull(t.vencimento)).map(t=>({ tipo:'tarefa', id:t.id, titulo:t.titulo, data:t.vencimento })) : [];
-  const eventosSemHoraDash = agendaLoaded ? agendaEventosGoogle.filter(e=>e.diaInteiro && !e.concluida).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
+  // eventos do Google são pessoais do próprio gestor — não fazem sentido (e vazariam
+  // dados privados) quando ele está olhando o dashboard de outra pessoa
+  const eventosSemHoraDash = (agendaLoaded && !visualizandoDashboardDe) ? agendaEventosGoogle.filter(e=>e.diaInteiro && !e.concluida).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
   const abertas = [...tarefasSemHora, ...eventosSemHoraDash].sort((a,b)=> new Date(a.data||'2999-01-01') - new Date(b.data||'2999-01-01')).slice(0,5);
 
   return `
+    ${visualizandoDashboardDe ? `
+      <div class="dashboard-readonly-banner">
+        <span>👁️ Você está vendo o dashboard de <b>${esc(visualizandoDashboardDe.nome)}</b> — somente leitura, nada aqui pode ser alterado.</span>
+        <button type="button" class="btn-outline" data-action="sair-dashboard-membro">← Voltar</button>
+      </div>
+    ` : ''}
     <div class="page-head">
       <div>
         <h1>Dashboard</h1>
@@ -4843,7 +5025,7 @@ function renderDashboardPage(){
 
     <div class="dash-grid" style="margin-bottom:20px;">
       <div class="dash-panel">
-        ${renderCabecalhoPainelDashboard('meta-individual', 'Meta de vendas do mês', !editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : '')}
+        ${renderCabecalhoPainelDashboard('meta-individual', 'Meta de vendas do mês', (!editandoMetaVendas && !visualizandoDashboardDe) ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : '')}
         ${envolverConteudoPainel('meta-individual', !metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
           <div class="field-row" style="align-items:flex-end;">
             <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
@@ -4856,7 +5038,7 @@ function renderDashboardPage(){
       </div>
       ${equipe ? `
         <div class="dash-panel">
-          ${renderCabecalhoPainelDashboard('meta-equipe', 'Meta de vendas da equipe', (equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : '')}
+          ${renderCabecalhoPainelDashboard('meta-equipe', 'Meta de vendas da equipe', (equipe.souSupervisor && !editandoMetaVendasEquipe && !visualizandoDashboardDe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : '')}
           ${envolverConteudoPainel('meta-equipe', !metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
             <div class="field-row" style="align-items:flex-end;">
               <div class="field"><label>Meta da equipe no mês (R$)</label><input type="number" id="meta-vendas-equipe-input" value="${metaVendasEquipeValor||0}" min="0" step="0.01" /></div>
@@ -4903,7 +5085,7 @@ function renderDashboardPage(){
           <div class="task-mini-item">
             ${t.tipo==='evento'
               ? `<span class="check-circle" data-action="toggle-evento" data-evento-id="${t.id}"></span>`
-              : `<span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>`
+              : (visualizandoDashboardDe ? `<span class="check-circle" style="cursor:default;"></span>` : `<span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>`)
             }
             <span class="task-mini-title">${esc(t.titulo)}</span>
             ${t.data ? `<span class="metric-sub">${formatDate(t.data)}</span>` : ''}
@@ -5696,6 +5878,7 @@ function renderComissoesPage(){
           <button class="icon-btn" data-action="comissoes-mes" data-delta="1" title="Próximo mês">›</button>
         </div>
         ${renderBotaoOrdenar('comissoes', comissoesOrdenarPor, null, true)}
+        <button class="icon-btn" data-action="open-regras-comissao" title="Regras de comissão">${ICON_SETTINGS}</button>
         <button class="btn-primary" data-action="open-new-contrato">+ Novo contrato</button>
       </div>
     </div>
@@ -5734,10 +5917,14 @@ function renderContratoCard(c){
     ? `Cancelado a partir de ${monthLabel(c.canceladoNoMes, true)}`
     : (idx >= c.parcelas ? 'Contrato quitado' : idx < 0 ? 'Ainda não iniciado' : `Parcela ${parcelaAtual}/${c.parcelas} este mês`);
   const escopo = ESCOPOS[c.scope] || ESCOPOS.Pessoal;
+  // contratos novos guardam o detalhe completo em "blocos" (N linhas, da regra usada);
+  // contratos criados antes das regras editáveis não têm isso e caem no formato antigo
   const p2 = c.parcelas - c.parcelas1;
-  const blocosHtml = p2 > 0
-    ? `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div><div>🔹 ${p2} parcela${p2===1?'':'s'} de ${fmtBRL(c.value2)} cada</div>`
-    : `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div>`;
+  const blocosHtml = (Array.isArray(c.blocos) && c.blocos.length)
+    ? c.blocos.map(b=>`<div>🔹 ${b.parcelas} parcela${b.parcelas===1?'':'s'} de ${fmtBRL(b.value)} cada</div>`).join('')
+    : (p2 > 0
+      ? `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div><div>🔹 ${p2} parcela${p2===1?'':'s'} de ${fmtBRL(c.value2)} cada</div>`
+      : `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div>`);
   return `
     <div class="contrato-card ${c.canceladoNoMes?'contrato-card-cancelado':''}">
       <div class="contrato-card-head">
@@ -5991,9 +6178,26 @@ function renderConfigGoogleAgenda(){
             <button class="btn-outline" data-action="disconnect-calendar">Desconectar</button>
           </div>
         `
-        : `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
+        : (integracoesConfig.googleAgenda
+          ? `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
+          : `<p class="settings-page-note">Essa integração não está configurada neste servidor — use o link de agenda abaixo como alternativa (funciona com Google, Apple, Outlook e outros).</p>`)
       }
       <p class="settings-page-note">O botão do WhatsApp de abrir conversa já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
+    </div>
+    <div class="settings-page-section">
+      <h3>Agenda por link (.ics)</h3>
+      <p class="settings-page-note">Gera um link que qualquer app de calendário (Google, Apple, Outlook…) pode "assinar" pra ver suas tarefas automaticamente — sem precisar conectar conta nenhuma. É a alternativa que não depende de nenhuma configuração especial deste servidor.</p>
+      ${icsCarregando ? `<p class="settings-page-note">Carregando…</p>` : (icsStatus && icsStatus.ativo ? `
+        <div class="field">
+          <label>Seu link de agenda</label>
+          <input type="text" id="ics-url" value="${esc(icsStatus.url)}" readonly onclick="this.select()" />
+        </div>
+        <div class="settings-btn-row">
+          <button class="btn-outline" data-action="copiar-link-ics">Copiar link</button>
+          <button class="btn-outline" data-action="gerar-link-ics" ${icsGerando?'disabled':''}>${icsGerando?'Gerando…':'Gerar novo link'}</button>
+          <button class="btn-outline" data-action="revogar-link-ics">Revogar</button>
+        </div>
+      ` : `<button class="btn-primary" data-action="gerar-link-ics" ${icsGerando?'disabled':''}>${icsGerando?'Gerando…':'Gerar link de agenda'}</button>`)}
     </div>
   `;
 }
@@ -6269,6 +6473,11 @@ function bindAppEvents(){
   if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
   const preencherMesInicioBtn = app.querySelector('[data-action="preencher-mes-inicio-contato"]');
   if(preencherMesInicioBtn) preencherMesInicioBtn.addEventListener('click', preencherMesInicioContatoAntigos);
+  app.querySelectorAll('[data-action="ver-dashboard-membro"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirDashboardDeMembro(btn.dataset.userId, btn.dataset.nome));
+  });
+  const sairDashboardBtn = app.querySelector('[data-action="sair-dashboard-membro"]');
+  if(sairDashboardBtn) sairDashboardBtn.addEventListener('click', sairDashboardDeMembro);
   const abrirBackupModalBtn = app.querySelector('[data-action="abrir-backup-modal"]');
   if(abrirBackupModalBtn) abrirBackupModalBtn.addEventListener('click', abrirBackupModal);
 
@@ -6344,6 +6553,19 @@ function bindAppEvents(){
   if(disconnectCalBtn) disconnectCalBtn.addEventListener('click', disconnectGoogleCalendar);
   app.querySelectorAll('[data-action="sync-calendar-now"]').forEach(btn=>{
     btn.addEventListener('click', syncCalendarNow);
+  });
+  const gerarIcsBtn = app.querySelector('[data-action="gerar-link-ics"]');
+  if(gerarIcsBtn) gerarIcsBtn.addEventListener('click', gerarLinkIcs);
+  const revogarIcsBtn = app.querySelector('[data-action="revogar-link-ics"]');
+  if(revogarIcsBtn) revogarIcsBtn.addEventListener('click', revogarLinkIcs);
+  const copiarIcsBtn = app.querySelector('[data-action="copiar-link-ics"]');
+  if(copiarIcsBtn) copiarIcsBtn.addEventListener('click', ()=>{
+    const input = document.getElementById('ics-url');
+    if(!input) return;
+    input.select();
+    navigator.clipboard && navigator.clipboard.writeText(input.value).catch(()=>{
+      document.execCommand('copy');
+    });
   });
 
   /* -- Dashboard -- */
@@ -6706,6 +6928,8 @@ function bindAppEvents(){
   });
   const openNewContratoBtn = app.querySelector('[data-action="open-new-contrato"]');
   if(openNewContratoBtn) openNewContratoBtn.addEventListener('click', openNewContrato);
+  const openRegrasBtn = app.querySelector('[data-action="open-regras-comissao"]');
+  if(openRegrasBtn) openRegrasBtn.addEventListener('click', openRegrasComissaoModal);
   app.querySelectorAll('[data-action="open-edit-contrato"]').forEach(btn=>{
     btn.addEventListener('click', ()=> openEditContrato(btn.dataset.contratoId));
   });
@@ -7896,12 +8120,7 @@ function renderModal(){
           <div class="field">
             <label>Tipo de carta de crédito</label>
             <select id="f-tipo-carta">
-              <option value="imovel" ${(f.tipoCarta||'imovel')==='imovel'?'selected':''}>Imóvel</option>
-              <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
-              <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
-              <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
-              <option value="home_equity" ${f.tipoCarta==='home_equity'?'selected':''}>Home Equity</option>
-              <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
+              ${renderOpcoesTipoCarta(f.tipoCarta||'imovel')}
             </select>
           </div>
           <div class="field-row">
@@ -8910,7 +9129,13 @@ function renderRankingSupervisao(membros){
       <div class="stage-list" style="margin-top:${supervisores.length?'14px':'0'};">
         ${resto.map((m,idx)=>`
           <div class="stage-row">
-            <div class="stage-row-top"><span>${idx+1}º — ${esc(m.nome)}</span><span>${fmtBRL(m.ganhoValor)}</span></div>
+            <div class="stage-row-top">
+              <span>${idx+1}º — ${esc(m.nome)}</span>
+              <span style="display:flex; align-items:center; gap:10px;">
+                ${fmtBRL(m.ganhoValor)}
+                <button type="button" class="btn-outline" style="padding:4px 10px; font-size:11px;" data-action="ver-dashboard-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}">Ver Dashboard</button>
+              </span>
+            </div>
             <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${(m.ganhoValor/maxGanho*100)}%"></div></div>
           </div>
         `).join('')}
@@ -9249,24 +9474,17 @@ function openEditContrato(id){
 }
 function closeContratoModal(){ contratoModalForm = null; document.getElementById('modal-root').innerHTML=''; }
 
+// Genérico pra N blocos — funciona pra qualquer regra, inclusive as que o usuário criar
+// na engrenagem (2 blocos, 1 bloco, 5 blocos, o que for).
 function previewComissaoHtml(prev){
-  if(prev.parcelas1 === 11 && prev.value2 === 0){
-    return `
-      🔹 11 parcelas iguais: <b>${fmtBRL(prev.value)}</b> cada<br/>
-      Total: 11x parcelas · Total líquido da comissão: <b>${fmtBRL(prev.value * 11)}</b>
-    `;
-  }
-  if(prev.parcelas === 1 && prev.value2 === 0){
-    return `
-      🔹 Parcela única: <b>${fmtBRL(prev.value)}</b><br/>
-      Total líquido da comissão: <b>${fmtBRL(prev.value)}</b>
-    `;
-  }
-  const total = prev.value*10 + prev.value2*3;
+  const linhas = prev.blocos.map(b=>
+    b.parcelas === 1
+      ? `🔹 Parcela única: <b>${fmtBRL(b.value)}</b>`
+      : `🔹 ${b.parcelas} parcelas: <b>${fmtBRL(b.value)}</b> cada`
+  ).join('<br/>');
   return `
-    🔹 10 primeiras parcelas: <b>${fmtBRL(prev.value)}</b> cada<br/>
-    🔹 3 últimas parcelas: <b>${fmtBRL(prev.value2)}</b> cada<br/>
-    Total: 13x parcelas · Total líquido da comissão: <b>${fmtBRL(total)}</b>
+    ${linhas}<br/>
+    Total: ${prev.parcelas}x parcela${prev.parcelas===1?'':'s'} · Total líquido da comissão: <b>${fmtBRL(prev.total)}</b>
   `;
 }
 function renderContratoModal(){
@@ -9297,12 +9515,7 @@ function renderContratoModal(){
           <div class="field">
             <label>Tipo de carta de crédito</label>
             <select id="c-tipo-carta">
-              <option value="imovel" ${f.tipoCarta==='imovel'?'selected':''}>Imóvel</option>
-              <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
-              <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
-              <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
-              <option value="home_equity" ${f.tipoCarta==='home_equity'?'selected':''}>Home Equity</option>
-              <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
+              ${renderOpcoesTipoCarta(f.tipoCarta)}
             </select>
           </div>
           <div class="field">
@@ -9315,10 +9528,7 @@ function renderContratoModal(){
           <div class="field">
             <label>Mês da 1ª parcela</label>
             <input type="month" id="c-mes" value="${(f.date||'').slice(0,7)}" />
-            <p class="settings-page-note" id="c-mes-nota">${(f.tipoCarta==='home_equity'||f.tipoCarta==='car_equity')
-              ? 'Home Equity e Car Equity podem demorar até 2 meses pra pagar — mudar o mês aqui não altera o mês do lead.'
-              : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — só Home Equity e Car Equity ficam independentes.'
-            }</p>
+            <p class="settings-page-note" id="c-mes-nota">${textoNotaMesContrato(f.tipoCarta)}</p>
           </div>
           <div class="calc-preview" id="c-preview">
             ${previewComissaoHtml(preview)}
@@ -9357,11 +9567,8 @@ function renderContratoModal(){
     const prev = calcComissaoPreviewPorTipo(contratoModalForm.creditoValor, contratoModalForm.tipoCarta);
     const previewEl = document.getElementById('c-preview');
     if(previewEl) previewEl.innerHTML = previewComissaoHtml(prev);
-    const ehEquity = contratoModalForm.tipoCarta==='home_equity' || contratoModalForm.tipoCarta==='car_equity';
     const notaMes = document.getElementById('c-mes-nota');
-    if(notaMes) notaMes.textContent = ehEquity
-      ? 'Home Equity e Car Equity podem demorar até 2 meses pra pagar — mudar o mês aqui não altera o mês do lead.'
-      : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — só Home Equity e Car Equity ficam independentes.';
+    if(notaMes) notaMes.textContent = textoNotaMesContrato(contratoModalForm.tipoCarta);
   });
 
   const creditoInput = document.getElementById('c-credito');
@@ -9382,6 +9589,271 @@ function renderContratoModal(){
         onConfirm: ()=>{ deleteContratoById(f.id); closeContratoModal(); closeConfirm(); },
       });
     });
+  }
+}
+
+/* ---------- modal: Regras de Comissão (engrenagem em Comissões) ----------
+   Duas telas dentro do mesmo modal: lista (todas as regras do usuário) e editor
+   (uma regra por vez — nome, mês independente e os blocos de parcelas, como uma
+   planilha: cada linha é "N parcelas de X% da carta"). */
+function openRegrasComissaoModal(){
+  regrasModalAberto = true;
+  regraEditForm = null;
+  renderRegrasModal();
+  if(!regrasComissaoLoaded) loadRegrasComissao();
+}
+function closeRegrasComissaoModal(){
+  regrasModalAberto = false;
+  regraEditForm = null;
+  document.getElementById('modal-root').innerHTML = '';
+  renderApp(); // a lista de contratos usa as regras pra mostrar nome/blocos — garante que reflita qualquer alteração
+}
+function abrirNovaRegra(){
+  regraEditForm = { __isNew:true, id:null, nome:'', mesIndependente:false, blocos:[{ parcelas:1, percentual:0 }] };
+  renderRegrasModal();
+}
+function abrirEditarRegra(id){
+  const r = regrasComissao.find(x=>x.id===id);
+  if(!r) return;
+  regraEditForm = {
+    __isNew:false, id:r.id, nome:r.nome, mesIndependente:!!r.mesIndependente,
+    // o back-end guarda percentual como fração (0.016); no formulário mostramos "humano" (1.6)
+    blocos: (r.blocos||[]).map(b=>({ parcelas:b.parcelas, percentual: Math.round(b.percentual*100*1000000)/1000000 })),
+  };
+  renderRegrasModal();
+}
+function renderRegraLinhaBloco(b, idx, podeRemover){
+  return `
+    <div class="regra-bloco-row">
+      <div class="field">
+        <label>Parcelas</label>
+        <input type="number" min="1" step="1" class="regra-bloco-parcelas" data-idx="${idx}" value="${b.parcelas}" />
+      </div>
+      <div class="field">
+        <label>% da carta (por parcela)</label>
+        <input type="number" min="0" step="any" class="regra-bloco-percentual" data-idx="${idx}" value="${b.percentual}" />
+      </div>
+      <button type="button" class="icon-btn" data-action="remover-bloco-regra" data-idx="${idx}" title="Remover linha" ${podeRemover?'':'disabled'}>${ICON_TRASH}</button>
+    </div>
+  `;
+}
+function htmlPreviewRegraEditor(f){
+  const REF = 100000; // carta de referência só pra simular — o valor real usa a carta de cada contrato
+  const blocos = f.blocos.map(b=>({
+    parcelas: Math.max(1, parseInt(b.parcelas,10)||1),
+    value: Math.round(REF * ((parseFloat(b.percentual)||0)/100) * 100) / 100,
+  }));
+  const total = Math.round(blocos.reduce((s,b)=>s+b.value*b.parcelas,0)*100)/100;
+  const totalParcelas = blocos.reduce((s,b)=>s+b.parcelas,0);
+  const linhas = blocos.map(b=> b.parcelas===1
+    ? `🔹 Parcela única: <b>${fmtBRL(b.value)}</b>`
+    : `🔹 ${b.parcelas} parcelas: <b>${fmtBRL(b.value)}</b> cada`
+  ).join('<br/>');
+  return `${linhas}<br/>Total: ${totalParcelas}x parcela${totalParcelas===1?'':'s'} · Total líquido: <b>${fmtBRL(total)}</b>`;
+}
+function atualizarPreviewRegraEditor(){
+  const el = document.getElementById('re-preview');
+  if(el && regraEditForm) el.innerHTML = htmlPreviewRegraEditor(regraEditForm);
+}
+function htmlRegrasLista(){
+  return `
+    <div class="overlay" id="regras-modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-head">
+          <h3>Regras de comissão</h3>
+          <button id="regras-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-page-note">Cada regra define como uma comissão é calculada, em blocos de parcelas — como uma planilha. Crie, renomeie, edite ou exclua regras à vontade: comissões já lançadas guardam o cálculo da época e não mudam retroativamente.</p>
+          ${!regrasComissaoLoaded ? `<div class="tasks-empty">Carregando…</div>` : (regrasComissao.length ? `
+            <div class="regras-lista">
+              ${regrasComissao.map(r=>`
+                <div class="regra-row">
+                  <div class="regra-row-info">
+                    <div class="regra-row-nome">${esc(r.nome)} ${r.mesIndependente?'<span class="badge badge-neutral" title="O mês da comissão pode ser editado sem alterar o mês do lead">Mês independente</span>':''}</div>
+                    <div class="regra-row-blocos">${(r.blocos||[]).map(b=>`${b.parcelas}x ${(b.percentual*100).toLocaleString('pt-BR',{maximumFractionDigits:6})}%`).join(' · ')}</div>
+                  </div>
+                  <div class="regra-row-actions">
+                    <button class="icon-btn" data-action="editar-regra" data-regra-id="${r.id}" title="Editar">${ICON_EDIT}</button>
+                    <button class="icon-btn" data-action="excluir-regra" data-regra-id="${r.id}" title="Excluir">${ICON_TRASH}</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : `<div class="tasks-empty">Nenhuma regra cadastrada ainda.</div>`)}
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="regras-modal-close-2">Fechar</button>
+            <button class="btn-save" data-action="nova-regra">+ Nova regra</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function htmlRegraEditor(){
+  const f = regraEditForm;
+  return `
+    <div class="overlay" id="regras-modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-head">
+          <h3>${f.__isNew ? 'Nova regra de comissão' : 'Editar regra'}</h3>
+          <button id="regras-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Nome</label>
+            <input type="text" id="re-nome" value="${esc(f.nome)}" placeholder="Ex: Consórcio Pesado" />
+          </div>
+          <div class="field">
+            <label class="checkbox-item"><input type="checkbox" id="re-mes-independente" ${f.mesIndependente?'checked':''} /> Mês da comissão independente do mês do lead (pra pagamentos que demoram a acontecer de verdade)</label>
+          </div>
+          <div class="field">
+            <label>Blocos de parcelas</label>
+            <div class="regra-blocos-cabecalho">
+              <span>Parcelas</span><span>% da carta (por parcela)</span><span></span>
+            </div>
+            <div id="re-blocos-lista">
+              ${f.blocos.map((b,idx)=>renderRegraLinhaBloco(b,idx,f.blocos.length>1)).join('')}
+            </div>
+            <button type="button" class="btn-outline" id="re-add-bloco">+ Adicionar linha</button>
+          </div>
+          <div class="calc-preview" id="re-preview">${htmlPreviewRegraEditor(f)}</div>
+          <p class="calc-preview-note">Simulação com uma carta de R$ 100.000 — o valor real usa a carta de cada contrato.</p>
+        </div>
+        <div class="modal-foot">
+          ${!f.__isNew ? `<button class="delete-link" id="re-delete">🗑 Excluir</button>` : '<span></span>'}
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="re-cancel">‹ Voltar</button>
+            <button class="btn-save" id="re-save">${f.__isNew ? 'Criar regra' : 'Salvar alterações'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function renderRegrasModal(){
+  const root = document.getElementById('modal-root');
+  if(!regrasModalAberto){ root.innerHTML=''; return; }
+  root.innerHTML = regraEditForm ? htmlRegraEditor() : htmlRegrasLista();
+  ligarBindingsRegrasModal();
+}
+function ligarBindingsRegrasModal(){
+  const closeBtn = document.getElementById('regras-modal-close');
+  if(closeBtn) closeBtn.addEventListener('click', closeRegrasComissaoModal);
+  const overlay = document.getElementById('regras-modal-overlay');
+  if(overlay) overlay.addEventListener('click', (e)=>{ if(e.target.id==='regras-modal-overlay') closeRegrasComissaoModal(); });
+
+  if(!regraEditForm){
+    const closeBtn2 = document.getElementById('regras-modal-close-2');
+    if(closeBtn2) closeBtn2.addEventListener('click', closeRegrasComissaoModal);
+    document.querySelectorAll('[data-action="editar-regra"]').forEach(btn=>{
+      btn.addEventListener('click', ()=> abrirEditarRegra(btn.dataset.regraId));
+    });
+    document.querySelectorAll('[data-action="excluir-regra"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.regraId;
+        const r = regrasComissao.find(x=>x.id===id);
+        showConfirm({
+          message: `Excluir a regra "${r?r.nome:''}"? Comissões já lançadas com ela continuam iguais, mas ela deixa de aparecer como opção pra novos contratos e leads.`,
+          confirmLabel: 'Excluir',
+          onConfirm: async ()=>{
+            closeConfirm();
+            try{
+              await apiRequest('DELETE', `/regras-comissao/${id}`);
+              regrasComissao = regrasComissao.filter(x=>x.id!==id);
+              renderRegrasModal();
+            }catch(e){
+              errorMsg = e.message || 'Não foi possível excluir essa regra.';
+              renderApp();
+            }
+          },
+        });
+      });
+    });
+    const novaBtn = document.querySelector('[data-action="nova-regra"]');
+    if(novaBtn) novaBtn.addEventListener('click', abrirNovaRegra);
+    return;
+  }
+
+  document.getElementById('re-nome').addEventListener('input', (e)=> regraEditForm.nome = e.target.value);
+  document.getElementById('re-mes-independente').addEventListener('change', (e)=> regraEditForm.mesIndependente = e.target.checked);
+  document.querySelectorAll('.regra-bloco-parcelas').forEach(inp=>{
+    inp.addEventListener('input', (e)=>{
+      regraEditForm.blocos[parseInt(e.target.dataset.idx,10)].parcelas = e.target.value;
+      atualizarPreviewRegraEditor();
+    });
+  });
+  document.querySelectorAll('.regra-bloco-percentual').forEach(inp=>{
+    inp.addEventListener('input', (e)=>{
+      regraEditForm.blocos[parseInt(e.target.dataset.idx,10)].percentual = e.target.value;
+      atualizarPreviewRegraEditor();
+    });
+  });
+  document.querySelectorAll('[data-action="remover-bloco-regra"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(regraEditForm.blocos.length<=1) return; // sempre precisa de ao menos 1 bloco
+      regraEditForm.blocos.splice(parseInt(btn.dataset.idx,10),1);
+      renderRegrasModal();
+    });
+  });
+  const addBtn = document.getElementById('re-add-bloco');
+  if(addBtn) addBtn.addEventListener('click', ()=>{
+    regraEditForm.blocos.push({ parcelas:1, percentual:0 });
+    renderRegrasModal();
+  });
+  document.getElementById('re-cancel').addEventListener('click', ()=>{ regraEditForm=null; renderRegrasModal(); });
+  if(!regraEditForm.__isNew){
+    document.getElementById('re-delete').addEventListener('click', ()=>{
+      const f = regraEditForm;
+      showConfirm({
+        message: `Excluir a regra "${f.nome}"? Comissões já lançadas com ela continuam iguais, mas ela deixa de aparecer como opção pra novos contratos e leads.`,
+        confirmLabel: 'Excluir',
+        onConfirm: async ()=>{
+          closeConfirm();
+          try{
+            await apiRequest('DELETE', `/regras-comissao/${f.id}`);
+            regrasComissao = regrasComissao.filter(x=>x.id!==f.id);
+            regraEditForm = null;
+            renderRegrasModal();
+          }catch(e){
+            errorMsg = e.message || 'Não foi possível excluir essa regra.';
+            renderApp();
+          }
+        },
+      });
+    });
+  }
+  document.getElementById('re-save').addEventListener('click', salvarRegraComissao);
+}
+async function salvarRegraComissao(){
+  const f = regraEditForm;
+  if(!f.nome || !f.nome.trim()){
+    errorMsg = 'Dê um nome pra essa regra de comissão.';
+    renderApp();
+    return;
+  }
+  const blocos = f.blocos.map(b=>({ parcelas: parseInt(b.parcelas,10)||1, percentual: parseFloat(b.percentual)||0 }));
+  const payload = { nome: f.nome.trim(), mesIndependente: !!f.mesIndependente, blocos };
+  const saveBtn = document.getElementById('re-save');
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Salvando…'; }
+  try{
+    let regra;
+    if(f.__isNew){
+      regra = await apiRequest('POST', '/regras-comissao', payload);
+      regrasComissao = [...regrasComissao, regra].sort((a,b)=>a.ordem-b.ordem);
+    }else{
+      regra = await apiRequest('PUT', `/regras-comissao/${f.id}`, payload);
+      regrasComissao = regrasComissao.map(r=> r.id===regra.id ? regra : r).sort((a,b)=>a.ordem-b.ordem);
+    }
+    regraEditForm = null;
+    renderRegrasModal();
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível salvar essa regra.';
+    renderApp();
+    if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent = f.__isNew?'Criar regra':'Salvar alterações'; }
   }
 }
 
@@ -9883,6 +10355,8 @@ if(getToken()){
   loadTasks();
   loadCalendarStatus();
   loadContratos();
+  loadRegrasComissao();
+  loadIntegracoesConfig();
   loadWhatsappStatus();
   loadInstagramStatus();
   loadTemplates();

@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
+const configRoutes = require('./routes/config');
 const authRoutes = require('./routes/auth');
 const boardRoutes = require('./routes/board');
 const columnRoutes = require('./routes/columns');
@@ -11,6 +12,7 @@ const cardRoutes = require('./routes/cards');
 const taskRoutes = require('./routes/tasks');
 const calendarRoutes = require('./routes/calendar');
 const comissoesRoutes = require('./routes/comissoes');
+const regrasComissaoRoutes = require('./routes/regrasComissao');
 const aiRoutes = require('./routes/ai');
 const whatsappRoutes = require('./routes/whatsapp');
 const funisRoutes = require('./routes/funis');
@@ -68,7 +70,8 @@ process.on('unhandledRejection', (motivo) => {
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// API (auth é pública; as outras exigem login dentro de cada rota)
+// API (auth e config são públicas; as outras exigem login dentro de cada rota)
+app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/board', boardRoutes);
 app.use('/api/columns', columnRoutes);
@@ -76,6 +79,7 @@ app.use('/api/cards', cardRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/comissoes', comissoesRoutes);
+app.use('/api/regras-comissao', regrasComissaoRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/funis', funisRoutes);

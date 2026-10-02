@@ -7,6 +7,8 @@ const ChatMensagem = require('../models/ChatMensagem');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
 const MetaVendasEquipe = require('../models/MetaVendasEquipe');
+const MetaVendas = require('../models/MetaVendas');
+const Task = require('../models/Task');
 const { registrarAuditoria } = require('../utils/auditoria');
 
 const router = express.Router();
@@ -331,6 +333,41 @@ router.get('/supervisao', async (req, res) => {
     res.json({ membros: resultado });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar a supervisão.' });
+  }
+});
+
+// GET /api/equipe/supervisao/:userId/dashboard -> tudo que o Dashboard precisa
+// (colunas, clientes, tarefas, meta individual) de um membro específico da equipe —
+// só leitura, pro supervisor acompanhar sem poder alterar nada daquela pessoa.
+router.get('/supervisao/:userId/dashboard', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.userId)) {
+      return res.status(400).json({ error: 'ID inválido.' });
+    }
+    const user = await User.findById(req.userId);
+    if (!user.equipeId || user.papelEquipe !== 'supervisor') {
+      return res.status(403).json({ error: 'Só supervisores podem ver essa página.' });
+    }
+    const membro = await User.findOne({ _id: req.params.userId, equipeId: user.equipeId });
+    if (!membro) return res.status(404).json({ error: 'Membro não encontrado nessa equipe.' });
+
+    const mesAtual = new Date().toISOString().slice(0, 7);
+    const [columns, cards, tasks, meta] = await Promise.all([
+      Column.find({ userId: membro._id }),
+      Card.find({ userId: membro._id, arquivado: { $ne: true } }),
+      Task.find({ userId: membro._id }),
+      MetaVendas.findOne({ userId: membro._id, mes: mesAtual }),
+    ]);
+
+    res.json({
+      nome: membro.nome || membro.email,
+      columns: columns.map((c) => c.toJSON()),
+      cards: cards.map((c) => c.toJSON()),
+      tasks: tasks.map((t) => t.toJSON()),
+      metaVendasValor: meta ? meta.valorMeta : 0,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao carregar o dashboard desse membro.' });
   }
 });
 

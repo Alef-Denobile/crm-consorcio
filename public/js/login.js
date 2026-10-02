@@ -102,22 +102,24 @@ twofaForm.addEventListener('submit', async (e)=>{
   }
 });
 
-/* ---------- "Continuar com Google" ---------- */
-// Troque pelo Client ID gerado no Google Cloud Console (veja o README).
-const GOOGLE_CLIENT_ID = '105063218745-vsie49mgs15lgpn6hdfk06v2a6o23o9b.apps.googleusercontent.com';
-
-function initGoogleButton(){
-  if(GOOGLE_CLIENT_ID.indexOf('COLOQUE_SEU') !== -1){
+/* ---------- "Continuar com Google" ----------
+   O Client ID vem do servidor (GET /api/config/integracoes), não fica fixo aqui — assim,
+   cada empresa que instalar esse painel configura o Google dela só com variáveis de
+   ambiente (mesmo GOOGLE_CLIENT_ID que a sincronização com a Google Agenda já usa), sem
+   precisar editar código. Client ID não é segredo, só o Client Secret é — é normal ele
+   rodar no navegador. */
+function initGoogleButton(clientId){
+  if(!clientId){
     const fallback = document.getElementById('google-btn-fallback');
     if(fallback) fallback.style.display = 'block';
     return;
   }
   if(!window.google || !window.google.accounts){
-    setTimeout(initGoogleButton, 300);
+    setTimeout(()=> initGoogleButton(clientId), 300);
     return;
   }
   google.accounts.id.initialize({
-    client_id: GOOGLE_CLIENT_ID,
+    client_id: clientId,
     callback: handleGoogleCredential,
   });
   google.accounts.id.renderButton(
@@ -125,7 +127,10 @@ function initGoogleButton(){
     { theme:'outline', size:'large', width:320, text:'continue_with', locale:'pt-BR' }
   );
 }
-initGoogleButton();
+fetch(API_BASE + '/config/integracoes')
+  .then(res=> res.ok ? res.json() : {})
+  .then(cfg=> initGoogleButton(cfg.googleClientId || ''))
+  .catch(()=> initGoogleButton(''));
 
 async function handleGoogleCredential(response){
   errorBox.style.display = 'none';

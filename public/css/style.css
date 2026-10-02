@@ -424,6 +424,18 @@ input[type=date]::-webkit-calendar-picker-indicator:hover, input[type=time]::-we
 .contrato-card-total{ font-weight:700; margin-top:4px; }
 .contrato-card-status{ display:flex; align-items:center; justify-content:space-between; margin-top:8px; font-size:12px; color:var(--ink-soft); }
 
+/* ---------- Regras de Comissão (engrenagem em Comissões) ---------- */
+.regras-lista{ display:flex; flex-direction:column; gap:10px; }
+.regra-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--col-bg); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+.regra-row-nome{ font-size:13px; font-weight:600; display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+.regra-row-blocos{ font-size:12px; color:var(--ink-soft); margin-top:4px; }
+.regra-row-actions{ display:flex; align-items:center; gap:4px; flex-shrink:0; }
+.regra-blocos-cabecalho{ display:grid; grid-template-columns:1fr 1fr 36px; gap:10px; margin-top:8px; font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em; }
+.regra-bloco-row{ display:grid; grid-template-columns:1fr 1fr 36px; gap:10px; align-items:end; margin-bottom:8px; }
+.regra-bloco-row .field label{ font-size:11px; }
+.regra-bloco-row .icon-btn{ margin-bottom:1px; }
+.regra-bloco-row .icon-btn:disabled{ opacity:.3; cursor:not-allowed; }
+
 .scope-toggle{ display:flex; gap:8px; margin-top:5px; }
 .scope-btn{ flex:1; display:flex; align-items:center; justify-content:center; padding:10px; min-height:42px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; border:1px solid var(--line); background:var(--col-bg); color:var(--ink-soft); }
 .scope-btn.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
@@ -846,3 +858,10 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .ordenar-wrap{ position:relative; }
 .ordenar-menu{ top:40px; width:220px; }
 .ordenar-ativo{ color:var(--accent); }
+
+.dashboard-readonly-banner{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  background:var(--accent); color:var(--paper); padding:12px 18px; border-radius:12px;
+  margin-bottom:18px; font-size:13px; font-weight:600;
+}
+.dashboard-readonly-banner .btn-outline{ background:transparent; border-color:var(--paper); color:var(--paper); flex-shrink:0; }
