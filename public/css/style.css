@@ -573,7 +573,25 @@ input[type=date]::-webkit-calendar-picker-indicator:hover, input[type=time]::-we
 /* ---------- avatar do perfil (Configurações) ---------- */
 .avatar-upload-row{ display:flex; align-items:center; gap:16px; margin-bottom:14px; }
 .avatar-preview{ width:64px; height:64px; border-radius:999px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:700; flex-shrink:0; overflow:hidden; }
-.avatar-preview img{ width:100%; height:100%; object-fit:cover; }
+.avatar-preview img{ width:100%; height:100%; object-fit:cover; display:block; }
+.avatar-preview-interativo{ position:relative; cursor:pointer; user-select:none; -webkit-user-select:none; }
+.avatar-hover-overlay{ position:absolute; inset:0; border-radius:999px; background:rgba(0,0,0,0); color:#fff; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .15s, background .15s; }
+.avatar-preview-interativo:hover .avatar-hover-overlay{ opacity:1; background:rgba(0,0,0,.32); }
+.avatar-preview-interativo:active .avatar-hover-overlay{ background:rgba(0,0,0,.45); }
+
+/* ---------- modal: Editar perfil ---------- */
+.opcao-perfil-btn{ width:100%; display:flex; align-items:center; gap:14px; padding:14px; border-radius:10px; border:1px solid var(--line); background:var(--col-bg); cursor:pointer; text-align:left; font-family:inherit; color:var(--ink); margin-bottom:10px; }
+.opcao-perfil-btn:last-child{ margin-bottom:0; }
+.opcao-perfil-btn:hover{ border-color:var(--accent); background:var(--badge-neutral-bg); }
+.opcao-perfil-icon{ flex-shrink:0; width:38px; height:38px; border-radius:999px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; }
+.opcao-perfil-btn strong{ display:block; font-size:13px; font-weight:600; }
+.opcao-perfil-nota{ display:block; font-size:11px; color:var(--ink-soft); margin-top:2px; }
+
+/* ---------- visualização grande da foto de perfil ---------- */
+.avatar-lightbox-overlay{ background:rgba(10,10,10,.85); display:flex; align-items:center; justify-content:center; }
+.avatar-lightbox-img{ max-width:min(90vw,420px); max-height:80vh; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,.4); }
+.avatar-lightbox-close{ position:absolute; top:20px; right:20px; width:40px; height:40px; border-radius:999px; border:none; background:rgba(255,255,255,.12); color:#fff; font-size:16px; cursor:pointer; }
+.avatar-lightbox-close:hover{ background:rgba(255,255,255,.22); }
 
 /* ---------- modal: escolher novo cliente vs transferir existente ---------- */
 .add-lead-choice-btn{ display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:100%; padding:14px 16px; margin-bottom:10px; border-radius:10px; border:1px solid var(--line); background:var(--paper); cursor:pointer; text-align:left; }

@@ -95,6 +95,7 @@ const ICON_USERS = ICON_LEADS;
 const ICON_DOLLAR = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
 const ICON_TROPHY = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M17 6h2a2 2 0 0 1 0 4h-2"/><path d="M7 6H5a2 2 0 0 0 0 4h2"/></svg>`;
 const ICON_TREND = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
+const ICON_CAMERA = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>`;
 
 const TEMPS = {
   quente: { label:'Quente', emoji:'🔥', color:'var(--gold-text)', bg:'var(--gold)' },
@@ -410,6 +411,10 @@ let logoutAllMsg = null;
 let logoutAllEnviando = false;
 let avatarSalvando = false;
 let avatarMsg = null;
+let modalEditarPerfilAberto = false; // escolha entre "adicionar foto" e "editar nome", em Seu perfil
+let avatarLightboxAberto = false; // visualização grande da foto atual (aberta via toque-e-segure)
+let avatarPressTimer = null; // controla o toque-e-segure no avatar/ícone de câmera
+let avatarPressDisparou = false; // marca que o toque-e-segure já abriu a visualização, pra ignorar o "click" fantasma que o touch dispara em seguida
 let senhaAtualVal = '';
 let senhaNovaVal = '';
 let senhaMsg = null; // { tipo:'ok'|'erro', texto }
@@ -3582,6 +3587,10 @@ function goToPage(page){
   regraEditForm = null;
   automacaoModalForm = null;
   fluxoModalForm = null;
+  modalAlterarNomeAberto = false;
+  modalAlterarSenhaAberto = false;
+  modalEditarPerfilAberto = false;
+  avatarLightboxAberto = false;
   document.getElementById('modal-root').innerHTML = '';
   renderApp();
   if(page === 'tarefas'){
@@ -5980,18 +5989,22 @@ const CONFIG_CATEGORIAS = [
 ];
 
 function renderConfigPerfil(){
+  const temFoto = !!(currentUser && currentUser.avatarUrl);
   return `
     <div class="settings-page-section">
       <h3>Seu perfil</h3>
       <div class="avatar-upload-row">
-        <div class="avatar-preview">${currentUser && currentUser.avatarUrl ? `<img src="${currentUser.avatarUrl}" alt="Foto de perfil" />` : esc(iniciaisDoNome((currentUser&&currentUser.nome)||''))}</div>
+        <div class="avatar-preview avatar-preview-interativo" id="avatar-preview" title="${temFoto?'Segure pra ver a foto · clique pra trocar':'Clique pra adicionar uma foto'}">
+          ${temFoto ? `<img src="${currentUser.avatarUrl}" alt="Foto de perfil" />` : esc(iniciaisDoNome((currentUser&&currentUser.nome)||''))}
+          <div class="avatar-hover-overlay">${ICON_CAMERA}</div>
+        </div>
         <div>
           <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/webp" style="display:none;" />
           <div class="settings-btn-row">
-            <button class="btn-outline" id="avatar-upload-btn" ${avatarSalvando?'disabled':''}>${avatarSalvando?'Enviando…':'Enviar foto'}</button>
-            ${currentUser && currentUser.avatarUrl ? `<button class="btn-outline" id="avatar-remover-btn" ${avatarSalvando?'disabled':''}>Remover</button>` : ''}
+            <button class="btn-outline" data-action="abrir-editar-perfil" ${avatarSalvando?'disabled':''}>${avatarSalvando?'Enviando…':'Editar perfil'}</button>
+            ${temFoto ? `<button class="btn-outline" id="avatar-remover-btn" ${avatarSalvando?'disabled':''}>Remover foto</button>` : ''}
           </div>
-          <p class="settings-page-note">PNG, JPG ou WebP — redimensionamos automaticamente.</p>
+          <p class="settings-page-note">Clique na foto pra trocar${temFoto?', ou segure pra ver ela maior':''}.</p>
         </div>
       </div>
       ${avatarMsg ? `<p class="settings-page-msg ${avatarMsg.tipo}">${esc(avatarMsg.texto)}</p>` : ''}
@@ -6012,13 +6025,6 @@ function renderConfigSeguranca(){
   return `
     <div class="settings-page-section">
       <h3>Login e segurança</h3>
-      <div class="settings-page-row">
-        <span>Nome</span>
-        <button class="btn-outline" data-action="abrir-alterar-nome">Alterar nome</button>
-      </div>
-
-      <div class="settings-sep-line"></div>
-
       <div class="settings-page-row">
         <span>Senha</span>
         <button class="btn-outline" data-action="abrir-alterar-senha">Mudar senha</button>
@@ -6964,14 +6970,39 @@ function bindAppEvents(){
     });
   });
   const avatarInput = document.getElementById('avatar-input');
-  const avatarUploadBtn = document.getElementById('avatar-upload-btn');
-  if(avatarUploadBtn && avatarInput) avatarUploadBtn.addEventListener('click', ()=> avatarInput.click());
   if(avatarInput) avatarInput.addEventListener('change', (e)=>{
     const file = e.target.files && e.target.files[0];
     if(file) handleAvatarFileSelected(file);
   });
   const avatarRemoverBtn = document.getElementById('avatar-remover-btn');
   if(avatarRemoverBtn) avatarRemoverBtn.addEventListener('click', removerAvatar);
+  const abrirEditarPerfilBtn = app.querySelector('[data-action="abrir-editar-perfil"]');
+  if(abrirEditarPerfilBtn) abrirEditarPerfilBtn.addEventListener('click', abrirEditarPerfilModal);
+  // A bolinha da foto: clique rápido abre o seletor de arquivo (trocar/adicionar foto);
+  // clique e segure (ou toque e segure, no celular) abre a foto atual em tamanho maior.
+  const avatarPreview = document.getElementById('avatar-preview');
+  if(avatarPreview){
+    const iniciarPress = ()=>{
+      clearTimeout(avatarPressTimer);
+      avatarPressTimer = setTimeout(()=>{
+        avatarPressDisparou = true;
+        abrirAvatarLightbox();
+      }, 550);
+    };
+    const cancelarPress = ()=> clearTimeout(avatarPressTimer);
+    avatarPreview.addEventListener('mousedown', iniciarPress);
+    avatarPreview.addEventListener('mouseup', cancelarPress);
+    avatarPreview.addEventListener('mouseleave', cancelarPress);
+    avatarPreview.addEventListener('touchstart', iniciarPress, { passive:true });
+    avatarPreview.addEventListener('touchend', cancelarPress);
+    avatarPreview.addEventListener('touchmove', cancelarPress);
+    avatarPreview.addEventListener('touchcancel', cancelarPress);
+    avatarPreview.addEventListener('contextmenu', (e)=> e.preventDefault());
+    avatarPreview.addEventListener('click', ()=>{
+      if(avatarPressDisparou){ avatarPressDisparou = false; return; } // ignora o clique fantasma depois de segurar
+      if(avatarInput) avatarInput.click();
+    });
+  }
   const logoutAllBtn = app.querySelector('[data-action="desconectar-todos"]');
   if(logoutAllBtn) logoutAllBtn.addEventListener('click', ()=>{
     showConfirm({
@@ -6980,8 +7011,6 @@ function bindAppEvents(){
       onConfirm: ()=>{ desconectarTodosDispositivos(); closeConfirm(); },
     });
   });
-  const abrirNomeBtn = app.querySelector('[data-action="abrir-alterar-nome"]');
-  if(abrirNomeBtn) abrirNomeBtn.addEventListener('click', abrirAlterarNomeModal);
   const abrirSenhaBtn = app.querySelector('[data-action="abrir-alterar-senha"]');
   if(abrirSenhaBtn) abrirSenhaBtn.addEventListener('click', abrirAlterarSenhaModal);
   const toggleAuditoriaBtn = app.querySelector('[data-action="toggle-auditoria"]');
@@ -8373,6 +8402,83 @@ function closeTaskModal(){
   taskModalForm = null;
   if(agendaDiaSelecionado){ renderAgendaDiaModal(); return; }
   document.getElementById('modal-root').innerHTML='';
+}
+
+/* ---------- modal: Editar perfil (escolha entre adicionar foto / editar nome) ---------- */
+function abrirEditarPerfilModal(){
+  modalEditarPerfilAberto = true;
+  renderEditarPerfilModal();
+}
+function closeEditarPerfilModal(){
+  modalEditarPerfilAberto = false;
+  const root = document.getElementById('modal-root');
+  if(root) root.innerHTML = '';
+}
+function renderEditarPerfilModal(){
+  const root = document.getElementById('modal-root');
+  if(!modalEditarPerfilAberto){ root.innerHTML=''; return; }
+  const temFoto = !!(currentUser && currentUser.avatarUrl);
+  root.innerHTML = `
+    <div class="overlay" id="editar-perfil-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Editar perfil</h3>
+          <button id="editar-perfil-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <button type="button" class="opcao-perfil-btn" data-action="editar-perfil-foto">
+            <span class="opcao-perfil-icon">${ICON_CAMERA}</span>
+            <span>
+              <strong>${temFoto?'Trocar foto':'Adicionar foto'}</strong>
+              <span class="opcao-perfil-nota">PNG, JPG ou WebP — redimensionamos automaticamente.</span>
+            </span>
+          </button>
+          <button type="button" class="opcao-perfil-btn" data-action="editar-perfil-nome">
+            <span class="opcao-perfil-icon">${ICON_EDIT}</span>
+            <span>
+              <strong>Editar nome</strong>
+              <span class="opcao-perfil-nota">Como seu nome aparece pro resto da equipe.</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('editar-perfil-close').addEventListener('click', closeEditarPerfilModal);
+  document.getElementById('editar-perfil-overlay').addEventListener('click', (e)=>{ if(e.target.id==='editar-perfil-overlay') closeEditarPerfilModal(); });
+  document.querySelector('[data-action="editar-perfil-foto"]').addEventListener('click', ()=>{
+    closeEditarPerfilModal();
+    const input = document.getElementById('avatar-input');
+    if(input) input.click();
+  });
+  document.querySelector('[data-action="editar-perfil-nome"]').addEventListener('click', ()=>{
+    closeEditarPerfilModal();
+    abrirAlterarNomeModal();
+  });
+}
+
+/* ---------- visualização grande da foto (toque-e-segure no avatar) ---------- */
+function abrirAvatarLightbox(){
+  if(!(currentUser && currentUser.avatarUrl)) return;
+  avatarLightboxAberto = true;
+  renderAvatarLightbox();
+}
+function closeAvatarLightbox(){
+  avatarLightboxAberto = false;
+  const root = document.getElementById('modal-root');
+  if(root) root.innerHTML = '';
+}
+function renderAvatarLightbox(){
+  const root = document.getElementById('modal-root');
+  if(!avatarLightboxAberto){ root.innerHTML=''; return; }
+  root.innerHTML = `
+    <div class="overlay avatar-lightbox-overlay" id="avatar-lightbox-overlay">
+      <img src="${currentUser.avatarUrl}" alt="Foto de perfil" class="avatar-lightbox-img" />
+      <button id="avatar-lightbox-close" class="avatar-lightbox-close" title="Fechar">✕</button>
+    </div>
+  `;
+  document.getElementById('avatar-lightbox-close').addEventListener('click', closeAvatarLightbox);
+  document.getElementById('avatar-lightbox-overlay').addEventListener('click', (e)=>{ if(e.target.id==='avatar-lightbox-overlay') closeAvatarLightbox(); });
 }
 
 function abrirAlterarNomeModal(){

@@ -60,7 +60,33 @@ crm-consorcio/
       cards.js
     package.json
     .env.example
+  scripts/                <- scripts de verificação e empacotamento (uso no dia a dia)
+    verificar.sh            (roda todas as checagens antes de subir uma mudança)
+    gerar-pacote.sh         (gera o .zip pronto pra enviar/publicar)
+    verificar-bindings.js   (checagem auxiliar usada pelo verificar.sh)
 ```
+
+## Scripts de verificação e empacotamento
+
+A pasta `scripts/` tem os comandos que a gente usa pra conferir se está tudo
+certo antes de subir uma mudança, e pra gerar o pacote `.zip` pronto pra
+publicar. Rode sempre a partir da raiz do projeto:
+
+```bash
+# Confere sintaxe do JS (front e back), CSS, HTML e os testes automatizados.
+# Não muda nada, só avisa se algo está quebrado. Rode sempre que mexer em código.
+bash scripts/verificar.sh
+
+# Faz tudo de uma vez: roda o verificar.sh, aumenta o número de cache (?v=...)
+# em 1, gera o dist/crm-consorcio.zip e confere esse .zip numa pasta limpa
+# (extrai, "npm install" do zero e roda os testes de novo).
+bash scripts/gerar-pacote.sh
+```
+
+Se o `verificar.sh` encontrar algum problema, o `gerar-pacote.sh` para e não
+gera pacote nenhum — corrija o que foi apontado e rode de novo. O `.zip`
+final sempre sai em `dist/crm-consorcio.zip`, sem `.git`, sem `node_modules`
+e sem nenhum `.env` com senha de verdade.
 
 ## Passo a passo
 
