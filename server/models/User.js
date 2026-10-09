@@ -68,6 +68,12 @@ const userSchema = new mongoose.Schema(
       diasSemana: { type: [Number], default: [1, 2, 3, 4, 5] }, // 0=domingo ... 6=sábado
       colunaDestinoId: { type: mongoose.Schema.Types.ObjectId, ref: 'Column', default: null }, // onde o lead novo entra no funil
     },
+    resetSenhaHash: { type: String, default: null }, // hash do token enviado por e-mail no "esqueci minha senha" (nunca o token em si)
+    resetSenhaExpira: { type: Date, default: null },
+    backupAutomatico: {
+      ativo: { type: Boolean, default: false }, // backup semanal por e-mail (precisa do envio de e-mail configurado no servidor)
+      ultimoEnvio: { type: Date, default: null },
+    },
     tokenVersion: { type: Number, default: 0 }, // incrementar invalida todos os tokens já emitidos (logout geral)
     icsToken: { type: String, default: null, unique: true, sparse: true }, // segredo do link de agenda (.ics) — ver server/routes/calendar.js
     avatarUrl: { type: String, default: null }, // imagem pequena em base64 (data URL)
@@ -85,6 +91,8 @@ const userSchema = new mongoose.Schema(
         delete ret.senhaHash; // nunca devolver o hash da senha pro front-end
         delete ret.tokenVersion; // detalhe interno de segurança, não precisa ir pro front-end
         delete ret.twoFactorSecret; // nunca expor o segredo do 2FA pro front-end
+        delete ret.resetSenhaHash; // detalhes internos da recuperação de senha nunca saem do servidor
+        delete ret.resetSenhaExpira;
         ret.googleCalendarConnected = !!(ret.googleCalendar && ret.googleCalendar.refreshToken);
         delete ret.googleCalendar; // tokens nunca saem do servidor
         ret.whatsappConnected = !!(ret.whatsappBusiness && ret.whatsappBusiness.accessToken && ret.whatsappBusiness.phoneNumberId);

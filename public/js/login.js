@@ -129,7 +129,14 @@ function initGoogleButton(clientId){
 }
 fetch(API_BASE + '/config/integracoes')
   .then(res=> res.ok ? res.json() : {})
-  .then(cfg=> initGoogleButton(cfg.googleClientId || ''))
+  .then(cfg=>{
+    initGoogleButton(cfg.googleClientId || '');
+    // "Esqueci minha senha" só aparece se o servidor tiver e-mail configurado
+    if(cfg.emailRecuperacao){
+      const w = document.getElementById('esqueci-wrap');
+      if(w) w.style.display = 'block';
+    }
+  })
   .catch(()=> initGoogleButton(''));
 
 async function handleGoogleCredential(response){
@@ -151,3 +158,93 @@ async function handleGoogleCredential(response){
     errorBox.style.display = 'block';
   }
 }
+
+
+/* ---------- Recuperação de senha ----------
+   1) "Esqueci minha senha" -> pede o e-mail e o servidor manda um link.
+   2) O link abre esta página com ?reset=TOKEN -> mostra o formulário de nova senha. */
+const esqueciForm = document.getElementById('esqueci-form');
+const resetForm = document.getElementById('reset-form');
+const infoBox = document.getElementById('auth-info');
+const authTabs = document.querySelector('.auth-tabs');
+
+function mostrarSomente(qual){ // 'login' | 'esqueci' | 'reset'
+  form.style.display = qual==='login' ? '' : 'none';
+  esqueciForm.style.display = qual==='esqueci' ? 'block' : 'none';
+  resetForm.style.display = qual==='reset' ? 'block' : 'none';
+  const soLogin = qual==='login';
+  authTabs.style.display = soLogin ? '' : 'none';
+  authDivider.style.display = soLogin ? '' : 'none';
+  googleBtnContainer.style.display = soLogin ? '' : 'none';
+  errorBox.style.display = 'none';
+  if(qual!=='login') infoBox.style.display = 'none';
+}
+function mostrarInfo(texto){ infoBox.textContent = texto; infoBox.style.display = 'block'; }
+function mostrarErro(texto){ errorBox.textContent = texto; errorBox.style.display = 'block'; }
+
+document.getElementById('esqueci-link').addEventListener('click', (e)=>{
+  e.preventDefault();
+  mostrarSomente('esqueci');
+  document.getElementById('esqueci-email').value = document.getElementById('a-email').value.trim();
+  document.getElementById('esqueci-email').focus();
+});
+document.querySelectorAll('.voltar-login').forEach(a=> a.addEventListener('click', (e)=>{
+  e.preventDefault();
+  history.replaceState(null, '', location.pathname);
+  mostrarSomente('login');
+}));
+
+esqueciForm.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  errorBox.style.display = 'none';
+  const btn = document.getElementById('esqueci-submit');
+  btn.disabled = true;
+  try{
+    const res = await fetch(API_BASE + '/auth/esqueci-senha', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ email: document.getElementById('esqueci-email').value.trim() }),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Não foi possível enviar agora. Tente novamente.');
+    mostrarSomente('login');
+    mostrarInfo(data.mensagem || 'Se existir uma conta com esse e-mail, enviamos um link para criar uma nova senha.');
+  }catch(err){
+    mostrarErro(err.message);
+  }finally{
+    btn.disabled = false;
+  }
+});
+
+const tokenReset = new URLSearchParams(location.search).get('reset');
+if(tokenReset){
+  mostrarSomente('reset');
+}
+
+resetForm.addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  errorBox.style.display = 'none';
+  const s1 = document.getElementById('reset-senha').value;
+  const s2 = document.getElementById('reset-senha2').value;
+  if(s1.length < 6){ mostrarErro('A senha precisa ter ao menos 6 caracteres.'); return; }
+  if(s1 !== s2){ mostrarErro('As duas senhas não são iguais.'); return; }
+  const btn = document.getElementById('reset-submit');
+  btn.disabled = true;
+  try{
+    const res = await fetch(API_BASE + '/auth/redefinir-senha', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ token: tokenReset, senhaNova: s1 }),
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Não foi possível redefinir a senha.');
+    history.replaceState(null, '', location.pathname); // tira o token da barra de endereço
+    resetForm.reset();
+    mostrarSomente('login');
+    mostrarInfo('Senha alterada! Entre com a nova senha.');
+  }catch(err){
+    mostrarErro(err.message);
+  }finally{
+    btn.disabled = false;
+  }
+});

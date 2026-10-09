@@ -6,7 +6,7 @@ const Message = require('../models/Message');
 const User = require('../models/User');
 const { gerarComissaoAutomaticaSeGanho } = require('./comissaoAutomatica');
 
-const GRAPH_API = 'https://graph.facebook.com/v19.0';
+const { GRAPH_API } = require('./meta');
 
 async function enviarMensagemGraphSimples(user, card, texto) {
   const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.phoneNumberId}/messages`, {

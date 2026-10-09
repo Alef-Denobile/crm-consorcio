@@ -14,7 +14,9 @@ const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica'
 const router = express.Router();
 
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || '';
-const GRAPH_API = 'https://graph.facebook.com/v19.0';
+const { GRAPH_API } = require('../utils/meta');
+const { exigirAssinaturaMeta } = require('../utils/webhookMeta');
+const { enviarPush, montarPayloadMensagem } = require('../utils/push');
 const { normalizarTelefone } = require('../utils/telefone');
 
 // Baixa uma mídia recebida pelo WhatsApp (foto, áudio, documento, vídeo) usando o
@@ -215,7 +217,7 @@ router.get('/webhook', (req, res) => {
 });
 
 // POST /api/whatsapp/webhook -> a Meta chama aqui a cada mensagem recebida (ou status de entrega)
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', exigirAssinaturaMeta, async (req, res) => {
   // responde rápido e sempre 200 — senão a Meta reenvia o mesmo evento várias vezes
   res.sendStatus(200);
   try {
@@ -304,6 +306,7 @@ async function processarEventoDeMensagens(value) {
       timestamp: msg.timestamp ? new Date(parseInt(msg.timestamp, 10) * 1000) : new Date(),
     });
     dispararWebhooks(user._id, 'mensagem.recebida', { cardId: card._id.toString(), cliente: card.cliente, telefone: card.telefone, texto, midiaTipo });
+    enviarPush(user._id, montarPayloadMensagem({ cliente: card.cliente, texto, canal: 'WhatsApp', cardId: card._id }));
 
     let tratadoPeloMenu = false;
 

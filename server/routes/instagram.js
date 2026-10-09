@@ -9,7 +9,9 @@ const { dispararWebhooks } = require('../utils/dispararWebhooks');
 const router = express.Router();
 
 const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || '';
-const GRAPH_API = 'https://graph.facebook.com/v19.0';
+const { GRAPH_API } = require('../utils/meta');
+const { exigirAssinaturaMeta } = require('../utils/webhookMeta');
+const { enviarPush, montarPayloadMensagem } = require('../utils/push');
 
 // tenta achar o valor de um campo do formulário, testando os nomes mais comuns
 function extrairCampo(campos, possiveisNomes) {
@@ -34,7 +36,7 @@ router.get('/webhook', (req, res) => {
 
 // POST /api/instagram/webhook -> a Meta chama aqui tanto pra leads de anúncio quanto
 // pra mensagens diretas (DM), dependendo do que veio no corpo da notificação
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', exigirAssinaturaMeta, async (req, res) => {
   res.sendStatus(200); // responde rápido e sempre 200, senão a Meta reenvia o mesmo evento
   try {
     const entry = (req.body.entry || [])[0];
@@ -139,6 +141,7 @@ async function processarMensagensDiretas(entry) {
       timestamp: evento.timestamp ? new Date(evento.timestamp) : new Date(),
     });
     dispararWebhooks(user._id, 'mensagem.recebida', { cardId: card._id.toString(), cliente: card.cliente, texto, canal: 'instagram' });
+    enviarPush(user._id, montarPayloadMensagem({ cliente: card.cliente, texto, canal: 'Instagram', cardId: card._id }));
   }
 }
 

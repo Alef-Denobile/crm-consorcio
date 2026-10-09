@@ -2,9 +2,12 @@
 
 ⚠️ **Testes automatizados:** rode `cd server && npm test` pra rodar os testes
 (usa o test runner nativo do Node, não precisa instalar nada a mais). Hoje cobre
-o cálculo de comissão (as 4 modalidades) e a normalização de telefone — os dois
-pontos que já tiveram bug real antes. Vale adicionar teste novo sempre que
+o cálculo de comissão (as 4 modalidades e as regras editáveis), a normalização
+de telefone, a agenda .ics, o login e a recuperação de senha (com o limite de
+tentativas), a assinatura dos webhooks da Meta, o e-mail, os lembretes push e
+os tokens de redefinição de senha. Vale adicionar teste novo sempre que
 corrigir um bug de lógica, pra ele nunca mais voltar sem a gente perceber.
+Pra rodar tudo de uma vez (sintaxe, CSS, HTML e testes), use `bash scripts/verificar.sh`.
 
 ⚠️ **Monitoramento de erros:** todo erro registrado com `console.error` (é o
 que toda rota já faz antes de responder com erro 500) também é guardado no
@@ -18,7 +21,7 @@ completo de como criar o bot está em `server/utils/telegramAlerta.js`). Não
 depende da API do WhatsApp Business nem de verificação de empresa na Meta.
 
 ⚠️ **Cache do navegador:** `style.css`, `script.js` e `login.js` são
-carregados com `?v=AAAAMMDD` no final da URL (ex: `style.css?v=20260830`).
+carregados com `?v=AAAAMMDD` no final da URL (ex: `style.css?v=20261082`).
 Isso existe só pra forçar o navegador a buscar a versão nova depois de um
 deploy — sem isso, quem já tinha o site aberto continua vendo o CSS/JS
 antigo em cache, às vezes por dias. **Toda vez que `style.css`, `script.js`
@@ -131,6 +134,8 @@ e sem nenhum `.env` com senha de verdade.
 
 O botão já está pronto no código, mas precisa de um Client ID seu pra
 funcionar — sem isso, ele mostra uma mensagem discreta em vez do botão.
+O Client ID vem do servidor (`GOOGLE_CLIENT_ID` no ambiente) — **não precisa
+editar nenhum arquivo do código**.
 
 1. Acesse o [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
    e crie um projeto (ou use um existente).
@@ -142,10 +147,8 @@ funcionar — sem isso, ele mostra uma mensagem discreta em vez do botão.
      (ex: `https://seudominio.com.br` e, para testar local,
      `http://localhost:3000`)
 4. Copie o Client ID gerado (termina em `.apps.googleusercontent.com`).
-5. Cole em dois lugares:
-   - No `.env` do servidor: `GOOGLE_CLIENT_ID=seu-client-id-aqui`
-   - No arquivo `public/js/login.js`, na linha que diz
-     `const GOOGLE_CLIENT_ID = 'COLOQUE_SEU_GOOGLE_CLIENT_ID_AQUI...'`
+5. Cole no `.env` do servidor (ou nas variáveis de ambiente do Render):
+   `GOOGLE_CLIENT_ID=seu-client-id-aqui`
 6. Reinicie o servidor (ou refaça o deploy). O botão aparece sozinho.
 
 Quem entrar com Google e já tiver uma conta com o mesmo e-mail cadastrada
@@ -227,8 +230,10 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
 - **Leads** — todos os clientes em formato de tabela, com busca,
   filtro por etapa e um botão de **exportar** em CSV
 - **Comissões** — contratos de comissão por mês, com cálculo automático
-  das parcelas a partir do valor da carta de crédito vendida (regra fixa:
-  10 parcelas × 0,00103388 + 3 parcelas × 0,00190561)
+  das parcelas a partir do valor da carta de crédito vendida. As regras de
+  comissão são **editáveis** (ícone de engrenagem na própria aba): a regra
+  padrão é 10 parcelas × 0,00103388 + 3 parcelas × 0,00190561, e você pode
+  criar outras por administradora/modalidade
 - **Tarefas** — lista de tarefas com prioridade, vencimento e lead
   relacionado
 - **Conversas** — todas as conversas do WhatsApp Business, ordenadas
@@ -444,8 +449,9 @@ quando os dados vêm crus e ainda faltam informações:
    cliente de verdade na aba Leads. "Descartar" remove um possível
    lead sem promovê-lo (duplicado, contato errado, etc.)
 
-A leitura da planilha usa a biblioteca SheetJS, carregada via CDN no
-`index.html` — trata .csv e .xlsx da mesma forma no navegador.
+A leitura da planilha usa a biblioteca SheetJS (versão 0.20.3, carregada do
+CDN oficial `cdn.sheetjs.com` no `index.html` — as versões 0.18.x tinham uma
+falha de segurança conhecida) — trata .csv e .xlsx da mesma forma no navegador.
 
 ## Busca global, histórico, etiquetas, campos e anexos
 
@@ -710,4 +716,60 @@ melhor o horário escolhido.
 - `GET  /api/instagram/status` — diz se o usuário já conectou (exige token)
 - `POST /api/instagram/configurar` — `{ pageId, pageAccessToken }` (exige token)
 - `POST /api/instagram/desconectar` — (exige token)
-# crm-consorcio
+
+## Recuperação de senha por e-mail ("Esqueci minha senha")
+
+Usa o [Resend](https://resend.com) (API HTTP, sem biblioteca extra). Sem as
+variáveis abaixo o link "Esqueci minha senha" simplesmente não aparece.
+
+- `RESEND_API_KEY` — chave da API do Resend
+- `EMAIL_FROM` — remetente, ex: `Painel CRM <nao-responda@seudominio.com.br>`
+  (o domínio precisa estar verificado no Resend)
+- `APP_URL` — endereço público do painel, ex: `https://crm-consorcio-co0i.onrender.com`
+
+O link enviado vale 60 minutos e só funciona uma vez; o banco guarda apenas o
+hash dele. Ao trocar a senha, todos os aparelhos são desconectados e a pessoa
+recebe um aviso por e-mail. Login, código do 2FA e "esqueci minha senha" têm
+limite de tentativas por IP (e por e-mail, no caso da recuperação).
+
+Rotas: `POST /api/auth/esqueci-senha` (`{ email }`) e
+`POST /api/auth/redefinir-senha` (`{ token, senhaNova }`).
+
+## Notificações push (app fechado)
+
+Avisam no celular/computador quando chega mensagem de cliente (WhatsApp ou
+Instagram) e na hora das tarefas. Gere as chaves uma vez:
+
+```
+cd server && npx web-push generate-vapid-keys
+```
+
+e coloque no ambiente: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e
+`VAPID_SUBJECT` (ex: `mailto:voce@email.com`; se faltar usa o `APP_URL`).
+Cada pessoa ativa em **Configurações → Notificações → Ativar neste aparelho**.
+No iPhone é preciso antes adicionar o painel à Tela de Início.
+
+⚠️ Os lembretes de tarefa são verificados por um agendador dentro do próprio
+servidor. No plano gratuito do Render o servidor "dorme" sem acessos, e aí os
+lembretes não saem na hora — use um plano que não durma.
+
+Rotas (exigem login): `GET /api/push/chave`, `POST /api/push/inscrever`,
+`POST /api/push/cancelar`, `POST /api/push/testar`.
+
+## Backup automático por e-mail
+
+Em **Configurações → Manutenção** dá pra ativar o envio semanal de uma cópia
+dos dados (JSON) para o e-mail da conta, e disparar um envio na hora. Usa as
+mesmas variáveis do Resend. Arquivos até 20 MB vão anexados; acima disso
+chega um aviso para baixar pelo botão Backup. **Os anexos dos clientes ficam
+fora desse arquivo** (use o Backup manual se quiser incluí-los).
+Rotas: `GET/PUT /api/backup/automatico` e `POST /api/backup/automatico/enviar-agora`.
+
+## Segurança dos webhooks da Meta e versão da API
+
+- `META_APP_SECRET` — "Chave secreta do app" da Meta. Quando definida, os
+  webhooks de WhatsApp e Instagram só são aceitos se vierem assinados pela
+  Meta (cabeçalho `X-Hub-Signature-256`). Sem ela, tudo funciona como antes.
+- `META_GRAPH_VERSION` — versão da Graph API (padrão `v22.0`). Fica definida
+  num único lugar (`server/utils/meta.js`); pra subir de versão basta mudar
+  essa variável.

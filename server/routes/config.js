@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const { emailConfigurado } = require('../utils/email');
+const { pushConfigurado } = require('../utils/push');
 
 // GET /api/config/integracoes -> diz quais integrações que dependem de credenciais do
 // SERVIDOR (não do usuário) estão configuradas nesse ambiente — pública, sem login, só
@@ -19,6 +21,9 @@ router.get('/integracoes', (req, res) => {
     whatsappWebhook: !!process.env.WHATSAPP_VERIFY_TOKEN,
     instagramWebhook: !!process.env.INSTAGRAM_VERIFY_TOKEN,
     telegramAlerta: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+    // e-mail (Resend) liga "esqueci minha senha" e o backup automático; push liga as notificações no celular
+    emailRecuperacao: emailConfigurado(),
+    push: pushConfigurado(),
   });
 });
 
