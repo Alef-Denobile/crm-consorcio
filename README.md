@@ -510,12 +510,30 @@ removida manualmente em Comissões.
 
 ## Recursos de IA
 
-Usam a API da Anthropic (modelo Haiku, rápido e barato — dá pra trocar
-em `server/utils/anthropic.js` se quiser mais qualidade em troca de
-custo maior). Precisam da variável `ANTHROPIC_API_KEY` no `.env`
-(gere em https://console.anthropic.com/settings/keys). Sem essa chave
-configurada, os botões continuam aparecendo mas mostram uma mensagem
-de erro ao clicar.
+Funcionam com **Google Gemini (plano gratuito)**, **Groq (plano gratuito)** ou
+com a **API da Anthropic (Claude, pago por uso)** — o provedor é escolhido pelas
+variáveis de ambiente:
+
+- `GEMINI_API_KEY` — crie em https://aistudio.google.com/apikey. Modelo padrão
+  `gemini-3.5-flash-lite`; dá pra trocar com `GEMINI_MODEL`.
+- `GROQ_API_KEY` — crie em https://console.groq.com/keys. Modelo padrão
+  `openai/gpt-oss-120b`; dá pra trocar com `GROQ_MODEL`.
+- `ANTHROPIC_API_KEY` — gere em https://console.anthropic.com/settings/keys
+  (usa o Claude Haiku).
+- `IA_PROVEDOR` — só é preciso se houver mais de uma chave (`gemini`, `groq` ou
+  `anthropic`); sem ele, a prioridade é Gemini, depois Groq, depois Anthropic.
+
+Sem nenhuma das chaves, a IA fica desligada: o assistente flutuante, os
+botões de sugestão, os insights e as opções de IA do WhatsApp somem da tela
+e o resto do painel funciona normalmente. Nos planos gratuitos (Gemini e Groq) há limite
+de uso; ao atingir, a IA responde "limite de uso" e volta sozinha no dia
+seguinte (nada mais do painel é afetado). Todo o código de IA está em
+`server/utils/ia.js`.
+
+⚠️ Os textos enviados à IA incluem trechos de conversas e dados de clientes —
+leia a política de uso de dados do provedor escolhido antes de ligar. No plano
+gratuito do Gemini, o Google informa que o conteúdo enviado pode ser usado para
+melhorar os produtos dele (no plano pago, não).
 
 - **Sugerir mensagem** — no modal de editar cliente, ao lado do botão
   do WhatsApp: gera um rascunho de mensagem de retomada de contato

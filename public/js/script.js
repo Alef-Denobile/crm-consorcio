@@ -199,6 +199,7 @@ let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar
 let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade,leadId,descricao,hora}], modo:'copiar'|'mover' } — cópia/corte do dia inteiro
 let longPressTimer = null;
 let cardTouchDrag = null; // { cardId, cardEl, btn, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque, iniciado pela alcinha
+let cardTouchLongPressTimer = null; // timer do "segurar pra arrastar" do card no celular (precisa existir antes do 1º toque, senão soltar o mouse no desktop gera erro no console)
 let autoScrollDoArrastoInterval = null;
 let arrastoRafPendente = false; // limita o trabalho pesado do arrastar a 1x por quadro de tela
 let assistenteBolhaX = null; // null = fica na posição padrão (canto inferior direito) até a pessoa arrastar
@@ -5177,7 +5178,7 @@ function renderPipelinePage(){
       </div>
     </div>
 
-    <div class="pipeline-insights-bar">
+    ${integracoesConfig.assistenteIA ? `<div class="pipeline-insights-bar">
       <button class="pipeline-insights-toggle" data-action="toggle-insights-pipeline">
         <span>${ICON_SPARKLE} Insights da IA sobre esse funil</span>
         <span class="auditoria-toggle-seta ${insightsPipelineExpandido?'aberta':''}">▾</span>
@@ -5191,7 +5192,7 @@ function renderPipelinePage(){
           }
         </div>
       ` : ''}
-    </div>
+    </div>` : ''}
 
     <div class="pipeline-ordenar-row">
       ${renderBotaoOrdenar('pipeline', pipelineOrdenarPor, 'Ordem manual (arrastar)')}
@@ -6091,6 +6092,7 @@ function renderConfigWhatsapp(){
       </div>
       ${whatsappConnected ? `
         <p class="settings-page-note">Conversas ficam registradas dentro do card de cada cliente. Pra reconfigurar, desconecte e conecte de novo com os dados atualizados.</p>
+        ${integracoesConfig.assistenteIA ? `
         <div class="settings-page-row">
           <span>Agente IA (responde clientes sozinho)</span>
           <span class="switch ${agenteIaAtivo?'on':''}" data-action="toggle-agente-ia" title="${agenteIaAtivo?'Ativado':'Desativado'}"><span class="switch-knob"></span></span>
@@ -6104,6 +6106,7 @@ function renderConfigWhatsapp(){
           <span class="switch ${iaProativaAtiva?'on':''}" data-action="toggle-ia-proativa" title="${iaProativaAtiva?'Ativada':'Desativada'}"><span class="switch-knob"></span></span>
         </div>
         <p class="settings-page-note">Analisa a conversa quando o cliente responde e deixa uma sugestão de mensagem e tarefa prontas no card — nunca envia nada sozinha, é sempre você quem decide usar.</p>
+        ` : ''}
 
         <button class="btn-outline" data-action="desconectar-whatsapp">Desconectar</button>
       ` : `
@@ -8348,7 +8351,7 @@ function renderModal(){
               <button type="button" class="wa-btn wa-btn-modal" id="f-whatsapp" style="${f.telefone ? '' : 'display:none;'}">
                 ${WA_ICON} Abrir WhatsApp
               </button>
-              ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-mensagem">${ICON_SPARKLE} Sugerir mensagem</button>` : ''}
+              ${!f.__isNew && integracoesConfig.assistenteIA ? `<button type="button" class="ai-btn" id="f-ai-mensagem">${ICON_SPARKLE} Sugerir mensagem</button>` : ''}
               ${!f.__isNew && whatsappConnected ? `<button type="button" class="ai-btn" id="f-ver-conversa">${WA_ICON} Ver conversa</button>` : ''}
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ver-historico">🕘 Ver histórico</button>` : ''}
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-gerar-proposta">📄 Gerar proposta</button>` : ''}
@@ -8361,7 +8364,7 @@ function renderModal(){
           <div class="field">
             <label>Observações (opcional)</label>
             <textarea id="f-obs" rows="3" placeholder="Detalhes da negociação...">${esc(f.obs||'')}</textarea>
-            ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-tarefa">${ICON_SPARKLE} Sugerir tarefa de acompanhamento</button>` : ''}
+            ${!f.__isNew && integracoesConfig.assistenteIA ? `<button type="button" class="ai-btn" id="f-ai-tarefa">${ICON_SPARKLE} Sugerir tarefa de acompanhamento</button>` : ''}
             <div class="ai-result" id="f-ai-tarefa-result" style="display:none;"></div>
           </div>
           ${camposPersonalizados.map(campo=>`

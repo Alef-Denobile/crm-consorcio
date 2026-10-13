@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { emailConfigurado } = require('../utils/email');
 const { pushConfigurado } = require('../utils/push');
+const { iaConfigurada } = require('../utils/ia');
 
 // GET /api/config/integracoes -> diz quais integrações que dependem de credenciais do
 // SERVIDOR (não do usuário) estão configuradas nesse ambiente — pública, sem login, só
@@ -17,7 +18,7 @@ router.get('/integracoes', (req, res) => {
     // configurar o Google dela só com variáveis de ambiente, sem mexer em código.
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
     googleAgenda: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-    assistenteIA: !!process.env.ANTHROPIC_API_KEY,
+    assistenteIA: iaConfigurada(),
     whatsappWebhook: !!process.env.WHATSAPP_VERIFY_TOKEN,
     instagramWebhook: !!process.env.INSTAGRAM_VERIFY_TOKEN,
     telegramAlerta: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),

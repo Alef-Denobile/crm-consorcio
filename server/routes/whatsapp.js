@@ -8,7 +8,7 @@ const Message = require('../models/Message');
 const Anexo = require('../models/Anexo');
 const { dispararWebhooks } = require('../utils/dispararWebhooks');
 const { enviarAlertaTelegram } = require('../utils/telegramAlerta');
-const { perguntarClaude } = require('../utils/anthropic');
+const { perguntarIA } = require('../utils/ia');
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
 
 const router = express.Router();
@@ -130,7 +130,7 @@ ${historico}
 Nova mensagem do cliente: "${novaMensagem}"
 
 Responda só com o texto da mensagem, pronto para enviar, sem aspas nem explicações antes ou depois.`;
-  return perguntarClaude(prompt, { maxTokens: 250 });
+  return perguntarIA(prompt, { maxTokens: 250 });
 }
 
 // Decide se o agente deve responder e, se sim, gera e envia a mensagem sozinho.
@@ -152,7 +152,7 @@ Cliente: ${card.cliente}
 Qualificação: ${card.temperatura}
 Conversa recente:
 ${historico}`;
-    const texto = await perguntarClaude(prompt, { maxTokens: 200 });
+    const texto = await perguntarIA(prompt, { maxTokens: 200 });
     const linhas = texto.split('\n').map((l) => l.trim()).filter(Boolean);
     await Card.findByIdAndUpdate(card._id, {
       sugestaoIA: {
