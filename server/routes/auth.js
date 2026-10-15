@@ -7,11 +7,43 @@ const auth = require('../middleware/auth');
 const { seedColunasPadrao } = require('../seed');
 const { gerarSegredo, verificarCodigoTOTP, montarOtpAuthUri } = require('../utils/totp');
 const { registrarAuditoria } = require('../utils/auditoria');
+const { criarMiddlewareLimite } = require('../utils/limiteTaxa');
+const { gerarTokenReset, tokenResetValido, hashToken, VALIDADE_MINUTOS } = require('../utils/senhaReset');
+const { emailConfigurado, urlBaseDoApp, enviarEmail, montarEmailRecuperacao, montarEmailSenhaAlterada } = require('../utils/email');
 
 const router = express.Router();
 const JWT_SECRET = auth.JWT_SECRET;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+
+// Freio de tentativa-e-erro (em memória, por IP). Login e código do 2FA: 10 tentativas a cada
+// 15 minutos. "Esqueci minha senha" dispara e-mail, então é mais apertado (5 por hora por IP,
+// e 3 por hora por e-mail) pra ninguém usar o painel pra encher a caixa de entrada de alguém.
+const limiteLogin = criarMiddlewareLimite({
+  janelaMs: 15 * 60 * 1000, max: 10,
+  chaveDe: (req) => `login:${req.ip}`,
+  mensagem: 'Muitas tentativas de login. Aguarde alguns minutos e tente de novo.',
+});
+const limite2FA = criarMiddlewareLimite({
+  janelaMs: 15 * 60 * 1000, max: 10,
+  chaveDe: (req) => `2fa:${req.ip}`,
+  mensagem: 'Muitas tentativas do código. Aguarde alguns minutos e tente de novo.',
+});
+const limiteEsqueciIp = criarMiddlewareLimite({
+  janelaMs: 60 * 60 * 1000, max: 5,
+  chaveDe: (req) => `esqueci-ip:${req.ip}`,
+  mensagem: 'Muitos pedidos de recuperação de senha. Tente de novo mais tarde.',
+});
+const limiteEsqueciEmail = criarMiddlewareLimite({
+  janelaMs: 60 * 60 * 1000, max: 3,
+  chaveDe: (req) => `esqueci-email:${String((req.body && req.body.email) || '').toLowerCase().trim()}`,
+  mensagem: 'Muitos pedidos de recuperação de senha para este e-mail. Tente de novo mais tarde.',
+});
+const limiteRedefinir = criarMiddlewareLimite({
+  janelaMs: 60 * 60 * 1000, max: 10,
+  chaveDe: (req) => `redefinir:${req.ip}`,
+  mensagem: 'Muitas tentativas. Peça um novo link de recuperação mais tarde.',
+});
 
 function gerarToken(user) {
   return jwt.sign({ sub: user._id.toString(), tv: user.tokenVersion || 0 }, JWT_SECRET, { expiresIn: '30d' });
@@ -53,7 +85,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', limiteLogin, async (req, res) => {
   try {
     const { email, senha } = req.body;
     if (!email || !senha) {
@@ -169,7 +201,7 @@ router.put('/avatar', auth, async (req, res) => {
 });
 
 // POST /api/auth/2fa/validar-login -> segunda etapa do login, confirma o código do app autenticador
-router.post('/2fa/validar-login', async (req, res) => {
+router.post('/2fa/validar-login', limite2FA, async (req, res) => {
   try {
     const { tempToken, codigo } = req.body;
     if (!tempToken || !codigo) return res.status(400).json({ error: 'Informe o código do app autenticador.' });
@@ -278,6 +310,72 @@ router.put('/agendamento-publico', auth, async (req, res) => {
     res.json({ user: user.toJSON() });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao salvar a configuração de agendamento.' });
+  }
+});
+
+// POST /api/auth/esqueci-senha -> manda por e-mail um link pra criar uma senha nova.
+// A resposta é SEMPRE a mesma, exista a conta ou não — assim ninguém usa esse formulário
+// pra descobrir quais e-mails têm conta aqui.
+const RESPOSTA_ESQUECI = { ok: true, mensagem: 'Se existir uma conta com esse e-mail, enviamos um link para criar uma nova senha. Confira também a caixa de spam.' };
+router.post('/esqueci-senha', limiteEsqueciIp, limiteEsqueciEmail, async (req, res) => {
+  try {
+    if (!emailConfigurado()) {
+      return res.status(503).json({ error: 'A recuperação de senha por e-mail não está configurada neste servidor.' });
+    }
+    const email = String((req.body && req.body.email) || '').toLowerCase().trim();
+    if (!email) return res.status(400).json({ error: 'Informe o e-mail da conta.' });
+
+    const user = await User.findOne({ email });
+    if (user) {
+      const { token, hash, expira } = gerarTokenReset();
+      user.resetSenhaHash = hash;
+      user.resetSenhaExpira = expira;
+      await user.save();
+      const link = `${urlBaseDoApp()}/login.html?reset=${token}`;
+      try {
+        const msg = montarEmailRecuperacao({ nome: user.nome, link, validadeMinutos: VALIDADE_MINUTOS });
+        await enviarEmail({ para: user.email, assunto: msg.assunto, html: msg.html, texto: msg.texto });
+        registrarAuditoria(user._id, 'senha_reset_solicitada', 'Pedido de recuperação de senha por e-mail');
+      } catch (e) {
+        console.error('Erro ao enviar e-mail de recuperação de senha:', e.message);
+      }
+    }
+    res.json(RESPOSTA_ESQUECI);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao processar o pedido. Tente novamente.' });
+  }
+});
+
+// POST /api/auth/redefinir-senha -> { token, senhaNova } — usa o link recebido por e-mail
+router.post('/redefinir-senha', limiteRedefinir, async (req, res) => {
+  try {
+    const { token, senhaNova } = req.body || {};
+    if (!token || !senhaNova) return res.status(400).json({ error: 'Link inválido ou senha ausente.' });
+    if (String(senhaNova).length < 6) {
+      return res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres.' });
+    }
+    const user = await User.findOne({ resetSenhaHash: hashToken(token) });
+    if (!tokenResetValido(user, token)) {
+      return res.status(400).json({ error: 'Este link venceu ou já foi usado. Peça um novo em "Esqueci minha senha".' });
+    }
+
+    user.senhaHash = await bcrypt.hash(String(senhaNova), 10);
+    user.resetSenhaHash = null; // uso único
+    user.resetSenhaExpira = null;
+    user.tokenVersion = (user.tokenVersion || 0) + 1; // desconecta todos os aparelhos
+    await user.save();
+    registrarAuditoria(user._id, 'senha_redefinida', 'Senha redefinida pelo link enviado por e-mail');
+    if (emailConfigurado()) {
+      try {
+        const msg = montarEmailSenhaAlterada({ nome: user.nome });
+        await enviarEmail({ para: user.email, assunto: msg.assunto, html: msg.html, texto: msg.texto });
+      } catch (e) {
+        console.error('Erro ao enviar aviso de senha alterada:', e.message);
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao redefinir a senha.' });
   }
 });
 

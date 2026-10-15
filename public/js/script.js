@@ -95,6 +95,7 @@ const ICON_USERS = ICON_LEADS;
 const ICON_DOLLAR = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`;
 const ICON_TROPHY = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M17 6h2a2 2 0 0 1 0 4h-2"/><path d="M7 6H5a2 2 0 0 0 0 4h2"/></svg>`;
 const ICON_TREND = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
+const ICON_CAMERA = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>`;
 
 const TEMPS = {
   quente: { label:'Quente', emoji:'🔥', color:'var(--gold-text)', bg:'var(--gold)' },
@@ -198,6 +199,7 @@ let horariosSelecionados = new Set(); // horas ("09:00" etc.) marcadas pra colar
 let diaAgendaCopiado = null; // { origemISO, tarefas:[{id,tipo,titulo,prioridade,leadId,descricao,hora}], modo:'copiar'|'mover' } — cópia/corte do dia inteiro
 let longPressTimer = null;
 let cardTouchDrag = null; // { cardId, cardEl, btn, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque, iniciado pela alcinha
+let cardTouchLongPressTimer = null; // timer do "segurar pra arrastar" do card no celular (precisa existir antes do 1º toque, senão soltar o mouse no desktop gera erro no console)
 let autoScrollDoArrastoInterval = null;
 let arrastoRafPendente = false; // limita o trabalho pesado do arrastar a 1x por quadro de tela
 let assistenteBolhaX = null; // null = fica na posição padrão (canto inferior direito) até a pessoa arrastar
@@ -205,6 +207,11 @@ let assistenteBolhaY = null;
 let assistenteAberto = false;
 let assistenteMensagens = [];
 let assistenteEnviando = false;
+let assistenteAnimando = null; // 'abrindo' | 'fechando' | null — só anima na abertura/fechamento, não a cada re-render
+let assistenteEditandoNome = false;
+const ASSISTENTE_NOME_PADRAO = 'Assistente do CRM';
+let assistenteNome = ASSISTENTE_NOME_PADRAO;
+try{ assistenteNome = (localStorage.getItem('assistente-nome')||'').trim().slice(0,30) || ASSISTENTE_NOME_PADRAO; }catch(err){}
 let assistenteDrag = null; // { startX, startY, bolhaXInicial, bolhaYInicial, moveu, pointerId }
 try{
   const posSalva = JSON.parse(localStorage.getItem('assistente-bolha-pos')||'null');
@@ -217,9 +224,21 @@ let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de e
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
 let calendarConnected = false;
 let calendarSyncing = false;
+// Integrações que dependem de credenciais do servidor (não do usuário) — otimista por
+// padrão (tudo true) até a checagem real chegar, pra nunca esconder nada à toa por causa
+// de uma resposta lenta. Ver server/routes/config.js.
+let integracoesConfig = { googleAgenda:true, assistenteIA:true, whatsappWebhook:true, instagramWebhook:true, telegramAlerta:true, emailRecuperacao:false, push:false };
+let icsStatus = null; // { ativo, url } — link de agenda (.ics), alternativa ao Google Agenda
+let icsCarregando = false;
+let icsGerando = false;
 let whatsappConnected = false;
 let whatsappSalvando = false;
 let whatsappConfigMsg = null;
+let whatsappProvedor = 'meta'; // provedor ativo do usuário (vem do servidor)
+let whatsappProvedorEscolhido = 'meta'; // escolha no formulário de conexão
+let whatsappYcloudWebhookPath = null;
+let whatsappYcloudSecretOk = false;
+let whatsappTwilioWebhookPath = null;
 let agenteIaAtivo = false;
 let iaProativaAtiva = false;
 let agendamentos = [];
@@ -365,6 +384,10 @@ let dmTexto = '';
 let dmEnviando = false;
 let supervisaoMembros = [];
 let supervisaoLoaded = false;
+let visualizandoDashboardDe = null; // { userId, nome } | null — quando setado, o Dashboard mostra os dados desse membro, em modo leitura
+let boardBackupGestor = null;
+let tasksBackupGestor = null;
+let metaVendasValorBackupGestor = null;
 let automacoes = [];
 let automacoesLoaded = false;
 let automacaoModalForm = null;
@@ -379,6 +402,10 @@ let contratos = [];
 let contratosLoaded = false;
 let comissoesMonth = currentMonthKey();
 let contratoModalForm = null;
+let regrasComissao = [];
+let regrasComissaoLoaded = false;
+let regrasModalAberto = false; // lista de regras de comissão (abre pela engrenagem em Comissões)
+let regraEditForm = null; // editor de uma regra específica, dentro do modal de regras
 let nomeNovoVal = '';
 let nomeMsg = null;
 let verificandoAtualizacao = false;
@@ -395,6 +422,10 @@ let logoutAllMsg = null;
 let logoutAllEnviando = false;
 let avatarSalvando = false;
 let avatarMsg = null;
+let modalEditarPerfilAberto = false; // escolha entre "adicionar foto" e "editar nome", em Seu perfil
+let avatarLightboxAberto = false; // visualização grande da foto atual (aberta via toque-e-segure)
+let avatarPressTimer = null; // controla o toque-e-segure no avatar/ícone de câmera
+let avatarPressDisparou = false; // marca que o toque-e-segure já abriu a visualização, pra ignorar o "click" fantasma que o touch dispara em seguida
 let senhaAtualVal = '';
 let senhaNovaVal = '';
 let senhaMsg = null; // { tipo:'ok'|'erro', texto }
@@ -1106,6 +1137,19 @@ async function loadContratos(){
   contratosLoaded = true;
   renderApp();
 }
+// Regras de comissão (engrenagem em Comissões) — na 1ª vez, o servidor já cria as
+// regras padrão (Imóvel, Veículo, Investimento, Serviços, Home Equity, Car Equity)
+// com a mesma matemática que sempre existiu, então nada muda pra quem nunca mexer nisso.
+async function loadRegrasComissao(){
+  try{
+    const data = await apiRequest('GET', '/regras-comissao');
+    regrasComissao = data.regras;
+  }catch(e){
+    regrasComissao = [];
+  }
+  regrasComissaoLoaded = true;
+  renderApp();
+}
 
 /* ---------- Google Agenda ---------- */
 async function loadCalendarStatus(){
@@ -1117,6 +1161,58 @@ async function loadCalendarStatus(){
   }
   renderApp();
 }
+// Quais integrações que dependem do servidor (não do usuário) estão configuradas nesse
+// ambiente — chamada 1x no início, pra decidir o que mostrar em Configurações. Pública,
+// não exige estar logado (mas não tem problema mandar o token também).
+async function loadIntegracoesConfig(){
+  try{
+    const data = await apiRequest('GET', '/config/integracoes');
+    integracoesConfig = { ...integracoesConfig, ...data };
+  }catch(e){
+    // se não conseguir checar, mantém tudo visível (otimista) — melhor mostrar um botão
+    // que às vezes falha do que esconder uma integração que na verdade está configurada
+  }
+  renderApp();
+  renderAssistente();
+}
+/* ---------- Agenda por link (.ics) — alternativa ao Google Agenda ---------- */
+async function loadIcsStatus(){
+  icsCarregando = true;
+  try{
+    icsStatus = await apiRequest('GET', '/calendar/ics-status');
+  }catch(e){
+    icsStatus = null;
+  }
+  icsCarregando = false;
+  renderApp();
+}
+async function gerarLinkIcs(){
+  icsGerando = true;
+  renderApp();
+  try{
+    icsStatus = await apiRequest('POST', '/calendar/ics/gerar');
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível gerar o link de agenda.';
+  }
+  icsGerando = false;
+  renderApp();
+}
+function revogarLinkIcs(){
+  showConfirm({
+    message: 'Revogar o link de agenda atual? Quem já assinou esse link (Google, Apple, Outlook…) para de receber atualizações. Você pode gerar um link novo a qualquer momento.',
+    confirmLabel: 'Revogar',
+    onConfirm: async ()=>{
+      closeConfirm();
+      try{
+        await apiRequest('POST', '/calendar/ics/revogar');
+        icsStatus = { ativo:false, url:null };
+      }catch(e){
+        errorMsg = e.message || 'Não foi possível revogar o link de agenda.';
+      }
+      renderApp();
+    },
+  });
+}
 
 /* ---------- WhatsApp Business API ---------- */
 async function loadWhatsappStatus(){
@@ -1125,6 +1221,10 @@ async function loadWhatsappStatus(){
     whatsappConnected = !!data.connected;
     agenteIaAtivo = !!data.agenteIaAtivo;
     iaProativaAtiva = !!data.iaProativaAtiva;
+    whatsappProvedor = (data.provedor === 'ycloud' || data.provedor === 'twilio') ? data.provedor : 'meta';
+    whatsappYcloudWebhookPath = data.ycloudWebhookPath || null;
+    whatsappYcloudSecretOk = !!data.ycloudSecretConfigurado;
+    whatsappTwilioWebhookPath = data.twilioWebhookPath || null;
   }catch(e){
     whatsappConnected = false;
   }
@@ -1182,23 +1282,40 @@ async function definirAgenteIa(ativo){
   renderApp();
 }
 async function salvarWhatsappConfig(){
-  const phoneEl = document.getElementById('wa-phone-id');
-  const tokenEl = document.getElementById('wa-token');
-  const wabaEl = document.getElementById('wa-waba-id');
-  const phoneNumberId = phoneEl ? phoneEl.value.trim() : '';
-  const accessToken = tokenEl ? tokenEl.value.trim() : '';
-  const wabaId = wabaEl ? wabaEl.value.trim() : '';
-  if(!phoneNumberId || !accessToken){
-    whatsappConfigMsg = { tipo:'erro', texto:'Preencha o Phone Number ID e o Access Token.' };
-    renderApp();
-    return;
+  const val = (id)=>{ const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  let payload;
+  if(whatsappProvedorEscolhido === 'twilio'){
+    payload = { provedor:'twilio', numero: val('wa-tw-numero'), accountSid: val('wa-tw-sid'), authToken: val('wa-tw-token') };
+    if(!payload.numero || !payload.accountSid || !payload.authToken){
+      whatsappConfigMsg = { tipo:'erro', texto:'Preencha o número do WhatsApp, o Account SID e o Auth Token da Twilio.' };
+      renderApp();
+      return;
+    }
+  } else if(whatsappProvedorEscolhido === 'ycloud'){
+    payload = { provedor:'ycloud', numero: val('wa-yc-numero'), apiKey: val('wa-yc-apikey'), webhookSecret: val('wa-yc-secret') };
+    if(!payload.numero || !payload.apiKey){
+      whatsappConfigMsg = { tipo:'erro', texto:'Preencha o número do WhatsApp e a API Key da YCloud.' };
+      renderApp();
+      return;
+    }
+  } else {
+    payload = { phoneNumberId: val('wa-phone-id'), accessToken: val('wa-token'), wabaId: val('wa-waba-id') };
+    if(!payload.phoneNumberId || !payload.accessToken){
+      whatsappConfigMsg = { tipo:'erro', texto:'Preencha o Phone Number ID e o Access Token.' };
+      renderApp();
+      return;
+    }
   }
   whatsappSalvando = true;
   whatsappConfigMsg = null;
   renderApp();
   try{
-    await apiRequest('POST', '/whatsapp/configurar', { phoneNumberId, accessToken, wabaId });
+    const resp = await apiRequest('POST', '/whatsapp/configurar', payload);
     whatsappConnected = true;
+    whatsappProvedor = whatsappProvedorEscolhido;
+    whatsappYcloudWebhookPath = (resp && resp.ycloudWebhookPath) || null;
+    whatsappYcloudSecretOk = !!val('wa-yc-secret');
+    whatsappTwilioWebhookPath = (resp && resp.twilioWebhookPath) || null;
     whatsappConfigMsg = { tipo:'ok', texto:'Conectado com sucesso.' };
   }catch(e){
     whatsappConfigMsg = { tipo:'erro', texto: e.message || 'Não foi possível salvar a configuração.' };
@@ -1206,10 +1323,62 @@ async function salvarWhatsappConfig(){
   whatsappSalvando = false;
   renderApp();
 }
+function fecharYcloudSecretModal(){ document.getElementById('modal-root').innerHTML=''; }
+function abrirYcloudSecretModal(){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="overlay" id="yc-secret-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Secret do webhook (YCloud)</h3>
+          <button id="yc-secret-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-page-note" style="margin:0">O secret é uma senha que a YCloud gera quando você cria o endpoint de webhook. Com ela o CRM confere se cada aviso (mensagem recebida, entregue, lida) veio mesmo da YCloud e não de outra pessoa. Sem o secret, o CRM recusa os avisos e as mensagens não aparecem.</p>
+          <ol class="settings-page-note" style="margin:0;padding-left:18px">
+            <li>Na YCloud, crie o endpoint com o endereço do webhook mostrado aqui no CRM.</li>
+            <li>Copie o secret que ela mostrar (começa com <b>whsec_</b>).</li>
+            <li>Cole abaixo e salve.</li>
+          </ol>
+          <div class="field"><label>Secret (whsec_…)</label><input type="password" id="yc-secret-input" autocomplete="off" placeholder="${whatsappYcloudSecretOk ? 'Já existe um salvo — cole aqui só para trocar' : 'whsec_…'}" /></div>
+          <p class="settings-page-msg erro" id="yc-secret-erro" style="display:none"></p>
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="yc-secret-cancel">Cancelar</button>
+            <button class="btn-save" id="yc-secret-salvar">Salvar secret</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  const erro = (t)=>{ const el = document.getElementById('yc-secret-erro'); el.textContent = t; el.style.display = 'block'; };
+  document.getElementById('yc-secret-close').addEventListener('click', fecharYcloudSecretModal);
+  document.getElementById('yc-secret-cancel').addEventListener('click', fecharYcloudSecretModal);
+  document.getElementById('yc-secret-overlay').addEventListener('click', (e)=>{ if(e.target.id==='yc-secret-overlay') fecharYcloudSecretModal(); });
+  document.getElementById('yc-secret-input').focus();
+  document.getElementById('yc-secret-salvar').addEventListener('click', async ()=>{
+    const valor = document.getElementById('yc-secret-input').value.trim();
+    if(!valor){ erro('Cole o secret (whsec_…) mostrado pela YCloud.'); return; }
+    try{
+      await apiRequest('POST', '/whatsapp/ycloud-secret', { webhookSecret: valor });
+      whatsappYcloudSecretOk = true;
+      fecharYcloudSecretModal();
+      renderApp();
+    }catch(e){
+      erro((e && e.message) || 'Não foi possível salvar o secret.');
+    }
+  });
+}
 async function desconectarWhatsapp(){
   try{
     await apiRequest('POST', '/whatsapp/desconectar');
     whatsappConnected = false;
+    whatsappProvedor = 'meta';
+    whatsappYcloudWebhookPath = null;
+    whatsappYcloudSecretOk = false;
+    whatsappTwilioWebhookPath = null;
   }catch(e){
     errorMsg = 'Não foi possível desconectar o WhatsApp Business.';
   }
@@ -1607,6 +1776,31 @@ async function loadSupervisao(){
     supervisaoMembros = [];
   }
   supervisaoLoaded = true;
+  renderApp();
+}
+// Troca temporariamente os dados em tela (board, tarefas, meta) pelos de um membro da
+// equipe, pro gestor ver o Dashboard dele exatamente como ele vê o próprio — sem
+// nenhuma ação de edição disponível. sairDashboardDeMembro() devolve tudo como estava.
+async function abrirDashboardDeMembro(userId, nome){
+  try{
+    const data = await apiRequest('GET', `/equipe/supervisao/${userId}/dashboard`);
+    boardBackupGestor = board;
+    tasksBackupGestor = tasks;
+    metaVendasValorBackupGestor = metaVendasValor;
+    board = { columns: data.columns || [], cards: data.cards || [] };
+    tasks = data.tasks || [];
+    tasksLoaded = true;
+    metaVendasValor = data.metaVendasValor || 0;
+    visualizandoDashboardDe = { userId, nome: data.nome || nome };
+    goToPage('dashboard');
+  }catch(e){
+    errorMsg = 'Não foi possível carregar o dashboard desse membro.';
+    renderApp();
+  }
+}
+function sairDashboardDeMembro(){
+  goToPage('equipe'); // a própria goToPage já restaura board/tasks/meta ao sair do dashboard
+  equipeSubTab = 'supervisao';
   renderApp();
 }
 
@@ -2716,7 +2910,7 @@ function relatoriosDadosMensais(mesesAtras, cardsBase){
   return buckets;
 }
 function baixarCsv(cards, nomeArquivo){
-  const linhas = [['Nome','Telefone','Valor','Coluna','Temperatura','Mês'].join(',')];
+  const linhas = [['Nome','Telefone','Valor','Coluna','Temperatura','Início de contato','Mês de venda'].join(',')];
   cards.forEach(c=>{
     const col = board.columns.find(k=>k.id===c.columnId);
     linhas.push([
@@ -2725,6 +2919,7 @@ function baixarCsv(cards, nomeArquivo){
       c.valor||0,
       `"${col?col.nome.replace(/"/g,'""'):''}"`,
       c.temperatura||'',
+      c.mesInicioContato||'',
       c.mes||'',
     ].join(','));
   });
@@ -3195,26 +3390,65 @@ const ESCOPOS = {
   Pessoal: { label:'Pessoal', color:'var(--ink-soft)', bg:'var(--badge-neutral-bg)' },
   Empresa: { label:'Empresa', color:'#FFFFFF',         bg:'var(--accent)' },
 };
-// mesma regra fixa do back-end: Imóvel/Investimento/Serviços = 10 parcelas a 0,00103388 + 3 a
-// 0,00190561; Veículo = 1,6% do valor da carta, dividido em 11 parcelas iguais.
-function calcComissaoPreview(creditoValor){
-  const credito = parseFloat(creditoValor) || 0;
-  const value1 = Math.round(credito * (1033.88/1000000) * 100) / 100;
-  const value2 = Math.round(credito * (1905.61/1000000) * 100) / 100;
-  return { value1, value2 };
+const REGRAS_COMISSAO_FALLBACK_NOMES = { imovel:'Imóvel', investimento:'Investimento', servicos:'Serviços', veiculo:'Veículo', home_equity:'Home Equity', car_equity:'Car Equity' };
+// Gera as <option> de tipo de carta a partir das regras de comissão carregadas — usado
+// tanto no formulário do lead quanto no modal de contrato. Enquanto as regras ainda não
+// carregaram (ou pra um valor salvo que não bate com nenhuma regra atual, ex: regra
+// excluída depois), garante que a opção escolhida sempre apareça, sem sumir do <select>.
+// Confere se a regra desse tipo de carta marca o mês como independente do lead — olha
+// as regras carregadas do servidor e, se ainda não carregaram, cai no padrão conhecido
+// (só Home Equity e Car Equity, historicamente).
+function mesIndependenteDoTipo(tipoCarta){
+  const regra = regrasComissao.find(r=>r.chave===tipoCarta);
+  if(regra) return !!regra.mesIndependente;
+  return tipoCarta==='home_equity' || tipoCarta==='car_equity';
 }
-function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
+function textoNotaMesContrato(tipoCarta){
+  return mesIndependenteDoTipo(tipoCarta)
+    ? 'Essa regra marca o mês como independente (pra pagamentos que podem demorar a acontecer) — mudar o mês aqui não altera o mês do lead.'
+    : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — a não ser que a regra desse tipo marque o mês como independente.';
+}
+function renderOpcoesTipoCarta(valorAtual){
+  const lista = regrasComissao.length
+    ? regrasComissao
+    : Object.keys(REGRAS_COMISSAO_FALLBACK_NOMES).map(chave=>({ chave, nome: REGRAS_COMISSAO_FALLBACK_NOMES[chave] }));
+  const opcoes = (valorAtual && !lista.some(r=>r.chave===valorAtual))
+    ? [...lista, { chave: valorAtual, nome: valorAtual }]
+    : lista;
+  return opcoes.map(r=>`<option value="${esc(r.chave)}" ${r.chave===valorAtual?'selected':''}>${esc(r.nome)}</option>`).join('');
+}
+// Motor genérico por blocos — espelha exatamente o back-end (comissaoCalc.js:
+// calcComissaoPorBlocos). Cada bloco é "N parcelas de X% da carta cada". Serve tanto pra
+// pré-visualizar um contrato quanto pra simular uma regra sendo editada na engrenagem.
+function calcComissaoPorBlocosPreview(creditoValor, blocos){
   const credito = parseFloat(creditoValor) || 0;
-  if(tipoCarta === 'veiculo'){
-    const valorParcela = Math.round((credito * 0.016 / 11) * 100) / 100;
-    return { parcelas:11, parcelas1:11, value:valorParcela, value2:0 };
-  }
-  if(tipoCarta === 'home_equity' || tipoCarta === 'car_equity'){
-    const valorParcela = Math.round(credito * 0.011 * 100) / 100;
-    return { parcelas:1, parcelas1:1, value:valorParcela, value2:0 };
-  }
-  const { value1, value2 } = calcComissaoPreview(credito);
-  return { parcelas:13, parcelas1:10, value:value1, value2 };
+  const lista = Array.isArray(blocos) && blocos.length ? blocos : [{ parcelas:1, percentual:0 }];
+  return lista.map(b=>({
+    parcelas: Math.max(1, parseInt(b.parcelas,10) || 1),
+    value: Math.round(credito * (parseFloat(b.percentual)||0) * 100) / 100,
+  }));
+}
+function resumoDeBlocosPreview(blocosCalculados){
+  const total = blocosCalculados.reduce((s,b)=> s + b.value*b.parcelas, 0);
+  const parcelas = blocosCalculados.reduce((s,b)=> s + b.parcelas, 0);
+  const primeiro = blocosCalculados[0] || { parcelas:0, value:0 };
+  const segundo = blocosCalculados[1];
+  return { blocos:blocosCalculados, parcelas, parcelas1:primeiro.parcelas, value:primeiro.value, value2: segundo?segundo.value:0, total: Math.round(total*100)/100 };
+}
+// Regras padrão do sistema, só como fallback enquanto as regras do usuário ainda não
+// carregaram do servidor (loadRegrasComissao) — assim que carregam, elas mandam.
+const REGRAS_COMISSAO_FALLBACK = {
+  imovel: [{ parcelas:10, percentual:1033.88/1000000 }, { parcelas:3, percentual:1905.61/1000000 }],
+  investimento: [{ parcelas:10, percentual:1033.88/1000000 }, { parcelas:3, percentual:1905.61/1000000 }],
+  servicos: [{ parcelas:10, percentual:1033.88/1000000 }, { parcelas:3, percentual:1905.61/1000000 }],
+  veiculo: [{ parcelas:11, percentual:0.016/11 }],
+  home_equity: [{ parcelas:1, percentual:0.011 }],
+  car_equity: [{ parcelas:1, percentual:0.011 }],
+};
+function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
+  const regra = regrasComissao.find(r=>r.chave===tipoCarta);
+  const blocos = regra ? regra.blocos : (REGRAS_COMISSAO_FALLBACK[tipoCarta] || [{ parcelas:1, percentual:0 }]);
+  return resumoDeBlocosPreview(calcComissaoPorBlocosPreview(creditoValor, blocos));
 }
 function atualizarNotaCicloDeVenda(){
   const nota = document.getElementById('f-ciclo-venda-nota');
@@ -3230,7 +3464,20 @@ function monthsBetween(anchorYM, targetYM){
 }
 // Descreve o tempo entre o início do contato e o mês de venda, pra dar uma noção
 // rápida do ciclo de venda daquele cliente direto no formulário.
+// Leads bem antigos podem ter "mes"/"mesInicioContato" guardados como "YYYY-MM" (de
+// antes de existir o dia) — um <input type="date"> não consegue exibir isso e mostra
+// vazio, mas a string ainda existe e conta como "preenchida" em qualquer checagem
+// direta. Isso normaliza pro dia 1 daquele mês, deixando a exibição e os cálculos
+// consistentes com o valor de verdade salvo.
+function normalizarData(valor){
+  if(!valor) return '';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(valor)) return valor;
+  if(/^\d{4}-\d{2}$/.test(valor)) return `${valor}-01`;
+  return valor;
+}
 function textoCicloDeVenda(mesInicio, mesVenda){
+  mesInicio = normalizarData(mesInicio);
+  mesVenda = normalizarData(mesVenda);
   if(!mesInicio) return '';
   if(!mesVenda) return '🟡 Ciclo aberto — ainda não fechou.';
   const diferenca = monthsBetween(mesInicio, mesVenda);
@@ -3243,7 +3490,19 @@ function addMonthsKey(ym, delta){
   const d = new Date(y, m-1+delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
+// Descobre o valor da parcela de índice "idx" (0 = primeira) dentro de um contrato,
+// percorrendo os blocos da regra em ordem até achar em qual bloco esse índice cai.
+// Contratos criados antes das regras editáveis não têm "blocos" detalhado — pra esses,
+// cai no formato antigo de até 2 blocos (parcelas1/value + value2).
 function parcelaValue(c, idx){
+  if(Array.isArray(c.blocos) && c.blocos.length){
+    let acumulado = 0;
+    for(const b of c.blocos){
+      if(idx < acumulado + b.parcelas) return b.value;
+      acumulado += b.parcelas;
+    }
+    return c.blocos[c.blocos.length-1].value;
+  }
   return idx < c.parcelas1 ? c.value : c.value2;
 }
 // A partir de qual índice de parcela o contrato foi cancelado (Infinity = nunca cancelado)
@@ -3373,6 +3632,19 @@ function filteredLeads(){
 /* ---------- navegação entre páginas ---------- */
 function goToPage(page){
   if(currentPage === page) return;
+  // se o gestor estiver vendo o dashboard de outro membro e navegar pra qualquer
+  // outra página (não só clicando em "Voltar"), restaura os próprios dados antes —
+  // sem isso, ele acabaria vendo os leads/tarefas de outra pessoa numa tela como o
+  // Pipeline, que permite editar de verdade
+  if(visualizandoDashboardDe && page !== 'dashboard'){
+    if(boardBackupGestor) board = boardBackupGestor;
+    if(tasksBackupGestor) tasks = tasksBackupGestor;
+    if(metaVendasValorBackupGestor !== null) metaVendasValor = metaVendasValorBackupGestor;
+    boardBackupGestor = null;
+    tasksBackupGestor = null;
+    metaVendasValorBackupGestor = null;
+    visualizandoDashboardDe = null;
+  }
   if(currentPage === 'conversas') pararPollingConversa();
   currentPage = page;
   dateMenuOpen = false;
@@ -3395,8 +3667,14 @@ function goToPage(page){
   templateModalForm = null;
   eventoGoogleModalForm = null;
   contratoModalForm = null;
+  regrasModalAberto = false;
+  regraEditForm = null;
   automacaoModalForm = null;
   fluxoModalForm = null;
+  modalAlterarNomeAberto = false;
+  modalAlterarSenhaAberto = false;
+  modalEditarPerfilAberto = false;
+  avatarLightboxAberto = false;
   document.getElementById('modal-root').innerHTML = '';
   renderApp();
   if(page === 'tarefas'){
@@ -3412,6 +3690,7 @@ function goToPage(page){
     auditoriaCarregada = false;
     loadAuditoria();
     refreshCurrentUser();
+    loadIcsStatus();
   }
   if(page === 'equipe'){
     equipeMsg = null;
@@ -3423,6 +3702,7 @@ function goToPage(page){
   }
   if(page === 'comissoes'){
     loadContratos(); // recarrega sempre, pra pegar comissões que o Pipeline gerou automaticamente
+    if(!regrasComissaoLoaded) loadRegrasComissao();
   }
 }
 async function refreshCurrentUser(){
@@ -4399,19 +4679,22 @@ function renderAssistente(){
   const root = document.getElementById('assistente-root');
   if(!root) return;
   if(!getToken()){ root.innerHTML=''; return; } // só aparece logado
+  if(!integracoesConfig.assistenteIA){ root.innerHTML=''; return; } // servidor sem ANTHROPIC_API_KEY configurada
 
   const posBolha = assistenteBolhaX!=null ? `left:${assistenteBolhaX}px; top:${assistenteBolhaY}px; right:auto; bottom:auto;` : '';
 
   root.innerHTML = `
-    <button id="assistente-bolha" class="assistente-bolha" style="${posBolha}" title="Assistente do CRM">${assistenteAberto ? '✕' : '💬'}</button>
+    <button id="assistente-bolha" class="assistente-bolha" style="${posBolha}" title="${esc(assistenteNome)}">${assistenteAberto ? '✕' : '💬'}</button>
     ${assistenteAberto ? `
-      <div class="assistente-painel" id="assistente-painel">
+      <div class="assistente-painel${assistenteAnimando ? ' '+assistenteAnimando : ''}" id="assistente-painel">
         <div class="assistente-painel-head">
-          <span>✨ Assistente do CRM</span>
+          ${assistenteEditandoNome
+            ? `<span class="assistente-nome-edit">✨ <input type="text" id="assistente-nome-input" maxlength="30" value="${esc(assistenteNome)}" aria-label="Nome do assistente" /></span>`
+            : `<span class="assistente-nome">✨ <span class="assistente-nome-txt">${esc(assistenteNome)}</span><button id="assistente-editar-nome" class="assistente-editar-nome" title="Editar nome" aria-label="Editar nome do assistente">${ICON_EDIT}</button></span>`}
           <button id="assistente-fechar" title="Fechar">✕</button>
         </div>
         <div class="assistente-mensagens" id="assistente-mensagens-lista">
-          ${!assistenteMensagens.length ? `<div class="assistente-msg assistente-msg-assistant">Oi! Pode perguntar qualquer coisa sobre como usar o CRM — Pipeline, Agenda, GEROT, Comissões, Fluxos, o que precisar.</div>` : ''}
+          ${!assistenteMensagens.length ? `<div class="assistente-msg assistente-msg-assistant">Oi! Eu sou ${esc(assistenteNome)}. Pode perguntar qualquer coisa sobre como usar o CRM — Pipeline, Agenda, GEROT, Comissões, Fluxos, o que precisar.</div>` : ''}
           ${assistenteMensagens.map(m=>`<div class="assistente-msg assistente-msg-${m.role}">${esc(m.content)}</div>`).join('')}
           ${assistenteEnviando ? `<div class="assistente-msg assistente-msg-assistant assistente-digitando">Digitando…</div>` : ''}
         </div>
@@ -4424,6 +4707,8 @@ function renderAssistente(){
   `;
   if(assistenteAberto) posicionarPainelAssistente();
   ligarBindingsAssistente();
+  assistenteAnimando = null; // a animação roda uma vez; re-renders seguintes (ex.: nova mensagem) não repetem
+  if(assistenteEditandoNome){ const ni = document.getElementById('assistente-nome-input'); if(ni){ ni.focus(); ni.select(); } }
   const lista = document.getElementById('assistente-mensagens-lista');
   if(lista) lista.scrollTop = lista.scrollHeight;
 }
@@ -4442,6 +4727,35 @@ function posicionarPainelAssistente(){
   top = Math.min(Math.max(12, top), window.innerHeight - altura - 12);
   painel.style.left = left+'px';
   painel.style.top = top+'px';
+  // cresce/encolhe a partir da bolinha
+  painel.style.transformOrigin = (rectBolha.left + rectBolha.width/2 - left)+'px '+(rectBolha.top + rectBolha.height/2 - top)+'px';
+}
+function alternarAssistente(){
+  if(assistenteAberto){
+    if(assistenteAnimando==='fechando') return;
+    const painel = document.getElementById('assistente-painel');
+    const reduz = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!painel || reduz){ assistenteAberto = false; assistenteEditandoNome = false; renderAssistente(); return; }
+    assistenteAnimando = 'fechando';
+    painel.classList.add('fechando');
+    const bolha = document.getElementById('assistente-bolha');
+    if(bolha) bolha.textContent = '💬';
+    setTimeout(()=>{ assistenteAberto = false; assistenteEditandoNome = false; assistenteAnimando = null; renderAssistente(); }, 220);
+  } else {
+    assistenteAberto = true;
+    assistenteAnimando = 'abrindo';
+    renderAssistente();
+  }
+}
+function salvarNomeAssistente(){
+  const ni = document.getElementById('assistente-nome-input');
+  if(ni){
+    const novo = ni.value.trim().slice(0,30) || ASSISTENTE_NOME_PADRAO;
+    assistenteNome = novo;
+    try{ localStorage.setItem('assistente-nome', novo); }catch(err){}
+  }
+  assistenteEditandoNome = false;
+  renderAssistente();
 }
 async function enviarMensagemAssistente(){
   const input = document.getElementById('assistente-input');
@@ -4496,8 +4810,7 @@ function ligarBindingsAssistente(){
         assistenteBolhaY = parseFloat(bolha.style.top);
         try{ localStorage.setItem('assistente-bolha-pos', JSON.stringify({x:assistenteBolhaX, y:assistenteBolhaY})); }catch(err){}
       } else {
-        assistenteAberto = !assistenteAberto;
-        renderAssistente();
+        alternarAssistente();
       }
       assistenteDrag = null;
     };
@@ -4505,7 +4818,18 @@ function ligarBindingsAssistente(){
     bolha.addEventListener('pointercancel', ()=>{ assistenteDrag = null; });
   }
   const fecharBtn = document.getElementById('assistente-fechar');
-  if(fecharBtn) fecharBtn.addEventListener('click', ()=>{ assistenteAberto = false; renderAssistente(); });
+  if(fecharBtn) fecharBtn.addEventListener('click', alternarAssistente);
+  const editarNomeBtn = document.getElementById('assistente-editar-nome');
+  if(editarNomeBtn) editarNomeBtn.addEventListener('click', ()=>{ assistenteEditandoNome = true; renderAssistente(); });
+  const nomeInput = document.getElementById('assistente-nome-input');
+  if(nomeInput){
+    let cancelado = false;
+    nomeInput.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter'){ e.preventDefault(); nomeInput.blur(); }
+      else if(e.key==='Escape'){ cancelado = true; assistenteEditandoNome = false; renderAssistente(); }
+    });
+    nomeInput.addEventListener('blur', ()=>{ if(!cancelado && assistenteEditandoNome) salvarNomeAssistente(); });
+  }
   const enviarBtn = document.getElementById('assistente-enviar');
   if(enviarBtn) enviarBtn.addEventListener('click', enviarMensagemAssistente);
   const input = document.getElementById('assistente-input');
@@ -4788,10 +5112,18 @@ function renderDashboardPage(){
   const maxStage = Math.max(1, ...stages.map(s=>s.total));
   const recentes = [...cardsInPeriod()].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0)).slice(0,5);
   const tarefasSemHora = tasksLoaded ? tasks.filter(t=>!t.concluida && !horaLocalDaTarefaOuNull(t.vencimento)).map(t=>({ tipo:'tarefa', id:t.id, titulo:t.titulo, data:t.vencimento })) : [];
-  const eventosSemHoraDash = agendaLoaded ? agendaEventosGoogle.filter(e=>e.diaInteiro && !e.concluida).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
+  // eventos do Google são pessoais do próprio gestor — não fazem sentido (e vazariam
+  // dados privados) quando ele está olhando o dashboard de outra pessoa
+  const eventosSemHoraDash = (agendaLoaded && !visualizandoDashboardDe) ? agendaEventosGoogle.filter(e=>e.diaInteiro && !e.concluida).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
   const abertas = [...tarefasSemHora, ...eventosSemHoraDash].sort((a,b)=> new Date(a.data||'2999-01-01') - new Date(b.data||'2999-01-01')).slice(0,5);
 
   return `
+    ${visualizandoDashboardDe ? `
+      <div class="dashboard-readonly-banner">
+        <span>👁️ Você está vendo o dashboard de <b>${esc(visualizandoDashboardDe.nome)}</b> — somente leitura, nada aqui pode ser alterado.</span>
+        <button type="button" class="btn-outline" data-action="sair-dashboard-membro">← Voltar</button>
+      </div>
+    ` : ''}
     <div class="page-head">
       <div>
         <h1>Dashboard</h1>
@@ -4829,7 +5161,7 @@ function renderDashboardPage(){
 
     <div class="dash-grid" style="margin-bottom:20px;">
       <div class="dash-panel">
-        ${renderCabecalhoPainelDashboard('meta-individual', 'Meta de vendas do mês', !editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : '')}
+        ${renderCabecalhoPainelDashboard('meta-individual', 'Meta de vendas do mês', (!editandoMetaVendas && !visualizandoDashboardDe) ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : '')}
         ${envolverConteudoPainel('meta-individual', !metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
           <div class="field-row" style="align-items:flex-end;">
             <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
@@ -4842,7 +5174,7 @@ function renderDashboardPage(){
       </div>
       ${equipe ? `
         <div class="dash-panel">
-          ${renderCabecalhoPainelDashboard('meta-equipe', 'Meta de vendas da equipe', (equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : '')}
+          ${renderCabecalhoPainelDashboard('meta-equipe', 'Meta de vendas da equipe', (equipe.souSupervisor && !editandoMetaVendasEquipe && !visualizandoDashboardDe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : '')}
           ${envolverConteudoPainel('meta-equipe', !metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
             <div class="field-row" style="align-items:flex-end;">
               <div class="field"><label>Meta da equipe no mês (R$)</label><input type="number" id="meta-vendas-equipe-input" value="${metaVendasEquipeValor||0}" min="0" step="0.01" /></div>
@@ -4889,7 +5221,7 @@ function renderDashboardPage(){
           <div class="task-mini-item">
             ${t.tipo==='evento'
               ? `<span class="check-circle" data-action="toggle-evento" data-evento-id="${t.id}"></span>`
-              : `<span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>`
+              : (visualizandoDashboardDe ? `<span class="check-circle" style="cursor:default;"></span>` : `<span class="check-circle" data-action="toggle-task" data-task-id="${t.id}"></span>`)
             }
             <span class="task-mini-title">${esc(t.titulo)}</span>
             ${t.data ? `<span class="metric-sub">${formatDate(t.data)}</span>` : ''}
@@ -4972,7 +5304,7 @@ function renderPipelinePage(){
       </div>
     </div>
 
-    <div class="pipeline-insights-bar">
+    ${integracoesConfig.assistenteIA ? `<div class="pipeline-insights-bar">
       <button class="pipeline-insights-toggle" data-action="toggle-insights-pipeline">
         <span>${ICON_SPARKLE} Insights da IA sobre esse funil</span>
         <span class="auditoria-toggle-seta ${insightsPipelineExpandido?'aberta':''}">▾</span>
@@ -4986,7 +5318,7 @@ function renderPipelinePage(){
           }
         </div>
       ` : ''}
-    </div>
+    </div>` : ''}
 
     <div class="pipeline-ordenar-row">
       ${renderBotaoOrdenar('pipeline', pipelineOrdenarPor, 'Ordem manual (arrastar)')}
@@ -5682,6 +6014,7 @@ function renderComissoesPage(){
           <button class="icon-btn" data-action="comissoes-mes" data-delta="1" title="Próximo mês">›</button>
         </div>
         ${renderBotaoOrdenar('comissoes', comissoesOrdenarPor, null, true)}
+        <button class="icon-btn" data-action="open-regras-comissao" title="Regras de comissão">${ICON_SETTINGS}</button>
         <button class="btn-primary" data-action="open-new-contrato">+ Novo contrato</button>
       </div>
     </div>
@@ -5720,10 +6053,14 @@ function renderContratoCard(c){
     ? `Cancelado a partir de ${monthLabel(c.canceladoNoMes, true)}`
     : (idx >= c.parcelas ? 'Contrato quitado' : idx < 0 ? 'Ainda não iniciado' : `Parcela ${parcelaAtual}/${c.parcelas} este mês`);
   const escopo = ESCOPOS[c.scope] || ESCOPOS.Pessoal;
+  // contratos novos guardam o detalhe completo em "blocos" (N linhas, da regra usada);
+  // contratos criados antes das regras editáveis não têm isso e caem no formato antigo
   const p2 = c.parcelas - c.parcelas1;
-  const blocosHtml = p2 > 0
-    ? `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div><div>🔹 ${p2} parcela${p2===1?'':'s'} de ${fmtBRL(c.value2)} cada</div>`
-    : `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div>`;
+  const blocosHtml = (Array.isArray(c.blocos) && c.blocos.length)
+    ? c.blocos.map(b=>`<div>🔹 ${b.parcelas} parcela${b.parcelas===1?'':'s'} de ${fmtBRL(b.value)} cada</div>`).join('')
+    : (p2 > 0
+      ? `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div><div>🔹 ${p2} parcela${p2===1?'':'s'} de ${fmtBRL(c.value2)} cada</div>`
+      : `<div>🔹 ${c.parcelas1} parcela${c.parcelas1===1?'':'s'} de ${fmtBRL(c.value)} cada</div>`);
   return `
     <div class="contrato-card ${c.canceladoNoMes?'contrato-card-cancelado':''}">
       <div class="contrato-card-head">
@@ -5761,6 +6098,7 @@ const CONFIG_CATEGORIAS = [
     ['perfil', 'Seu perfil'],
     ['seguranca', 'Login e segurança'],
     ['aparencia', 'Aparência'],
+    ['notificacoes', 'Notificações'],
   ]},
   { grupo: 'Integrações', itens: [
     ['whatsapp', 'WhatsApp Business'],
@@ -5779,18 +6117,22 @@ const CONFIG_CATEGORIAS = [
 ];
 
 function renderConfigPerfil(){
+  const temFoto = !!(currentUser && currentUser.avatarUrl);
   return `
     <div class="settings-page-section">
       <h3>Seu perfil</h3>
       <div class="avatar-upload-row">
-        <div class="avatar-preview">${currentUser && currentUser.avatarUrl ? `<img src="${currentUser.avatarUrl}" alt="Foto de perfil" />` : esc(iniciaisDoNome((currentUser&&currentUser.nome)||''))}</div>
+        <div class="avatar-preview avatar-preview-interativo" id="avatar-preview" title="${temFoto?'Segure pra ver a foto · clique pra trocar':'Clique pra adicionar uma foto'}">
+          ${temFoto ? `<img src="${currentUser.avatarUrl}" alt="Foto de perfil" />` : esc(iniciaisDoNome((currentUser&&currentUser.nome)||''))}
+          <div class="avatar-hover-overlay">${ICON_CAMERA}</div>
+        </div>
         <div>
           <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/webp" style="display:none;" />
           <div class="settings-btn-row">
-            <button class="btn-outline" id="avatar-upload-btn" ${avatarSalvando?'disabled':''}>${avatarSalvando?'Enviando…':'Enviar foto'}</button>
-            ${currentUser && currentUser.avatarUrl ? `<button class="btn-outline" id="avatar-remover-btn" ${avatarSalvando?'disabled':''}>Remover</button>` : ''}
+            <button class="btn-outline" data-action="abrir-editar-perfil" ${avatarSalvando?'disabled':''}>${avatarSalvando?'Enviando…':'Editar perfil'}</button>
+            ${temFoto ? `<button class="btn-outline" id="avatar-remover-btn" ${avatarSalvando?'disabled':''}>Remover foto</button>` : ''}
           </div>
-          <p class="settings-page-note">PNG, JPG ou WebP — redimensionamos automaticamente.</p>
+          <p class="settings-page-note">Clique na foto pra trocar${temFoto?', ou segure pra ver ela maior':''}.</p>
         </div>
       </div>
       ${avatarMsg ? `<p class="settings-page-msg ${avatarMsg.tipo}">${esc(avatarMsg.texto)}</p>` : ''}
@@ -5811,13 +6153,6 @@ function renderConfigSeguranca(){
   return `
     <div class="settings-page-section">
       <h3>Login e segurança</h3>
-      <div class="settings-page-row">
-        <span>Nome</span>
-        <button class="btn-outline" data-action="abrir-alterar-nome">Alterar nome</button>
-      </div>
-
-      <div class="settings-sep-line"></div>
-
       <div class="settings-page-row">
         <span>Senha</span>
         <button class="btn-outline" data-action="abrir-alterar-senha">Mudar senha</button>
@@ -5883,6 +6218,31 @@ function renderConfigWhatsapp(){
       </div>
       ${whatsappConnected ? `
         <p class="settings-page-note">Conversas ficam registradas dentro do card de cada cliente. Pra reconfigurar, desconecte e conecte de novo com os dados atualizados.</p>
+        ${whatsappProvedor==='twilio' ? `
+        <div class="settings-page-row"><span>Provedor</span><span>Twilio</span></div>
+        ${whatsappTwilioWebhookPath ? `
+        <div class="field">
+          <label>Endereço do webhook (cole na Twilio)</label>
+          <input type="text" readonly value="${esc((location.origin) + whatsappTwilioWebhookPath)}" onclick="this.select()" />
+        </div>
+        <p class="settings-page-note">Na Twilio, no número/remetente de WhatsApp: em <b>“When a message comes in”</b> cole esse endereço, com o método <b>HTTP POST</b>. Os status de entrega chegam pelo mesmo endereço.</p>` : ''}` : ''}
+        ${whatsappProvedor==='ycloud' ? `
+        <div class="settings-page-row"><span>Provedor</span><span>YCloud</span></div>
+        ${whatsappYcloudWebhookPath ? `
+        <div class="field">
+          <label>Endereço do webhook (cole na YCloud)</label>
+          <input type="text" readonly value="${esc(location.origin + whatsappYcloudWebhookPath)}" onclick="this.select()" />
+        </div>
+        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b> e <b>whatsapp.message.updated</b>. Depois de criar, a YCloud mostra o secret (whsec_…): clique em “Adicionar secret” abaixo.</p>` : ''}
+        <div class="settings-page-row">
+          <span>Secret do webhook</span>
+          <span style="display:flex;align-items:center;gap:10px;">
+            <span class="${whatsappYcloudSecretOk?'':'wa-secret-pendente'}" style="font-size:12px;">${whatsappYcloudSecretOk ? '✓ Secret adicionado' : '⚠️ Secret ainda não adicionado'}</span>
+            <button class="btn-outline" data-action="abrir-ycloud-secret">${whatsappYcloudSecretOk ? 'Trocar secret' : 'Adicionar secret'}</button>
+          </span>
+        </div>
+        ` : ''}
+        ${integracoesConfig.assistenteIA ? `
         <div class="settings-page-row">
           <span>Agente IA (responde clientes sozinho)</span>
           <span class="switch ${agenteIaAtivo?'on':''}" data-action="toggle-agente-ia" title="${agenteIaAtivo?'Ativado':'Desativado'}"><span class="switch-knob"></span></span>
@@ -5896,9 +6256,47 @@ function renderConfigWhatsapp(){
           <span class="switch ${iaProativaAtiva?'on':''}" data-action="toggle-ia-proativa" title="${iaProativaAtiva?'Ativada':'Desativada'}"><span class="switch-knob"></span></span>
         </div>
         <p class="settings-page-note">Analisa a conversa quando o cliente responde e deixa uma sugestão de mensagem e tarefa prontas no card — nunca envia nada sozinha, é sempre você quem decide usar.</p>
+        ` : ''}
 
         <button class="btn-outline" data-action="desconectar-whatsapp">Desconectar</button>
       ` : `
+        <div class="field">
+          <label>Provedor</label>
+          <select id="wa-provedor">
+            <option value="meta" ${whatsappProvedorEscolhido==='meta'?'selected':''}>Meta (API oficial direta)</option>
+            <option value="ycloud" ${whatsappProvedorEscolhido==='ycloud'?'selected':''}>YCloud</option>
+            <option value="twilio" ${whatsappProvedorEscolhido==='twilio'?'selected':''}>Twilio</option>
+          </select>
+        </div>
+        ${whatsappProvedorEscolhido==='twilio' ? `
+        <div class="field">
+          <label>Número do WhatsApp na Twilio</label>
+          <input type="text" id="wa-tw-numero" placeholder="Ex: 5515988053447 (com DDI e DDD). No sandbox: 14155238886" />
+        </div>
+        <div class="field">
+          <label>Account SID</label>
+          <input type="text" id="wa-tw-sid" placeholder="Começa com AC… (painel principal da Twilio)" />
+        </div>
+        <div class="field">
+          <label>Auth Token</label>
+          <input type="password" id="wa-tw-token" placeholder="Painel principal da Twilio → Auth Token" />
+        </div>
+        <p class="settings-page-note">Depois de conectar, o painel mostra o endereço do webhook pra você colar na Twilio. O mesmo Auth Token é usado pra conferir a assinatura dos webhooks.</p>
+        ` : whatsappProvedorEscolhido==='ycloud' ? `
+        <div class="field">
+          <label>Número do WhatsApp conectado na YCloud</label>
+          <input type="text" id="wa-yc-numero" placeholder="Ex: 5515988053447 (com DDI e DDD)" />
+        </div>
+        <div class="field">
+          <label>API Key da YCloud</label>
+          <input type="password" id="wa-yc-apikey" placeholder="Developers → API Keys" />
+        </div>
+        <div class="field">
+          <label>Secret do webhook (whsec_…)</label>
+          <input type="password" id="wa-yc-secret" placeholder="Mostrado pela YCloud ao criar o webhook" />
+        </div>
+        <p class="settings-page-note">Depois de conectar, o painel mostra o endereço do webhook pra você colar na YCloud. Pode deixar o secret em branco agora: a YCloud só mostra o secret depois de criar o endpoint, e você cola ele aqui depois de conectar.</p>
+        ` : `
         <div class="field">
           <label>Phone Number ID</label>
           <input type="text" id="wa-phone-id" placeholder="Ex: 109xxxxxxxxxxxx" />
@@ -5910,11 +6308,11 @@ function renderConfigWhatsapp(){
         <div class="field">
           <label>WABA ID (opcional)</label>
           <input type="text" id="wa-waba-id" placeholder="ID da conta comercial do WhatsApp" />
-        </div>
+        </div>`}
         ${whatsappConfigMsg ? `<p class="settings-page-msg ${whatsappConfigMsg.tipo}">${esc(whatsappConfigMsg.texto)}</p>` : ''}
         <button class="btn-primary" data-action="salvar-whatsapp-config" ${whatsappSalvando?'disabled':''}>${whatsappSalvando?'Salvando…':'Conectar'}</button>
       `}
-      <p class="settings-page-note">Requer conta comercial no Meta com o produto WhatsApp ativado. Passo a passo completo no README.</p>
+      <p class="settings-page-note">${whatsappProvedorEscolhido==='twilio' ? 'Requer conta na Twilio com um remetente de WhatsApp. Passo a passo no README.' : whatsappProvedorEscolhido==='ycloud' ? 'Requer conta na YCloud com um número de WhatsApp conectado. Passo a passo no README.' : 'Requer conta comercial no Meta com o produto WhatsApp ativado. Passo a passo completo no README.'}</p>
     </div>
 
     <div class="settings-page-section">
@@ -5977,9 +6375,26 @@ function renderConfigGoogleAgenda(){
             <button class="btn-outline" data-action="disconnect-calendar">Desconectar</button>
           </div>
         `
-        : `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
+        : (integracoesConfig.googleAgenda
+          ? `<button class="btn-primary" data-action="connect-calendar">Conectar Google Agenda</button>`
+          : `<p class="settings-page-note">Essa integração não está configurada neste servidor — use o link de agenda abaixo como alternativa (funciona com Google, Apple, Outlook e outros).</p>`)
       }
       <p class="settings-page-note">O botão do WhatsApp de abrir conversa já funciona em todos os clientes com telefone cadastrado, sem precisar conectar nada.</p>
+    </div>
+    <div class="settings-page-section">
+      <h3>Agenda por link (.ics)</h3>
+      <p class="settings-page-note">Gera um link que qualquer app de calendário (Google, Apple, Outlook…) pode "assinar" pra ver suas tarefas automaticamente — sem precisar conectar conta nenhuma. É a alternativa que não depende de nenhuma configuração especial deste servidor.</p>
+      ${icsCarregando ? `<p class="settings-page-note">Carregando…</p>` : (icsStatus && icsStatus.ativo ? `
+        <div class="field">
+          <label>Seu link de agenda</label>
+          <input type="text" id="ics-url" value="${esc(icsStatus.url)}" readonly onclick="this.select()" />
+        </div>
+        <div class="settings-btn-row">
+          <button class="btn-outline" data-action="copiar-link-ics">Copiar link</button>
+          <button class="btn-outline" data-action="gerar-link-ics" ${icsGerando?'disabled':''}>${icsGerando?'Gerando…':'Gerar novo link'}</button>
+          <button class="btn-outline" data-action="revogar-link-ics">Revogar</button>
+        </div>
+      ` : `<button class="btn-primary" data-action="gerar-link-ics" ${icsGerando?'disabled':''}>${icsGerando?'Gerando…':'Gerar link de agenda'}</button>`)}
     </div>
   `;
 }
@@ -6161,6 +6576,162 @@ function renderConfigImportar(){
   `;
 }
 
+/* ---------- Notificações push (neste aparelho) ---------- */
+let pushEstado = { carregado:false, suportado:false, permissao:'default', inscrito:false, ocupado:false, msg:null };
+
+function pushSuportado(){
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+function urlBase64ParaUint8(base64){
+  const pad = '='.repeat((4 - base64.length % 4) % 4);
+  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64);
+  return Uint8Array.from([...raw].map(c=> c.charCodeAt(0)));
+}
+async function carregarEstadoPush(){
+  pushEstado.suportado = pushSuportado();
+  if(pushEstado.suportado){
+    pushEstado.permissao = Notification.permission;
+    try{
+      const reg = await navigator.serviceWorker.ready;
+      pushEstado.inscrito = !!(await reg.pushManager.getSubscription());
+    }catch(e){ pushEstado.inscrito = false; }
+  }
+  pushEstado.carregado = true;
+  renderApp();
+}
+async function ativarPush(){
+  if(pushEstado.ocupado) return;
+  pushEstado.ocupado = true; pushEstado.msg = null; renderApp();
+  try{
+    const permissao = await Notification.requestPermission();
+    pushEstado.permissao = permissao;
+    if(permissao !== 'granted') throw new Error('Permissão negada. Libere as notificações deste site nas configurações do navegador e tente de novo.');
+    const { publicKey } = await apiRequest('GET', '/push/chave');
+    if(!publicKey) throw new Error('O servidor ainda não tem as chaves de notificação configuradas.');
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ParaUint8(publicKey) });
+    }
+    await apiRequest('POST', '/push/inscrever', { subscription: sub.toJSON() });
+    pushEstado.inscrito = true;
+    pushEstado.msg = { tipo:'ok', texto:'Notificações ativadas neste aparelho. Use "Enviar teste" pra conferir.' };
+  }catch(e){
+    pushEstado.msg = { tipo:'erro', texto: e.message || 'Não foi possível ativar as notificações.' };
+  }
+  pushEstado.ocupado = false; renderApp();
+}
+async function desativarPush(){
+  if(pushEstado.ocupado) return;
+  pushEstado.ocupado = true; pushEstado.msg = null; renderApp();
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if(sub){
+      try{ await apiRequest('POST', '/push/cancelar', { endpoint: sub.endpoint }); }catch(e){ /* segue e cancela localmente */ }
+      await sub.unsubscribe();
+    }
+    pushEstado.inscrito = false;
+    pushEstado.msg = { tipo:'ok', texto:'Notificações desativadas neste aparelho.' };
+  }catch(e){
+    pushEstado.msg = { tipo:'erro', texto: e.message || 'Não foi possível desativar.' };
+  }
+  pushEstado.ocupado = false; renderApp();
+}
+async function testarPush(){
+  if(pushEstado.ocupado) return;
+  pushEstado.ocupado = true; pushEstado.msg = null; renderApp();
+  try{
+    const r = await apiRequest('POST', '/push/testar');
+    pushEstado.msg = r && r.enviados > 0
+      ? { tipo:'ok', texto:'Teste enviado! Em instantes deve aparecer uma notificação.' }
+      : { tipo:'erro', texto:'Nenhum aparelho inscrito foi encontrado. Ative as notificações primeiro.' };
+  }catch(e){
+    pushEstado.msg = { tipo:'erro', texto: e.message || 'Não foi possível enviar o teste.' };
+  }
+  pushEstado.ocupado = false; renderApp();
+}
+
+function renderConfigNotificacoes(){
+  if(!pushEstado.carregado){ carregarEstadoPush(); }
+  let corpo;
+  if(!integracoesConfig.push){
+    corpo = `<p class="settings-page-note">As notificações ainda não foram configuradas neste servidor (faltam as chaves VAPID nas variáveis de ambiente). Veja o README.</p>`;
+  } else if(!pushEstado.carregado){
+    corpo = `<p class="settings-page-note">Verificando este aparelho…</p>`;
+  } else if(!pushEstado.suportado){
+    corpo = `<p class="settings-page-note">Este navegador não suporta notificações com o app fechado. No iPhone, primeiro adicione o painel à Tela de Início (Compartilhar → Adicionar à Tela de Início) e abra por lá.</p>`;
+  } else if(pushEstado.permissao === 'denied'){
+    corpo = `<p class="settings-page-note">As notificações estão bloqueadas para este site. Libere nas configurações do navegador (cadeado ao lado do endereço) e volte aqui.</p>`;
+  } else {
+    corpo = `
+      <p class="settings-page-note">Avisa no celular ou computador quando chegar mensagem de cliente (WhatsApp/Instagram) e na hora das suas tarefas, mesmo com o app fechado. A ativação vale só para este aparelho.</p>
+      <p class="settings-page-note"><strong>Situação:</strong> ${pushEstado.inscrito ? 'ativadas neste aparelho ✅' : 'desativadas neste aparelho'}</p>
+      ${pushEstado.msg ? `<p class="settings-page-msg ${pushEstado.msg.tipo}">${esc(pushEstado.msg.texto)}</p>` : ''}
+      ${pushEstado.inscrito
+        ? `<button class="btn-outline" data-action="push-testar" ${pushEstado.ocupado?'disabled':''}>Enviar teste</button>
+           <button class="btn-outline" data-action="push-desativar" ${pushEstado.ocupado?'disabled':''}>Desativar</button>`
+        : `<button class="btn-primary" data-action="push-ativar" ${pushEstado.ocupado?'disabled':''}>${pushEstado.ocupado?'Ativando…':'Ativar neste aparelho'}</button>`}
+    `;
+  }
+  return `
+    <div class="settings-page-section">
+      <h3>Notificações no aparelho</h3>
+      ${corpo}
+    </div>
+  `;
+}
+
+/* ---------- Backup automático por e-mail ---------- */
+let backupAuto = { carregado:false, disponivel:false, ativo:false, ultimoEnvio:null, email:'', ocupado:false, msg:null };
+async function carregarBackupAuto(){
+  backupAuto.carregado = true;
+  try{
+    const d = await apiRequest('GET', '/backup/automatico');
+    backupAuto = { ...backupAuto, ...d };
+  }catch(e){ backupAuto.disponivel = false; }
+  renderApp();
+}
+async function alternarBackupAuto(){
+  if(backupAuto.ocupado) return;
+  backupAuto.ocupado = true; backupAuto.msg = null; renderApp();
+  try{
+    const d = await apiRequest('PUT', '/backup/automatico', { ativo: !backupAuto.ativo });
+    backupAuto.ativo = !!d.ativo;
+    backupAuto.msg = { tipo:'ok', texto: backupAuto.ativo ? 'Backup semanal ativado.' : 'Backup semanal desativado.' };
+  }catch(e){
+    backupAuto.msg = { tipo:'erro', texto: e.message || 'Não foi possível alterar.' };
+  }
+  backupAuto.ocupado = false; renderApp();
+}
+async function enviarBackupAutoAgora(){
+  if(backupAuto.ocupado) return;
+  backupAuto.ocupado = true; backupAuto.msg = null; renderApp();
+  try{
+    const d = await apiRequest('POST', '/backup/automatico/enviar-agora', undefined, 90000);
+    backupAuto.ultimoEnvio = (d && d.ultimoEnvio) || new Date().toISOString();
+    backupAuto.msg = { tipo:'ok', texto:'Backup enviado para ' + (backupAuto.email || 'o seu e-mail') + '.' };
+  }catch(e){
+    backupAuto.msg = { tipo:'erro', texto: e.message || 'Não foi possível enviar agora.' };
+  }
+  backupAuto.ocupado = false; renderApp();
+}
+function renderBlocoBackupAuto(){
+  if(!backupAuto.carregado){ carregarBackupAuto(); return ''; }
+  if(!backupAuto.disponivel) return '';
+  const ult = backupAuto.ultimoEnvio ? new Date(backupAuto.ultimoEnvio).toLocaleString('pt-BR') : 'nunca';
+  return `
+    <div class="settings-page-section">
+      <h3>Backup automático por e-mail</h3>
+      <p class="settings-page-note">Toda semana enviamos uma cópia dos seus dados (clientes, tarefas, comissões, mensagens e configurações) para <strong>${esc(backupAuto.email || 'o seu e-mail')}</strong>. Os anexos dos clientes não entram nesse arquivo — para eles use o botão Backup acima. Último envio: ${esc(ult)}.</p>
+      ${backupAuto.msg ? `<p class="settings-page-msg ${backupAuto.msg.tipo}">${esc(backupAuto.msg.texto)}</p>` : ''}
+      <button class="btn-outline" data-action="backup-auto-alternar" ${backupAuto.ocupado?'disabled':''}>${backupAuto.ativo?'Desativar backup semanal':'Ativar backup semanal'}</button>
+      <button class="btn-outline" data-action="backup-auto-agora" ${backupAuto.ocupado?'disabled':''}>${backupAuto.ocupado?'Aguarde…':'Enviar backup agora'}</button>
+    </div>
+  `;
+}
+
 function renderConfigManutencao(){
   return `
     <div class="settings-page-section">
@@ -6168,6 +6739,7 @@ function renderConfigManutencao(){
       <p class="settings-page-note">Guarda ou restaura uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações.</p>
       <button class="btn-outline" data-action="abrir-backup-modal">📦 Backup</button>
     </div>
+    ${renderBlocoBackupAuto()}
     <div class="settings-page-section">
       <h3>Início de contato nos leads antigos</h3>
       <p class="settings-page-note">Preenche automaticamente o "mês de início de contato" dos seus leads que ainda não têm esse campo, usando o mês de venda que já estava cadastrado como ponto de partida. Não altera leads que você já preencheu manualmente, e pode ser usado quantas vezes quiser.</p>
@@ -6188,6 +6760,7 @@ function renderConfiguracoesPage(){
     'perfil': renderConfigPerfil,
     'seguranca': renderConfigSeguranca,
     'aparencia': renderConfigAparencia,
+    'notificacoes': renderConfigNotificacoes,
     'whatsapp': renderConfigWhatsapp,
     'google-agenda': renderConfigGoogleAgenda,
     'instagram': renderConfigInstagram,
@@ -6251,10 +6824,25 @@ function bindAppEvents(){
     setDarkMode(!getDarkMode());
     renderApp();
   });
+  const pushAtivarBtn = app.querySelector('[data-action="push-ativar"]');
+  if(pushAtivarBtn) pushAtivarBtn.addEventListener('click', ativarPush);
+  const pushDesativarBtn = app.querySelector('[data-action="push-desativar"]');
+  if(pushDesativarBtn) pushDesativarBtn.addEventListener('click', desativarPush);
+  const pushTestarBtn = app.querySelector('[data-action="push-testar"]');
+  if(pushTestarBtn) pushTestarBtn.addEventListener('click', testarPush);
+  const backupAutoAlternarBtn = app.querySelector('[data-action="backup-auto-alternar"]');
+  if(backupAutoAlternarBtn) backupAutoAlternarBtn.addEventListener('click', alternarBackupAuto);
+  const backupAutoAgoraBtn = app.querySelector('[data-action="backup-auto-agora"]');
+  if(backupAutoAgoraBtn) backupAutoAgoraBtn.addEventListener('click', enviarBackupAutoAgora);
   const verificarAtualizacaoBtn = app.querySelector('[data-action="verificar-atualizacao"]');
   if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
   const preencherMesInicioBtn = app.querySelector('[data-action="preencher-mes-inicio-contato"]');
   if(preencherMesInicioBtn) preencherMesInicioBtn.addEventListener('click', preencherMesInicioContatoAntigos);
+  app.querySelectorAll('[data-action="ver-dashboard-membro"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirDashboardDeMembro(btn.dataset.userId, btn.dataset.nome));
+  });
+  const sairDashboardBtn = app.querySelector('[data-action="sair-dashboard-membro"]');
+  if(sairDashboardBtn) sairDashboardBtn.addEventListener('click', sairDashboardDeMembro);
   const abrirBackupModalBtn = app.querySelector('[data-action="abrir-backup-modal"]');
   if(abrirBackupModalBtn) abrirBackupModalBtn.addEventListener('click', abrirBackupModal);
 
@@ -6330,6 +6918,19 @@ function bindAppEvents(){
   if(disconnectCalBtn) disconnectCalBtn.addEventListener('click', disconnectGoogleCalendar);
   app.querySelectorAll('[data-action="sync-calendar-now"]').forEach(btn=>{
     btn.addEventListener('click', syncCalendarNow);
+  });
+  const gerarIcsBtn = app.querySelector('[data-action="gerar-link-ics"]');
+  if(gerarIcsBtn) gerarIcsBtn.addEventListener('click', gerarLinkIcs);
+  const revogarIcsBtn = app.querySelector('[data-action="revogar-link-ics"]');
+  if(revogarIcsBtn) revogarIcsBtn.addEventListener('click', revogarLinkIcs);
+  const copiarIcsBtn = app.querySelector('[data-action="copiar-link-ics"]');
+  if(copiarIcsBtn) copiarIcsBtn.addEventListener('click', ()=>{
+    const input = document.getElementById('ics-url');
+    if(!input) return;
+    input.select();
+    navigator.clipboard && navigator.clipboard.writeText(input.value).catch(()=>{
+      document.execCommand('copy');
+    });
   });
 
   /* -- Dashboard -- */
@@ -6692,6 +7293,8 @@ function bindAppEvents(){
   });
   const openNewContratoBtn = app.querySelector('[data-action="open-new-contrato"]');
   if(openNewContratoBtn) openNewContratoBtn.addEventListener('click', openNewContrato);
+  const openRegrasBtn = app.querySelector('[data-action="open-regras-comissao"]');
+  if(openRegrasBtn) openRegrasBtn.addEventListener('click', openRegrasComissaoModal);
   app.querySelectorAll('[data-action="open-edit-contrato"]').forEach(btn=>{
     btn.addEventListener('click', ()=> openEditContrato(btn.dataset.contratoId));
   });
@@ -6726,14 +7329,39 @@ function bindAppEvents(){
     });
   });
   const avatarInput = document.getElementById('avatar-input');
-  const avatarUploadBtn = document.getElementById('avatar-upload-btn');
-  if(avatarUploadBtn && avatarInput) avatarUploadBtn.addEventListener('click', ()=> avatarInput.click());
   if(avatarInput) avatarInput.addEventListener('change', (e)=>{
     const file = e.target.files && e.target.files[0];
     if(file) handleAvatarFileSelected(file);
   });
   const avatarRemoverBtn = document.getElementById('avatar-remover-btn');
   if(avatarRemoverBtn) avatarRemoverBtn.addEventListener('click', removerAvatar);
+  const abrirEditarPerfilBtn = app.querySelector('[data-action="abrir-editar-perfil"]');
+  if(abrirEditarPerfilBtn) abrirEditarPerfilBtn.addEventListener('click', abrirEditarPerfilModal);
+  // A bolinha da foto: clique rápido abre o seletor de arquivo (trocar/adicionar foto);
+  // clique e segure (ou toque e segure, no celular) abre a foto atual em tamanho maior.
+  const avatarPreview = document.getElementById('avatar-preview');
+  if(avatarPreview){
+    const iniciarPress = ()=>{
+      clearTimeout(avatarPressTimer);
+      avatarPressTimer = setTimeout(()=>{
+        avatarPressDisparou = true;
+        abrirAvatarLightbox();
+      }, 550);
+    };
+    const cancelarPress = ()=> clearTimeout(avatarPressTimer);
+    avatarPreview.addEventListener('mousedown', iniciarPress);
+    avatarPreview.addEventListener('mouseup', cancelarPress);
+    avatarPreview.addEventListener('mouseleave', cancelarPress);
+    avatarPreview.addEventListener('touchstart', iniciarPress, { passive:true });
+    avatarPreview.addEventListener('touchend', cancelarPress);
+    avatarPreview.addEventListener('touchmove', cancelarPress);
+    avatarPreview.addEventListener('touchcancel', cancelarPress);
+    avatarPreview.addEventListener('contextmenu', (e)=> e.preventDefault());
+    avatarPreview.addEventListener('click', ()=>{
+      if(avatarPressDisparou){ avatarPressDisparou = false; return; } // ignora o clique fantasma depois de segurar
+      if(avatarInput) avatarInput.click();
+    });
+  }
   const logoutAllBtn = app.querySelector('[data-action="desconectar-todos"]');
   if(logoutAllBtn) logoutAllBtn.addEventListener('click', ()=>{
     showConfirm({
@@ -6742,8 +7370,6 @@ function bindAppEvents(){
       onConfirm: ()=>{ desconectarTodosDispositivos(); closeConfirm(); },
     });
   });
-  const abrirNomeBtn = app.querySelector('[data-action="abrir-alterar-nome"]');
-  if(abrirNomeBtn) abrirNomeBtn.addEventListener('click', abrirAlterarNomeModal);
   const abrirSenhaBtn = app.querySelector('[data-action="abrir-alterar-senha"]');
   if(abrirSenhaBtn) abrirSenhaBtn.addEventListener('click', abrirAlterarSenhaModal);
   const toggleAuditoriaBtn = app.querySelector('[data-action="toggle-auditoria"]');
@@ -6793,6 +7419,10 @@ function bindAppEvents(){
 
   const salvarWaBtn = app.querySelector('[data-action="salvar-whatsapp-config"]');
   if(salvarWaBtn) salvarWaBtn.addEventListener('click', salvarWhatsappConfig);
+  const waProvEl = document.getElementById('wa-provedor');
+  if(waProvEl) waProvEl.addEventListener('change', ()=>{ whatsappProvedorEscolhido = (waProvEl.value==='ycloud' || waProvEl.value==='twilio') ? waProvEl.value : 'meta'; whatsappConfigMsg = null; renderApp(); });
+  const abrirYcSecretBtn = app.querySelector('[data-action="abrir-ycloud-secret"]');
+  if(abrirYcSecretBtn) abrirYcSecretBtn.addEventListener('click', abrirYcloudSecretModal);
   const desconectarWaBtn = app.querySelector('[data-action="desconectar-whatsapp"]');
   if(desconectarWaBtn) desconectarWaBtn.addEventListener('click', desconectarWhatsapp);
 
@@ -7882,22 +8512,17 @@ function renderModal(){
           <div class="field">
             <label>Tipo de carta de crédito</label>
             <select id="f-tipo-carta">
-              <option value="imovel" ${(f.tipoCarta||'imovel')==='imovel'?'selected':''}>Imóvel</option>
-              <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
-              <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
-              <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
-              <option value="home_equity" ${f.tipoCarta==='home_equity'?'selected':''}>Home Equity</option>
-              <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
+              ${renderOpcoesTipoCarta(f.tipoCarta||'imovel')}
             </select>
           </div>
           <div class="field-row">
             <div class="field">
               <label>Mês de início de contato</label>
-              <input type="date" id="f-mes-inicio-contato" value="${f.mesInicioContato || ''}" />
+              <input type="date" id="f-mes-inicio-contato" value="${normalizarData(f.mesInicioContato)}" />
             </div>
             <div class="field">
               <label>Mês de venda</label>
-              <input type="date" id="f-mes" value="${f.mes || ''}" />
+              <input type="date" id="f-mes" value="${normalizarData(f.mes)}" />
             </div>
           </div>
           <p class="settings-page-note">O início de contato é opcional — ajuda a documentar quanto tempo leva até fechar.</p>
@@ -7917,7 +8542,7 @@ function renderModal(){
               <button type="button" class="wa-btn wa-btn-modal" id="f-whatsapp" style="${f.telefone ? '' : 'display:none;'}">
                 ${WA_ICON} Abrir WhatsApp
               </button>
-              ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-mensagem">${ICON_SPARKLE} Sugerir mensagem</button>` : ''}
+              ${!f.__isNew && integracoesConfig.assistenteIA ? `<button type="button" class="ai-btn" id="f-ai-mensagem">${ICON_SPARKLE} Sugerir mensagem</button>` : ''}
               ${!f.__isNew && whatsappConnected ? `<button type="button" class="ai-btn" id="f-ver-conversa">${WA_ICON} Ver conversa</button>` : ''}
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ver-historico">🕘 Ver histórico</button>` : ''}
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-gerar-proposta">📄 Gerar proposta</button>` : ''}
@@ -7930,7 +8555,7 @@ function renderModal(){
           <div class="field">
             <label>Observações (opcional)</label>
             <textarea id="f-obs" rows="3" placeholder="Detalhes da negociação...">${esc(f.obs||'')}</textarea>
-            ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ai-tarefa">${ICON_SPARKLE} Sugerir tarefa de acompanhamento</button>` : ''}
+            ${!f.__isNew && integracoesConfig.assistenteIA ? `<button type="button" class="ai-btn" id="f-ai-tarefa">${ICON_SPARKLE} Sugerir tarefa de acompanhamento</button>` : ''}
             <div class="ai-result" id="f-ai-tarefa-result" style="display:none;"></div>
           </div>
           ${camposPersonalizados.map(campo=>`
@@ -8140,6 +8765,83 @@ function closeTaskModal(){
   taskModalForm = null;
   if(agendaDiaSelecionado){ renderAgendaDiaModal(); return; }
   document.getElementById('modal-root').innerHTML='';
+}
+
+/* ---------- modal: Editar perfil (escolha entre adicionar foto / editar nome) ---------- */
+function abrirEditarPerfilModal(){
+  modalEditarPerfilAberto = true;
+  renderEditarPerfilModal();
+}
+function closeEditarPerfilModal(){
+  modalEditarPerfilAberto = false;
+  const root = document.getElementById('modal-root');
+  if(root) root.innerHTML = '';
+}
+function renderEditarPerfilModal(){
+  const root = document.getElementById('modal-root');
+  if(!modalEditarPerfilAberto){ root.innerHTML=''; return; }
+  const temFoto = !!(currentUser && currentUser.avatarUrl);
+  root.innerHTML = `
+    <div class="overlay" id="editar-perfil-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Editar perfil</h3>
+          <button id="editar-perfil-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <button type="button" class="opcao-perfil-btn" data-action="editar-perfil-foto">
+            <span class="opcao-perfil-icon">${ICON_CAMERA}</span>
+            <span>
+              <strong>${temFoto?'Trocar foto':'Adicionar foto'}</strong>
+              <span class="opcao-perfil-nota">PNG, JPG ou WebP — redimensionamos automaticamente.</span>
+            </span>
+          </button>
+          <button type="button" class="opcao-perfil-btn" data-action="editar-perfil-nome">
+            <span class="opcao-perfil-icon">${ICON_EDIT}</span>
+            <span>
+              <strong>Editar nome</strong>
+              <span class="opcao-perfil-nota">Como seu nome aparece pro resto da equipe.</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('editar-perfil-close').addEventListener('click', closeEditarPerfilModal);
+  document.getElementById('editar-perfil-overlay').addEventListener('click', (e)=>{ if(e.target.id==='editar-perfil-overlay') closeEditarPerfilModal(); });
+  document.querySelector('[data-action="editar-perfil-foto"]').addEventListener('click', ()=>{
+    closeEditarPerfilModal();
+    const input = document.getElementById('avatar-input');
+    if(input) input.click();
+  });
+  document.querySelector('[data-action="editar-perfil-nome"]').addEventListener('click', ()=>{
+    closeEditarPerfilModal();
+    abrirAlterarNomeModal();
+  });
+}
+
+/* ---------- visualização grande da foto (toque-e-segure no avatar) ---------- */
+function abrirAvatarLightbox(){
+  if(!(currentUser && currentUser.avatarUrl)) return;
+  avatarLightboxAberto = true;
+  renderAvatarLightbox();
+}
+function closeAvatarLightbox(){
+  avatarLightboxAberto = false;
+  const root = document.getElementById('modal-root');
+  if(root) root.innerHTML = '';
+}
+function renderAvatarLightbox(){
+  const root = document.getElementById('modal-root');
+  if(!avatarLightboxAberto){ root.innerHTML=''; return; }
+  root.innerHTML = `
+    <div class="overlay avatar-lightbox-overlay" id="avatar-lightbox-overlay">
+      <img src="${currentUser.avatarUrl}" alt="Foto de perfil" class="avatar-lightbox-img" />
+      <button id="avatar-lightbox-close" class="avatar-lightbox-close" title="Fechar">✕</button>
+    </div>
+  `;
+  document.getElementById('avatar-lightbox-close').addEventListener('click', closeAvatarLightbox);
+  document.getElementById('avatar-lightbox-overlay').addEventListener('click', (e)=>{ if(e.target.id==='avatar-lightbox-overlay') closeAvatarLightbox(); });
 }
 
 function abrirAlterarNomeModal(){
@@ -8896,7 +9598,13 @@ function renderRankingSupervisao(membros){
       <div class="stage-list" style="margin-top:${supervisores.length?'14px':'0'};">
         ${resto.map((m,idx)=>`
           <div class="stage-row">
-            <div class="stage-row-top"><span>${idx+1}º — ${esc(m.nome)}</span><span>${fmtBRL(m.ganhoValor)}</span></div>
+            <div class="stage-row-top">
+              <span>${idx+1}º — ${esc(m.nome)}</span>
+              <span style="display:flex; align-items:center; gap:10px;">
+                ${fmtBRL(m.ganhoValor)}
+                <button type="button" class="btn-outline" style="padding:4px 10px; font-size:11px;" data-action="ver-dashboard-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}">Ver Dashboard</button>
+              </span>
+            </div>
             <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${(m.ganhoValor/maxGanho*100)}%"></div></div>
           </div>
         `).join('')}
@@ -9235,24 +9943,17 @@ function openEditContrato(id){
 }
 function closeContratoModal(){ contratoModalForm = null; document.getElementById('modal-root').innerHTML=''; }
 
+// Genérico pra N blocos — funciona pra qualquer regra, inclusive as que o usuário criar
+// na engrenagem (2 blocos, 1 bloco, 5 blocos, o que for).
 function previewComissaoHtml(prev){
-  if(prev.parcelas1 === 11 && prev.value2 === 0){
-    return `
-      🔹 11 parcelas iguais: <b>${fmtBRL(prev.value)}</b> cada<br/>
-      Total: 11x parcelas · Total líquido da comissão: <b>${fmtBRL(prev.value * 11)}</b>
-    `;
-  }
-  if(prev.parcelas === 1 && prev.value2 === 0){
-    return `
-      🔹 Parcela única: <b>${fmtBRL(prev.value)}</b><br/>
-      Total líquido da comissão: <b>${fmtBRL(prev.value)}</b>
-    `;
-  }
-  const total = prev.value*10 + prev.value2*3;
+  const linhas = prev.blocos.map(b=>
+    b.parcelas === 1
+      ? `🔹 Parcela única: <b>${fmtBRL(b.value)}</b>`
+      : `🔹 ${b.parcelas} parcelas: <b>${fmtBRL(b.value)}</b> cada`
+  ).join('<br/>');
   return `
-    🔹 10 primeiras parcelas: <b>${fmtBRL(prev.value)}</b> cada<br/>
-    🔹 3 últimas parcelas: <b>${fmtBRL(prev.value2)}</b> cada<br/>
-    Total: 13x parcelas · Total líquido da comissão: <b>${fmtBRL(total)}</b>
+    ${linhas}<br/>
+    Total: ${prev.parcelas}x parcela${prev.parcelas===1?'':'s'} · Total líquido da comissão: <b>${fmtBRL(prev.total)}</b>
   `;
 }
 function renderContratoModal(){
@@ -9283,12 +9984,7 @@ function renderContratoModal(){
           <div class="field">
             <label>Tipo de carta de crédito</label>
             <select id="c-tipo-carta">
-              <option value="imovel" ${f.tipoCarta==='imovel'?'selected':''}>Imóvel</option>
-              <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
-              <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
-              <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
-              <option value="home_equity" ${f.tipoCarta==='home_equity'?'selected':''}>Home Equity</option>
-              <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
+              ${renderOpcoesTipoCarta(f.tipoCarta)}
             </select>
           </div>
           <div class="field">
@@ -9301,10 +9997,7 @@ function renderContratoModal(){
           <div class="field">
             <label>Mês da 1ª parcela</label>
             <input type="month" id="c-mes" value="${(f.date||'').slice(0,7)}" />
-            <p class="settings-page-note" id="c-mes-nota">${(f.tipoCarta==='home_equity'||f.tipoCarta==='car_equity')
-              ? 'Home Equity e Car Equity podem demorar até 2 meses pra pagar — mudar o mês aqui não altera o mês do lead.'
-              : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — só Home Equity e Car Equity ficam independentes.'
-            }</p>
+            <p class="settings-page-note" id="c-mes-nota">${textoNotaMesContrato(f.tipoCarta)}</p>
           </div>
           <div class="calc-preview" id="c-preview">
             ${previewComissaoHtml(preview)}
@@ -9343,11 +10036,8 @@ function renderContratoModal(){
     const prev = calcComissaoPreviewPorTipo(contratoModalForm.creditoValor, contratoModalForm.tipoCarta);
     const previewEl = document.getElementById('c-preview');
     if(previewEl) previewEl.innerHTML = previewComissaoHtml(prev);
-    const ehEquity = contratoModalForm.tipoCarta==='home_equity' || contratoModalForm.tipoCarta==='car_equity';
     const notaMes = document.getElementById('c-mes-nota');
-    if(notaMes) notaMes.textContent = ehEquity
-      ? 'Home Equity e Car Equity podem demorar até 2 meses pra pagar — mudar o mês aqui não altera o mês do lead.'
-      : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — só Home Equity e Car Equity ficam independentes.';
+    if(notaMes) notaMes.textContent = textoNotaMesContrato(contratoModalForm.tipoCarta);
   });
 
   const creditoInput = document.getElementById('c-credito');
@@ -9368,6 +10058,271 @@ function renderContratoModal(){
         onConfirm: ()=>{ deleteContratoById(f.id); closeContratoModal(); closeConfirm(); },
       });
     });
+  }
+}
+
+/* ---------- modal: Regras de Comissão (engrenagem em Comissões) ----------
+   Duas telas dentro do mesmo modal: lista (todas as regras do usuário) e editor
+   (uma regra por vez — nome, mês independente e os blocos de parcelas, como uma
+   planilha: cada linha é "N parcelas de X% da carta"). */
+function openRegrasComissaoModal(){
+  regrasModalAberto = true;
+  regraEditForm = null;
+  renderRegrasModal();
+  if(!regrasComissaoLoaded) loadRegrasComissao();
+}
+function closeRegrasComissaoModal(){
+  regrasModalAberto = false;
+  regraEditForm = null;
+  document.getElementById('modal-root').innerHTML = '';
+  renderApp(); // a lista de contratos usa as regras pra mostrar nome/blocos — garante que reflita qualquer alteração
+}
+function abrirNovaRegra(){
+  regraEditForm = { __isNew:true, id:null, nome:'', mesIndependente:false, blocos:[{ parcelas:1, percentual:0 }] };
+  renderRegrasModal();
+}
+function abrirEditarRegra(id){
+  const r = regrasComissao.find(x=>x.id===id);
+  if(!r) return;
+  regraEditForm = {
+    __isNew:false, id:r.id, nome:r.nome, mesIndependente:!!r.mesIndependente,
+    // o back-end guarda percentual como fração (0.016); no formulário mostramos "humano" (1.6)
+    blocos: (r.blocos||[]).map(b=>({ parcelas:b.parcelas, percentual: Math.round(b.percentual*100*1000000)/1000000 })),
+  };
+  renderRegrasModal();
+}
+function renderRegraLinhaBloco(b, idx, podeRemover){
+  return `
+    <div class="regra-bloco-row">
+      <div class="field">
+        <label>Parcelas</label>
+        <input type="number" min="1" step="1" class="regra-bloco-parcelas" data-idx="${idx}" value="${b.parcelas}" />
+      </div>
+      <div class="field">
+        <label>% da carta (por parcela)</label>
+        <input type="number" min="0" step="any" class="regra-bloco-percentual" data-idx="${idx}" value="${b.percentual}" />
+      </div>
+      <button type="button" class="icon-btn" data-action="remover-bloco-regra" data-idx="${idx}" title="Remover linha" ${podeRemover?'':'disabled'}>${ICON_TRASH}</button>
+    </div>
+  `;
+}
+function htmlPreviewRegraEditor(f){
+  const REF = 100000; // carta de referência só pra simular — o valor real usa a carta de cada contrato
+  const blocos = f.blocos.map(b=>({
+    parcelas: Math.max(1, parseInt(b.parcelas,10)||1),
+    value: Math.round(REF * ((parseFloat(b.percentual)||0)/100) * 100) / 100,
+  }));
+  const total = Math.round(blocos.reduce((s,b)=>s+b.value*b.parcelas,0)*100)/100;
+  const totalParcelas = blocos.reduce((s,b)=>s+b.parcelas,0);
+  const linhas = blocos.map(b=> b.parcelas===1
+    ? `🔹 Parcela única: <b>${fmtBRL(b.value)}</b>`
+    : `🔹 ${b.parcelas} parcelas: <b>${fmtBRL(b.value)}</b> cada`
+  ).join('<br/>');
+  return `${linhas}<br/>Total: ${totalParcelas}x parcela${totalParcelas===1?'':'s'} · Total líquido: <b>${fmtBRL(total)}</b>`;
+}
+function atualizarPreviewRegraEditor(){
+  const el = document.getElementById('re-preview');
+  if(el && regraEditForm) el.innerHTML = htmlPreviewRegraEditor(regraEditForm);
+}
+function htmlRegrasLista(){
+  return `
+    <div class="overlay" id="regras-modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-head">
+          <h3>Regras de comissão</h3>
+          <button id="regras-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-page-note">Cada regra define como uma comissão é calculada, em blocos de parcelas — como uma planilha. Crie, renomeie, edite ou exclua regras à vontade: comissões já lançadas guardam o cálculo da época e não mudam retroativamente.</p>
+          ${!regrasComissaoLoaded ? `<div class="tasks-empty">Carregando…</div>` : (regrasComissao.length ? `
+            <div class="regras-lista">
+              ${regrasComissao.map(r=>`
+                <div class="regra-row">
+                  <div class="regra-row-info">
+                    <div class="regra-row-nome">${esc(r.nome)} ${r.mesIndependente?'<span class="badge badge-neutral" title="O mês da comissão pode ser editado sem alterar o mês do lead">Mês independente</span>':''}</div>
+                    <div class="regra-row-blocos">${(r.blocos||[]).map(b=>`${b.parcelas}x ${(b.percentual*100).toLocaleString('pt-BR',{maximumFractionDigits:6})}%`).join(' · ')}</div>
+                  </div>
+                  <div class="regra-row-actions">
+                    <button class="icon-btn" data-action="editar-regra" data-regra-id="${r.id}" title="Editar">${ICON_EDIT}</button>
+                    <button class="icon-btn" data-action="excluir-regra" data-regra-id="${r.id}" title="Excluir">${ICON_TRASH}</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : `<div class="tasks-empty">Nenhuma regra cadastrada ainda.</div>`)}
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="regras-modal-close-2">Fechar</button>
+            <button class="btn-save" data-action="nova-regra">+ Nova regra</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function htmlRegraEditor(){
+  const f = regraEditForm;
+  return `
+    <div class="overlay" id="regras-modal-overlay">
+      <div class="modal modal-lg">
+        <div class="modal-head">
+          <h3>${f.__isNew ? 'Nova regra de comissão' : 'Editar regra'}</h3>
+          <button id="regras-modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Nome</label>
+            <input type="text" id="re-nome" value="${esc(f.nome)}" placeholder="Ex: Consórcio Pesado" />
+          </div>
+          <div class="field">
+            <label class="checkbox-item"><input type="checkbox" id="re-mes-independente" ${f.mesIndependente?'checked':''} /> Mês da comissão independente do mês do lead (pra pagamentos que demoram a acontecer de verdade)</label>
+          </div>
+          <div class="field">
+            <label>Blocos de parcelas</label>
+            <div class="regra-blocos-cabecalho">
+              <span>Parcelas</span><span>% da carta (por parcela)</span><span></span>
+            </div>
+            <div id="re-blocos-lista">
+              ${f.blocos.map((b,idx)=>renderRegraLinhaBloco(b,idx,f.blocos.length>1)).join('')}
+            </div>
+            <button type="button" class="btn-outline" id="re-add-bloco">+ Adicionar linha</button>
+          </div>
+          <div class="calc-preview" id="re-preview">${htmlPreviewRegraEditor(f)}</div>
+          <p class="calc-preview-note">Simulação com uma carta de R$ 100.000 — o valor real usa a carta de cada contrato.</p>
+        </div>
+        <div class="modal-foot">
+          ${!f.__isNew ? `<button class="delete-link" id="re-delete">🗑 Excluir</button>` : '<span></span>'}
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="re-cancel">‹ Voltar</button>
+            <button class="btn-save" id="re-save">${f.__isNew ? 'Criar regra' : 'Salvar alterações'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+function renderRegrasModal(){
+  const root = document.getElementById('modal-root');
+  if(!regrasModalAberto){ root.innerHTML=''; return; }
+  root.innerHTML = regraEditForm ? htmlRegraEditor() : htmlRegrasLista();
+  ligarBindingsRegrasModal();
+}
+function ligarBindingsRegrasModal(){
+  const closeBtn = document.getElementById('regras-modal-close');
+  if(closeBtn) closeBtn.addEventListener('click', closeRegrasComissaoModal);
+  const overlay = document.getElementById('regras-modal-overlay');
+  if(overlay) overlay.addEventListener('click', (e)=>{ if(e.target.id==='regras-modal-overlay') closeRegrasComissaoModal(); });
+
+  if(!regraEditForm){
+    const closeBtn2 = document.getElementById('regras-modal-close-2');
+    if(closeBtn2) closeBtn2.addEventListener('click', closeRegrasComissaoModal);
+    document.querySelectorAll('[data-action="editar-regra"]').forEach(btn=>{
+      btn.addEventListener('click', ()=> abrirEditarRegra(btn.dataset.regraId));
+    });
+    document.querySelectorAll('[data-action="excluir-regra"]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.regraId;
+        const r = regrasComissao.find(x=>x.id===id);
+        showConfirm({
+          message: `Excluir a regra "${r?r.nome:''}"? Comissões já lançadas com ela continuam iguais, mas ela deixa de aparecer como opção pra novos contratos e leads.`,
+          confirmLabel: 'Excluir',
+          onConfirm: async ()=>{
+            closeConfirm();
+            try{
+              await apiRequest('DELETE', `/regras-comissao/${id}`);
+              regrasComissao = regrasComissao.filter(x=>x.id!==id);
+              renderRegrasModal();
+            }catch(e){
+              errorMsg = e.message || 'Não foi possível excluir essa regra.';
+              renderApp();
+            }
+          },
+        });
+      });
+    });
+    const novaBtn = document.querySelector('[data-action="nova-regra"]');
+    if(novaBtn) novaBtn.addEventListener('click', abrirNovaRegra);
+    return;
+  }
+
+  document.getElementById('re-nome').addEventListener('input', (e)=> regraEditForm.nome = e.target.value);
+  document.getElementById('re-mes-independente').addEventListener('change', (e)=> regraEditForm.mesIndependente = e.target.checked);
+  document.querySelectorAll('.regra-bloco-parcelas').forEach(inp=>{
+    inp.addEventListener('input', (e)=>{
+      regraEditForm.blocos[parseInt(e.target.dataset.idx,10)].parcelas = e.target.value;
+      atualizarPreviewRegraEditor();
+    });
+  });
+  document.querySelectorAll('.regra-bloco-percentual').forEach(inp=>{
+    inp.addEventListener('input', (e)=>{
+      regraEditForm.blocos[parseInt(e.target.dataset.idx,10)].percentual = e.target.value;
+      atualizarPreviewRegraEditor();
+    });
+  });
+  document.querySelectorAll('[data-action="remover-bloco-regra"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if(regraEditForm.blocos.length<=1) return; // sempre precisa de ao menos 1 bloco
+      regraEditForm.blocos.splice(parseInt(btn.dataset.idx,10),1);
+      renderRegrasModal();
+    });
+  });
+  const addBtn = document.getElementById('re-add-bloco');
+  if(addBtn) addBtn.addEventListener('click', ()=>{
+    regraEditForm.blocos.push({ parcelas:1, percentual:0 });
+    renderRegrasModal();
+  });
+  document.getElementById('re-cancel').addEventListener('click', ()=>{ regraEditForm=null; renderRegrasModal(); });
+  if(!regraEditForm.__isNew){
+    document.getElementById('re-delete').addEventListener('click', ()=>{
+      const f = regraEditForm;
+      showConfirm({
+        message: `Excluir a regra "${f.nome}"? Comissões já lançadas com ela continuam iguais, mas ela deixa de aparecer como opção pra novos contratos e leads.`,
+        confirmLabel: 'Excluir',
+        onConfirm: async ()=>{
+          closeConfirm();
+          try{
+            await apiRequest('DELETE', `/regras-comissao/${f.id}`);
+            regrasComissao = regrasComissao.filter(x=>x.id!==f.id);
+            regraEditForm = null;
+            renderRegrasModal();
+          }catch(e){
+            errorMsg = e.message || 'Não foi possível excluir essa regra.';
+            renderApp();
+          }
+        },
+      });
+    });
+  }
+  document.getElementById('re-save').addEventListener('click', salvarRegraComissao);
+}
+async function salvarRegraComissao(){
+  const f = regraEditForm;
+  if(!f.nome || !f.nome.trim()){
+    errorMsg = 'Dê um nome pra essa regra de comissão.';
+    renderApp();
+    return;
+  }
+  const blocos = f.blocos.map(b=>({ parcelas: parseInt(b.parcelas,10)||1, percentual: parseFloat(b.percentual)||0 }));
+  const payload = { nome: f.nome.trim(), mesIndependente: !!f.mesIndependente, blocos };
+  const saveBtn = document.getElementById('re-save');
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = 'Salvando…'; }
+  try{
+    let regra;
+    if(f.__isNew){
+      regra = await apiRequest('POST', '/regras-comissao', payload);
+      regrasComissao = [...regrasComissao, regra].sort((a,b)=>a.ordem-b.ordem);
+    }else{
+      regra = await apiRequest('PUT', `/regras-comissao/${f.id}`, payload);
+      regrasComissao = regrasComissao.map(r=> r.id===regra.id ? regra : r).sort((a,b)=>a.ordem-b.ordem);
+    }
+    regraEditForm = null;
+    renderRegrasModal();
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível salvar essa regra.';
+    renderApp();
+    if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent = f.__isNew?'Criar regra':'Salvar alterações'; }
   }
 }
 
@@ -9869,6 +10824,8 @@ if(getToken()){
   loadTasks();
   loadCalendarStatus();
   loadContratos();
+  loadRegrasComissao();
+  loadIntegracoesConfig();
   loadWhatsappStatus();
   loadInstagramStatus();
   loadTemplates();

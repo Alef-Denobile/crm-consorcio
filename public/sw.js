@@ -1,4 +1,4 @@
-const CACHE_NAME = 'painel-crm-v2';
+const CACHE_NAME = 'painel-crm-v3';
 
 self.addEventListener('install', () => {
   self.skipWaiting(); // assume o controle assim que instalar, sem esperar todas as abas fecharem
@@ -29,4 +29,31 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => caches.match(event.request))
   );
+});
+
+// Notificações push (tarefas e mensagens de clientes) — chegam mesmo com o app fechado.
+self.addEventListener('push', (event) => {
+  let dados = {};
+  try { dados = event.data ? event.data.json() : {}; } catch (e) { dados = { title: 'Painel CRM', body: event.data ? event.data.text() : '' }; }
+  const titulo = dados.title || 'Painel CRM';
+  event.waitUntil(self.registration.showNotification(titulo, {
+    body: dados.body || '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: dados.tag || undefined,
+    renotify: !!dados.tag,
+    data: { url: dados.url || '/index.html' },
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const destino = (event.notification.data && event.notification.data.url) || '/index.html';
+  event.waitUntil((async () => {
+    const janelas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const j of janelas) {
+      if ('focus' in j) { await j.focus(); return; }
+    }
+    if (self.clients.openWindow) await self.clients.openWindow(destino);
+  })());
 });

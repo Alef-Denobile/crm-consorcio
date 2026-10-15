@@ -1,7 +1,8 @@
 const Contrato = require('../models/Contrato');
 const Column = require('../models/Column');
 const Card = require('../models/Card');
-const { calcComissaoPorTipo } = require('./comissaoCalc');
+const { calcComissaoPorRegra } = require('./comissaoCalc');
+const { obterRegraPorChave } = require('./regrasComissao');
 
 // Quando um cliente entra numa coluna do tipo "ganho" (fechado), gera a comissão
 // dele automaticamente na aba Comissões — só uma vez por cliente, mesmo que passe
@@ -19,7 +20,8 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
     const jaExiste = await Contrato.findOne({ cardId: card._id });
     if (jaExiste) return; // já foi gerada antes pra esse cliente, não duplica
 
-    const { parcelas, parcelas1, value, value2 } = calcComissaoPorTipo(credito, card.tipoCarta);
+    const regra = await obterRegraPorChave(userId, card.tipoCarta);
+    const { parcelas, parcelas1, value, value2, blocos } = calcComissaoPorRegra(credito, regra);
     // Usa o "mês" que a pessoa definiu no lead como referência — só cai pra data de hoje
     // se o lead não tiver esse campo preenchido. Aceita tanto "YYYY-MM" (formato antigo)
     // quanto "YYYY-MM-DD" (com dia, formato atual) — sempre usa o dia 1 do mês
@@ -44,10 +46,12 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
       date: dataReferencia,
       creditoValor: credito,
       tipoCarta: card.tipoCarta || 'imovel',
+      regraNome: regra.nome || '',
       parcelas,
       parcelas1,
       value,
       value2,
+      blocos,
     });
   } catch (err) {
     console.error('Erro ao gerar comissão automática:', err.message);

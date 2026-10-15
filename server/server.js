@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
+const configRoutes = require('./routes/config');
 const authRoutes = require('./routes/auth');
 const boardRoutes = require('./routes/board');
 const columnRoutes = require('./routes/columns');
@@ -11,6 +12,7 @@ const cardRoutes = require('./routes/cards');
 const taskRoutes = require('./routes/tasks');
 const calendarRoutes = require('./routes/calendar');
 const comissoesRoutes = require('./routes/comissoes');
+const regrasComissaoRoutes = require('./routes/regrasComissao');
 const aiRoutes = require('./routes/ai');
 const whatsappRoutes = require('./routes/whatsapp');
 const funisRoutes = require('./routes/funis');
@@ -29,6 +31,7 @@ const webhooksSaidaRoutes = require('./routes/webhooksSaida');
 const agendamentoPublicoRoutes = require('./routes/agendamentoPublico');
 const gerotRoutes = require('./routes/gerot');
 const historicoContatoRoutes = require('./routes/historicoContato');
+const pushRoutes = require('./routes/push');
 
 const app = express();
 // O Render (e a maioria dos serviços de hospedagem) fica atrás de um proxy: o HTTPS
@@ -66,9 +69,19 @@ process.on('unhandledRejection', (motivo) => {
 });
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+// Guarda o corpo CRU só dos webhooks (Meta e YCloud) — a conferência da assinatura (X-Hub-Signature-256)
+// precisa dos bytes exatos que a Meta mandou, e depois do parse do JSON isso se perde.
+app.use(express.json({
+  limit: '50mb',
+  verify: (req, _res, buf) => {
+    if (req.originalUrl.startsWith('/api/whatsapp/webhook') || req.originalUrl.startsWith('/api/whatsapp/ycloud-webhook') || req.originalUrl.startsWith('/api/instagram/webhook')) {
+      req.rawBody = buf;
+    }
+  },
+}));
 
-// API (auth é pública; as outras exigem login dentro de cada rota)
+// API (auth e config são públicas; as outras exigem login dentro de cada rota)
+app.use('/api/config', configRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/board', boardRoutes);
 app.use('/api/columns', columnRoutes);
@@ -76,6 +89,7 @@ app.use('/api/cards', cardRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/comissoes', comissoesRoutes);
+app.use('/api/regras-comissao', regrasComissaoRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/whatsapp', whatsappRoutes);
 app.use('/api/funis', funisRoutes);
@@ -94,6 +108,7 @@ app.use('/api/webhooks-saida', webhooksSaidaRoutes);
 app.use('/api/agendamento-publico', agendamentoPublicoRoutes);
 app.use('/api/gerot', gerotRoutes);
 app.use('/api/historico-contato', historicoContatoRoutes);
+app.use('/api/push', pushRoutes);
 
 // página pública de agendamento — /agendar/<userId> (sem login, o cliente acessa direto)
 app.get('/agendar/:userId', (req, res) => {
@@ -106,6 +121,8 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 const { verificarAutomacoesPorTempo } = require('./utils/automacaoScheduler');
 const { processarFluxos } = require('./utils/fluxoScheduler');
 const { processarAgendamentos } = require('./utils/agendamentoScheduler');
+const { enviarLembretesDeTarefas } = require('./utils/lembreteScheduler');
+const { enviarBackupsSemanais } = require('./utils/backupScheduler');
 const UMA_HORA = 60 * 60 * 1000;
 const CINCO_MINUTOS = 5 * 60 * 1000;
 
@@ -123,6 +140,11 @@ async function start() {
     setInterval(processarFluxos, UMA_HORA);
     setTimeout(processarAgendamentos, 15 * 1000);
     setInterval(processarAgendamentos, CINCO_MINUTOS);
+    // lembretes de tarefa por notificação push (a cada 2 min) e backup semanal por e-mail (confere de 6 em 6 horas)
+    setTimeout(enviarLembretesDeTarefas, 20 * 1000);
+    setInterval(enviarLembretesDeTarefas, 2 * 60 * 1000);
+    setTimeout(enviarBackupsSemanais, 90 * 1000);
+    setInterval(enviarBackupsSemanais, 6 * UMA_HORA);
   } catch (err) {
     console.error('Falha ao conectar no MongoDB:', err.message);
     enviarAlertaTelegram(`Não foi possível conectar ao MongoDB — o servidor não vai subir.\n${err.message}`);

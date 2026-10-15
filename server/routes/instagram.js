@@ -9,7 +9,9 @@ const { dispararWebhooks } = require('../utils/dispararWebhooks');
 const router = express.Router();
 
 const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || '';
-const GRAPH_API = 'https://graph.facebook.com/v19.0';
+const { GRAPH_API } = require('../utils/meta');
+const { exigirAssinaturaMeta } = require('../utils/webhookMeta');
+const { enviarPush, montarPayloadMensagem } = require('../utils/push');
 
 // tenta achar o valor de um campo do formulário, testando os nomes mais comuns
 function extrairCampo(campos, possiveisNomes) {
@@ -34,7 +36,7 @@ router.get('/webhook', (req, res) => {
 
 // POST /api/instagram/webhook -> a Meta chama aqui tanto pra leads de anúncio quanto
 // pra mensagens diretas (DM), dependendo do que veio no corpo da notificação
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', exigirAssinaturaMeta, async (req, res) => {
   res.sendStatus(200); // responde rápido e sempre 200, senão a Meta reenvia o mesmo evento
   try {
     const entry = (req.body.entry || [])[0];
@@ -82,7 +84,8 @@ router.post('/webhook', async (req, res) => {
         valor: 0,
         temperatura: 'morno',
         obs: `Capturado via anúncio do Instagram/Facebook.${email ? ` E-mail: ${email}` : ''}`,
-        mes: new Date().toISOString().slice(0, 7),
+        mes: '', // mês de venda fica em branco até a venda acontecer de verdade
+        mesInicioContato: new Date().toISOString().slice(0, 7), // o lead acabou de chegar: esse é o mês de início do contato
       });
       dispararWebhooks(user._id, 'lead.criado', { id: novoCard._id.toString(), cliente: novoCard.cliente, telefone: novoCard.telefone, origem: 'instagram_leadgen' });
     }
@@ -123,7 +126,8 @@ async function processarMensagensDiretas(entry) {
         valor: 0,
         temperatura: 'morno',
         obs: '',
-        mes: new Date().toISOString().slice(0, 7),
+        mes: '', // mês de venda fica em branco até a venda acontecer de verdade
+        mesInicioContato: new Date().toISOString().slice(0, 7), // o lead acabou de chegar: esse é o mês de início do contato
       });
       dispararWebhooks(user._id, 'lead.criado', { id: card._id.toString(), cliente: card.cliente, origem: 'instagram_dm' });
     }
@@ -139,6 +143,7 @@ async function processarMensagensDiretas(entry) {
       timestamp: evento.timestamp ? new Date(evento.timestamp) : new Date(),
     });
     dispararWebhooks(user._id, 'mensagem.recebida', { cardId: card._id.toString(), cliente: card.cliente, texto, canal: 'instagram' });
+    enviarPush(user._id, montarPayloadMensagem({ cliente: card.cliente, texto, canal: 'Instagram', cardId: card._id }));
   }
 }
 

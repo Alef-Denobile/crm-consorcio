@@ -75,6 +75,7 @@ router.put('/:id', async (req, res) => {
     if (dados.leadId && !mongoose.isValidObjectId(dados.leadId)) {
       return res.status(400).json({ error: 'Lead relacionado inválido.' });
     }
+    if (dados.vencimento !== undefined) dados.lembretePushEnviado = false; // mudou o horário: o lembrete vale de novo
     const task = await Task.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },
       dados,

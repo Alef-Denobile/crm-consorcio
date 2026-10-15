@@ -20,7 +20,9 @@ const cardSchema = new mongoose.Schema(
     telefoneNormalizado: { type: String, default: null, index: true }, // só dígitos, com DDI — usado pra casar mensagens do WhatsApp
     instagramId: { type: String, default: null, index: true }, // ID do remetente no Instagram — usado pra casar mensagens de DM
     obs: { type: String, default: '' },
-    tipoCarta: { type: String, enum: ['imovel', 'veiculo', 'investimento', 'servicos', 'home_equity', 'car_equity'], default: 'imovel' },
+    // chave da Regra de Comissão (ver server/models/RegraComissao.js) — deixou de ser um enum
+    // fixo pra permitir regras/tipos de carta criados e renomeados pelo usuário
+    tipoCarta: { type: String, default: 'imovel', trim: true },
     mes: { type: String, default: '' }, // formato "YYYY-MM" — mês de referência/venda (já usado pra filtrar o Pipeline e sincronizar com Comissões)
     mesInicioContato: { type: String, default: '' }, // formato "YYYY-MM" — quando o contato com esse cliente começou, pra documentar o ciclo de venda
     colunaDesde: { type: Date, default: Date.now }, // quando entrou na coluna atual — usado pelas automações por tempo

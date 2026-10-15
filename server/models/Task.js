@@ -10,6 +10,7 @@ const taskSchema = new mongoose.Schema(
     descricao: { type: String, default: '' },
     concluida: { type: Boolean, default: false },
     googleEventId: { type: String, default: null },
+    lembretePushEnviado: { type: Boolean, default: false }, // já avisamos por notificação push (volta a false se o vencimento mudar)
   },
   {
     timestamps: true,

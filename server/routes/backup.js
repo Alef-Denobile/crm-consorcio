@@ -2,6 +2,10 @@ const express = require('express');
 const auth = require('../middleware/auth');
 
 const User = require('../models/User');
+const { montarBackup } = require('../utils/backupDados');
+const { emailConfigurado } = require('../utils/email');
+const { enviarBackupPorEmail } = require('../utils/backupScheduler');
+const RegraComissao = require('../models/RegraComissao');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
 const Funil = require('../models/Funil');
@@ -21,52 +25,10 @@ const router = express.Router();
 router.use(auth);
 
 // GET /api/backup/exportar-tudo -> baixa um arquivo com todos os dados do usuário logado
-// (clientes, tarefas, comissões, mensagens, automações, etc.), pra guardar como cópia de segurança.
+// (clientes, tarefas, comissões, mensagens, automações, anexos, etc.), pra guardar como cópia de segurança.
 router.get('/exportar-tudo', async (req, res) => {
   try {
-    const userId = req.userId;
-    const [
-      usuario, cards, columns, funis, tasks, contratos, messages,
-      automacoes, fluxos, fluxoExecucoes, camposPersonalizados,
-      mensagensAgendadas, metasVendas, possiveisLeads, anexos,
-    ] = await Promise.all([
-      User.findById(userId).select('-senhaHash -whatsappBusiness.accessToken -googleCalendar.accessToken -googleCalendar.refreshToken -twoFactorSecret'),
-      Card.find({ userId }),
-      Column.find({ userId }),
-      Funil.find({ userId }),
-      Task.find({ userId }),
-      Contrato.find({ userId }),
-      Message.find({ userId }),
-      Automacao.find({ userId }),
-      Fluxo.find({ userId }),
-      FluxoExecucao.find({ userId }),
-      CampoPersonalizado.find({ userId }),
-      MensagemAgendada.find({ userId }),
-      MetaVendas.find({ userId }),
-      PossivelLead.find({ userId }),
-      Anexo.find({ userId }),
-    ]);
-
-    const backup = {
-      geradoEm: new Date().toISOString(),
-      versao: 1,
-      usuario: usuario ? usuario.toJSON() : null,
-      clientes: cards.map((d) => d.toJSON()),
-      colunas: columns.map((d) => d.toJSON()),
-      funis: funis.map((d) => d.toJSON()),
-      tarefas: tasks.map((d) => d.toJSON()),
-      comissoes: contratos.map((d) => d.toJSON()),
-      mensagensWhatsapp: messages.map((d) => d.toJSON()),
-      automacoes: automacoes.map((d) => d.toJSON()),
-      fluxos: fluxos.map((d) => d.toJSON()),
-      execucoesDeFluxo: fluxoExecucoes.map((d) => d.toJSON()),
-      camposPersonalizados: camposPersonalizados.map((d) => d.toJSON()),
-      mensagensAgendadas: mensagensAgendadas.map((d) => d.toJSON()),
-      metasDeVendas: metasVendas.map((d) => d.toJSON()),
-      possiveisLeads: possiveisLeads.map((d) => d.toJSON()),
-      anexos: anexos.map((d) => d.toJSON()),
-    };
-
+    const backup = await montarBackup(req.userId, { incluirAnexos: true });
     const nomeArquivo = `backup-painel-crm-${new Date().toISOString().slice(0, 10)}.json`;
     res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`);
     res.setHeader('Content-Type', 'application/json');
@@ -74,6 +36,51 @@ router.get('/exportar-tudo', async (req, res) => {
   } catch (err) {
     console.error('Erro ao gerar backup:', err);
     res.status(500).json({ error: 'Erro ao gerar o backup. Tente novamente.' });
+  }
+});
+
+// GET /api/backup/automatico -> estado do backup semanal por e-mail
+router.get('/automatico', async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('backupAutomatico email');
+    res.json({
+      disponivel: emailConfigurado(), // o servidor tem e-mail configurado?
+      ativo: !!(user && user.backupAutomatico && user.backupAutomatico.ativo),
+      ultimoEnvio: (user && user.backupAutomatico && user.backupAutomatico.ultimoEnvio) || null,
+      email: user ? user.email : '',
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar a configuração do backup automático.' });
+  }
+});
+
+// PUT /api/backup/automatico -> { ativo } liga/desliga o backup semanal por e-mail
+router.put('/automatico', async (req, res) => {
+  try {
+    if (!emailConfigurado()) {
+      return res.status(503).json({ error: 'O envio de e-mail não está configurado neste servidor.' });
+    }
+    const ativo = !!(req.body && req.body.ativo);
+    await User.updateOne({ _id: req.userId }, { 'backupAutomatico.ativo': ativo });
+    res.json({ ativo });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao salvar a configuração do backup automático.' });
+  }
+});
+
+// POST /api/backup/automatico/enviar-agora -> manda um backup por e-mail agora mesmo (pra testar)
+router.post('/automatico/enviar-agora', async (req, res) => {
+  try {
+    if (!emailConfigurado()) {
+      return res.status(503).json({ error: 'O envio de e-mail não está configurado neste servidor.' });
+    }
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const r = await enviarBackupPorEmail(user);
+    res.json({ enviado: true, ...r });
+  } catch (err) {
+    console.error('Erro ao enviar backup por e-mail:', err.message);
+    res.status(500).json({ error: 'Não foi possível enviar o e-mail. Confira a configuração do Resend.' });
   }
 });
 
@@ -121,6 +128,7 @@ router.post('/importar-tudo', async (req, res) => {
       ['clientes', Card],
       ['tarefas', Task],
       ['comissoes', Contrato],
+      ['regrasDeComissao', RegraComissao],
       ['mensagensWhatsapp', Message],
       ['automacoes', Automacao],
       ['fluxos', Fluxo],

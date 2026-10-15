@@ -6,7 +6,7 @@ const Column = require('../models/Column');
 const Task = require('../models/Task');
 const Contrato = require('../models/Contrato');
 const Funil = require('../models/Funil');
-const { perguntarClaude, chamarClaude } = require('../utils/anthropic');
+const { perguntarIA, chamarIA } = require('../utils/ia');
 const { resumoComissoesDoMes } = require('../utils/comissaoResumo');
 
 const router = express.Router();
@@ -29,7 +29,7 @@ router.post('/mensagem', async (req, res) => {
 
 Responda só com o texto da mensagem, pronto para enviar, sem explicações antes ou depois e sem aspas envolvendo o texto.`;
 
-    const mensagem = await perguntarClaude(prompt, { maxTokens: 250 });
+    const mensagem = await perguntarIA(prompt, { maxTokens: 250 });
     res.json({ mensagem });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Erro ao gerar mensagem.' });
@@ -62,7 +62,7 @@ router.post('/insights', async (req, res) => {
 ${resumo}
 Total de leads quentes em aberto: ${quentes}`;
 
-    const texto = await perguntarClaude(prompt, { maxTokens: 300 });
+    const texto = await perguntarIA(prompt, { maxTokens: 300 });
     const insights = texto.split('\n').map((l) => l.replace(/^[-•]\s*/, '').trim()).filter(Boolean);
     res.json({ insights });
   } catch (err) {
@@ -85,7 +85,7 @@ Cliente: ${card.cliente}
 Qualificação: ${card.temperatura}
 Observações: ${card.obs || 'nenhuma'}`;
 
-    const texto = await perguntarClaude(prompt, { maxTokens: 80 });
+    const texto = await perguntarIA(prompt, { maxTokens: 80 });
     const linhas = texto.split('\n').map((l) => l.trim()).filter(Boolean);
     const titulo = (linhas[0] || 'Fazer follow-up').replace(/^(linha\s*1[:.]?\s*)/i, '');
     const dias = parseInt((linhas[1] || '3').replace(/\D/g, ''), 10) || 3;
@@ -213,7 +213,7 @@ router.post('/assistente', async (req, res) => {
 
     let resposta = '';
     for (let rodada = 0; rodada < 4; rodada++) {
-      const data = await chamarClaude({
+      const data = await chamarIA({
         system: SYSTEM_PROMPT_ASSISTENTE,
         mensagens: historico,
         tools: FERRAMENTAS_ASSISTENTE,

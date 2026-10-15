@@ -2,9 +2,12 @@
 
 ⚠️ **Testes automatizados:** rode `cd server && npm test` pra rodar os testes
 (usa o test runner nativo do Node, não precisa instalar nada a mais). Hoje cobre
-o cálculo de comissão (as 4 modalidades) e a normalização de telefone — os dois
-pontos que já tiveram bug real antes. Vale adicionar teste novo sempre que
+o cálculo de comissão (as 4 modalidades e as regras editáveis), a normalização
+de telefone, a agenda .ics, o login e a recuperação de senha (com o limite de
+tentativas), a assinatura dos webhooks da Meta, o e-mail, os lembretes push e
+os tokens de redefinição de senha. Vale adicionar teste novo sempre que
 corrigir um bug de lógica, pra ele nunca mais voltar sem a gente perceber.
+Pra rodar tudo de uma vez (sintaxe, CSS, HTML e testes), use `bash scripts/verificar.sh`.
 
 ⚠️ **Monitoramento de erros:** todo erro registrado com `console.error` (é o
 que toda rota já faz antes de responder com erro 500) também é guardado no
@@ -18,7 +21,7 @@ completo de como criar o bot está em `server/utils/telegramAlerta.js`). Não
 depende da API do WhatsApp Business nem de verificação de empresa na Meta.
 
 ⚠️ **Cache do navegador:** `style.css`, `script.js` e `login.js` são
-carregados com `?v=AAAAMMDD` no final da URL (ex: `style.css?v=20260830`).
+carregados com `?v=AAAAMMDD` no final da URL (ex: `style.css?v=20261082`).
 Isso existe só pra forçar o navegador a buscar a versão nova depois de um
 deploy — sem isso, quem já tinha o site aberto continua vendo o CSS/JS
 antigo em cache, às vezes por dias. **Toda vez que `style.css`, `script.js`
@@ -60,7 +63,33 @@ crm-consorcio/
       cards.js
     package.json
     .env.example
+  scripts/                <- scripts de verificação e empacotamento (uso no dia a dia)
+    verificar.sh            (roda todas as checagens antes de subir uma mudança)
+    gerar-pacote.sh         (gera o .zip pronto pra enviar/publicar)
+    verificar-bindings.js   (checagem auxiliar usada pelo verificar.sh)
 ```
+
+## Scripts de verificação e empacotamento
+
+A pasta `scripts/` tem os comandos que a gente usa pra conferir se está tudo
+certo antes de subir uma mudança, e pra gerar o pacote `.zip` pronto pra
+publicar. Rode sempre a partir da raiz do projeto:
+
+```bash
+# Confere sintaxe do JS (front e back), CSS, HTML e os testes automatizados.
+# Não muda nada, só avisa se algo está quebrado. Rode sempre que mexer em código.
+bash scripts/verificar.sh
+
+# Faz tudo de uma vez: roda o verificar.sh, aumenta o número de cache (?v=...)
+# em 1, gera o dist/crm-consorcio.zip e confere esse .zip numa pasta limpa
+# (extrai, "npm install" do zero e roda os testes de novo).
+bash scripts/gerar-pacote.sh
+```
+
+Se o `verificar.sh` encontrar algum problema, o `gerar-pacote.sh` para e não
+gera pacote nenhum — corrija o que foi apontado e rode de novo. O `.zip`
+final sempre sai em `dist/crm-consorcio.zip`, sem `.git`, sem `node_modules`
+e sem nenhum `.env` com senha de verdade.
 
 ## Passo a passo
 
@@ -105,6 +134,8 @@ crm-consorcio/
 
 O botão já está pronto no código, mas precisa de um Client ID seu pra
 funcionar — sem isso, ele mostra uma mensagem discreta em vez do botão.
+O Client ID vem do servidor (`GOOGLE_CLIENT_ID` no ambiente) — **não precisa
+editar nenhum arquivo do código**.
 
 1. Acesse o [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
    e crie um projeto (ou use um existente).
@@ -116,10 +147,8 @@ funcionar — sem isso, ele mostra uma mensagem discreta em vez do botão.
      (ex: `https://seudominio.com.br` e, para testar local,
      `http://localhost:3000`)
 4. Copie o Client ID gerado (termina em `.apps.googleusercontent.com`).
-5. Cole em dois lugares:
-   - No `.env` do servidor: `GOOGLE_CLIENT_ID=seu-client-id-aqui`
-   - No arquivo `public/js/login.js`, na linha que diz
-     `const GOOGLE_CLIENT_ID = 'COLOQUE_SEU_GOOGLE_CLIENT_ID_AQUI...'`
+5. Cole no `.env` do servidor (ou nas variáveis de ambiente do Render):
+   `GOOGLE_CLIENT_ID=seu-client-id-aqui`
 6. Reinicie o servidor (ou refaça o deploy). O botão aparece sozinho.
 
 Quem entrar com Google e já tiver uma conta com o mesmo e-mail cadastrada
@@ -201,8 +230,10 @@ O painel agora tem uma barra lateral com 5 páginas (tudo dentro do mesmo
 - **Leads** — todos os clientes em formato de tabela, com busca,
   filtro por etapa e um botão de **exportar** em CSV
 - **Comissões** — contratos de comissão por mês, com cálculo automático
-  das parcelas a partir do valor da carta de crédito vendida (regra fixa:
-  10 parcelas × 0,00103388 + 3 parcelas × 0,00190561)
+  das parcelas a partir do valor da carta de crédito vendida. As regras de
+  comissão são **editáveis** (ícone de engrenagem na própria aba): a regra
+  padrão é 10 parcelas × 0,00103388 + 3 parcelas × 0,00190561, e você pode
+  criar outras por administradora/modalidade
 - **Tarefas** — lista de tarefas com prioridade, vencimento e lead
   relacionado
 - **Conversas** — todas as conversas do WhatsApp Business, ordenadas
@@ -245,6 +276,82 @@ Também tem um **sino de notificações** no topo de todas as páginas,
 com tarefas vencendo, leads novos e mensagens recebidas nas últimas
 48h — calculado na hora a partir do que já está carregado, sem
 nenhuma tabela nova no banco.
+
+## WhatsApp pela YCloud (alternativa à Meta direta)
+
+Em vez de criar e manter um app na Meta, você pode usar a **YCloud**
+(provedor oficial, parceiro da Meta). O caminho da Meta continua
+funcionando igual — você escolhe o provedor em Configurações →
+Integrações → WhatsApp Business API → **Provedor**.
+
+**Na YCloud (ycloud.com):**
+
+1. Crie a conta e conecte o número (Embedded Signup — login com o Meta
+   Business; o número precisa ser dedicado à API)
+2. Developers → **API Keys** → crie uma chave
+3. Guarde o **número** conectado, com DDI e DDD (ex.: `5515988053447`)
+
+**No painel do CRM:**
+
+1. Provedor **YCloud** → informe o número e a API Key → Conectar
+2. O painel mostra o **endereço do webhook** (único por usuário)
+3. Na YCloud: Developers → **Webhooks** → criar endpoint com esse endereço,
+   marcando `whatsapp.inbound_message.received` e `whatsapp.message.updated`
+4. Copie o **secret** (`whsec_…`) que a YCloud mostra e informe no painel
+   (desconectando e conectando de novo, ou já na primeira conexão). Sem o
+   secret, todos os webhooks são recusados — é a conferência de assinatura
+   (`YCloud-Signature`)
+
+**Diferenças em relação à Meta direta:**
+
+- Os **modelos de mensagem** (templates) são criados e aprovados no painel
+  da YCloud; no CRM você só envia pelo nome (Disparos → "Usar modelo")
+- Texto livre só dentro da janela de 24h depois que o cliente escreve
+- Não precisa de variáveis novas no Render: chave e secret ficam guardados
+  por usuário no banco (nunca saem do servidor nem entram no backup)
+- Pra voltar à Meta: Desconectar → escolher Provedor "Meta" → conectar
+
+⚠️ Integração escrita pela documentação da YCloud, ainda não testada com
+uma conta real. Teste com uma mensagem sua antes de usar com clientes.
+
+## WhatsApp pela Twilio (outra alternativa à Meta direta)
+
+Mesma ideia da YCloud: você escolhe o provedor em Configurações →
+Integrações → WhatsApp Business API → **Provedor → Twilio**. Meta e YCloud
+continuam funcionando igual.
+
+**Na Twilio (twilio.com/console):**
+
+1. Crie a conta e, em Messaging → Try it out → **Send a WhatsApp message**, use
+   o **sandbox** pra testar (número `14155238886`; cada celular precisa
+   mandar a frase "join …" que a Twilio mostra, uma vez). Em produção, registre
+   um remetente de WhatsApp (Messaging → Senders → WhatsApp senders)
+2. No painel principal, copie o **Account SID** (começa com `AC`) e o
+   **Auth Token**
+
+**No painel do CRM:**
+
+1. Provedor **Twilio** → número (com DDI/DDD), Account SID e Auth Token → Conectar
+2. O painel mostra o **endereço do webhook** (único por usuário). Na Twilio,
+   no sandbox (Sandbox settings) ou no remetente, cole em **"When a message
+   comes in"** com método **POST**. Os status de entrega (enviado/entregue/lido)
+   chegam no mesmo endereço (o painel já manda esse endereço como StatusCallback
+   se a variável `APP_URL` estiver configurada no Render)
+3. Os webhooks são conferidos pela assinatura `X-Twilio-Signature` (usa o
+   Auth Token e a URL exata; por isso `APP_URL` precisa ser o endereço público
+   com https, igual ao que está na Twilio)
+
+**Diferenças em relação à Meta direta:**
+
+- Modelos de mensagem: crie e aprove no **Content Template Builder** da Twilio;
+  no CRM (Disparos → "Usar modelo") informe o **Content SID** (começa com `HX`).
+  As variáveis são enviadas numeradas ({{1}}, {{2}}…)
+- Texto livre só dentro de 24h depois que o cliente escreve
+- O Auth Token fica guardado por usuário no banco (não entra no backup)
+- A Twilio cobra a mensagem dela somada à tarifa da Meta (cobrança em dólar)
+
+⚠️ Integração escrita pela documentação da Twilio, ainda não testada com
+uma conta real. Teste com uma mensagem sua antes de usar com clientes.
 
 ## Configurar a API do WhatsApp Business (opcional)
 
@@ -418,8 +525,9 @@ quando os dados vêm crus e ainda faltam informações:
    cliente de verdade na aba Leads. "Descartar" remove um possível
    lead sem promovê-lo (duplicado, contato errado, etc.)
 
-A leitura da planilha usa a biblioteca SheetJS, carregada via CDN no
-`index.html` — trata .csv e .xlsx da mesma forma no navegador.
+A leitura da planilha usa a biblioteca SheetJS (versão 0.20.3, carregada do
+CDN oficial `cdn.sheetjs.com` no `index.html` — as versões 0.18.x tinham uma
+falha de segurança conhecida) — trata .csv e .xlsx da mesma forma no navegador.
 
 ## Busca global, histórico, etiquetas, campos e anexos
 
@@ -478,12 +586,30 @@ removida manualmente em Comissões.
 
 ## Recursos de IA
 
-Usam a API da Anthropic (modelo Haiku, rápido e barato — dá pra trocar
-em `server/utils/anthropic.js` se quiser mais qualidade em troca de
-custo maior). Precisam da variável `ANTHROPIC_API_KEY` no `.env`
-(gere em https://console.anthropic.com/settings/keys). Sem essa chave
-configurada, os botões continuam aparecendo mas mostram uma mensagem
-de erro ao clicar.
+Funcionam com **Google Gemini (plano gratuito)**, **Groq (plano gratuito)** ou
+com a **API da Anthropic (Claude, pago por uso)** — o provedor é escolhido pelas
+variáveis de ambiente:
+
+- `GEMINI_API_KEY` — crie em https://aistudio.google.com/apikey. Modelo padrão
+  `gemini-3.5-flash-lite`; dá pra trocar com `GEMINI_MODEL`.
+- `GROQ_API_KEY` — crie em https://console.groq.com/keys. Modelo padrão
+  `openai/gpt-oss-120b`; dá pra trocar com `GROQ_MODEL`.
+- `ANTHROPIC_API_KEY` — gere em https://console.anthropic.com/settings/keys
+  (usa o Claude Haiku).
+- `IA_PROVEDOR` — só é preciso se houver mais de uma chave (`gemini`, `groq` ou
+  `anthropic`); sem ele, a prioridade é Gemini, depois Groq, depois Anthropic.
+
+Sem nenhuma das chaves, a IA fica desligada: o assistente flutuante, os
+botões de sugestão, os insights e as opções de IA do WhatsApp somem da tela
+e o resto do painel funciona normalmente. Nos planos gratuitos (Gemini e Groq) há limite
+de uso; ao atingir, a IA responde "limite de uso" e volta sozinha no dia
+seguinte (nada mais do painel é afetado). Todo o código de IA está em
+`server/utils/ia.js`.
+
+⚠️ Os textos enviados à IA incluem trechos de conversas e dados de clientes —
+leia a política de uso de dados do provedor escolhido antes de ligar. No plano
+gratuito do Gemini, o Google informa que o conteúdo enviado pode ser usado para
+melhorar os produtos dele (no plano pago, não).
 
 - **Sugerir mensagem** — no modal de editar cliente, ao lado do botão
   do WhatsApp: gera um rascunho de mensagem de retomada de contato
@@ -684,4 +810,60 @@ melhor o horário escolhido.
 - `GET  /api/instagram/status` — diz se o usuário já conectou (exige token)
 - `POST /api/instagram/configurar` — `{ pageId, pageAccessToken }` (exige token)
 - `POST /api/instagram/desconectar` — (exige token)
-# crm-consorcio
+
+## Recuperação de senha por e-mail ("Esqueci minha senha")
+
+Usa o [Resend](https://resend.com) (API HTTP, sem biblioteca extra). Sem as
+variáveis abaixo o link "Esqueci minha senha" simplesmente não aparece.
+
+- `RESEND_API_KEY` — chave da API do Resend
+- `EMAIL_FROM` — remetente, ex: `Painel CRM <nao-responda@seudominio.com.br>`
+  (o domínio precisa estar verificado no Resend)
+- `APP_URL` — endereço público do painel, ex: `https://crm-consorcio-co0i.onrender.com`
+
+O link enviado vale 60 minutos e só funciona uma vez; o banco guarda apenas o
+hash dele. Ao trocar a senha, todos os aparelhos são desconectados e a pessoa
+recebe um aviso por e-mail. Login, código do 2FA e "esqueci minha senha" têm
+limite de tentativas por IP (e por e-mail, no caso da recuperação).
+
+Rotas: `POST /api/auth/esqueci-senha` (`{ email }`) e
+`POST /api/auth/redefinir-senha` (`{ token, senhaNova }`).
+
+## Notificações push (app fechado)
+
+Avisam no celular/computador quando chega mensagem de cliente (WhatsApp ou
+Instagram) e na hora das tarefas. Gere as chaves uma vez:
+
+```
+cd server && npx web-push generate-vapid-keys
+```
+
+e coloque no ambiente: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e
+`VAPID_SUBJECT` (ex: `mailto:voce@email.com`; se faltar usa o `APP_URL`).
+Cada pessoa ativa em **Configurações → Notificações → Ativar neste aparelho**.
+No iPhone é preciso antes adicionar o painel à Tela de Início.
+
+⚠️ Os lembretes de tarefa são verificados por um agendador dentro do próprio
+servidor. No plano gratuito do Render o servidor "dorme" sem acessos, e aí os
+lembretes não saem na hora — use um plano que não durma.
+
+Rotas (exigem login): `GET /api/push/chave`, `POST /api/push/inscrever`,
+`POST /api/push/cancelar`, `POST /api/push/testar`.
+
+## Backup automático por e-mail
+
+Em **Configurações → Manutenção** dá pra ativar o envio semanal de uma cópia
+dos dados (JSON) para o e-mail da conta, e disparar um envio na hora. Usa as
+mesmas variáveis do Resend. Arquivos até 20 MB vão anexados; acima disso
+chega um aviso para baixar pelo botão Backup. **Os anexos dos clientes ficam
+fora desse arquivo** (use o Backup manual se quiser incluí-los).
+Rotas: `GET/PUT /api/backup/automatico` e `POST /api/backup/automatico/enviar-agora`.
+
+## Segurança dos webhooks da Meta e versão da API
+
+- `META_APP_SECRET` — "Chave secreta do app" da Meta. Quando definida, os
+  webhooks de WhatsApp e Instagram só são aceitos se vierem assinados pela
+  Meta (cabeçalho `X-Hub-Signature-256`). Sem ela, tudo funciona como antes.
+- `META_GRAPH_VERSION` — versão da Graph API (padrão `v22.0`). Fica definida
+  num único lugar (`server/utils/meta.js`); pra subir de versão basta mudar
+  essa variável.

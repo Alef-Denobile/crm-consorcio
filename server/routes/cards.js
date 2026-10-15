@@ -11,6 +11,7 @@ const Anexo = require('../models/Anexo');
 const Contrato = require('../models/Contrato');
 const { registrarAuditoria } = require('../utils/auditoria');
 const { gerarComissaoAutomaticaSeGanho, cancelarComissaoSePerdidoAposGanho } = require('../utils/comissaoAutomatica');
+const { obterRegraPorChave } = require('../utils/regrasComissao');
 const { executarAcaoDeAutomacao } = require('../utils/executarAutomacao');
 const { dispararWebhooks } = require('../utils/dispararWebhooks');
 
@@ -143,7 +144,8 @@ router.put('/:id', async (req, res) => {
     // do mês correspondente, já que trabalha em parcelas mensais.
     if (dados.mes && /^\d{4}-\d{2}/.test(dados.mes)) {
       const contratoVinculado = await Contrato.findOne({ cardId: card._id, userId: req.userId });
-      if (contratoVinculado && !['home_equity', 'car_equity'].includes(contratoVinculado.tipoCarta)) {
+      const regraVinculada = contratoVinculado ? await obterRegraPorChave(req.userId, contratoVinculado.tipoCarta) : null;
+      if (contratoVinculado && !(regraVinculada && regraVinculada.mesIndependente)) {
         contratoVinculado.date = new Date(Number(dados.mes.slice(0, 4)), Number(dados.mes.slice(5, 7)) - 1, 1);
         await contratoVinculado.save();
       }
