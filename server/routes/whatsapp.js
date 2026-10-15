@@ -461,6 +461,7 @@ router.get('/status', auth, async (req, res) => {
       provedor: wb.provedor === 'ycloud' || wb.provedor === 'twilio' ? wb.provedor : 'meta',
       ycloudWebhookPath: wb.provedor === 'ycloud' && wb.webhookToken ? `/api/whatsapp/ycloud-webhook/${wb.webhookToken}` : null,
       twilioWebhookPath: wb.provedor === 'twilio' && wb.webhookToken ? `/api/whatsapp/twilio-webhook/${wb.webhookToken}` : null,
+      ycloudSecretConfigurado: wb.provedor === 'ycloud' && !!wb.webhookSecret,
     });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao verificar a conexão com o WhatsApp.' });
@@ -602,6 +603,22 @@ router.post('/configurar', auth, async (req, res) => {
 });
 
 // POST /api/whatsapp/desconectar
+// Salva (ou troca) só o secret do webhook da YCloud, sem desconectar: a YCloud só mostra o
+// secret depois que o endpoint é criado, e o endpoint precisa do endereço que o CRM gera ao conectar.
+router.post('/ycloud-secret', auth, async (req, res) => {
+  try {
+    const secret = String((req.body && req.body.webhookSecret) || '').trim();
+    if (secret.length < 8) return res.status(400).json({ error: 'Cole o secret completo mostrado pela YCloud (começa com whsec_).' });
+    const user = await User.findById(req.userId);
+    const wb = (user && user.whatsappBusiness) || {};
+    if (wb.provedor !== 'ycloud') return res.status(400).json({ error: 'Conecte primeiro o WhatsApp pela YCloud.' });
+    await User.findByIdAndUpdate(req.userId, { 'whatsappBusiness.webhookSecret': secret });
+    res.status(204).end();
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao salvar o secret.' });
+  }
+});
+
 router.post('/desconectar', auth, async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.userId, {

@@ -237,6 +237,7 @@ let whatsappConfigMsg = null;
 let whatsappProvedor = 'meta'; // provedor ativo do usuário (vem do servidor)
 let whatsappProvedorEscolhido = 'meta'; // escolha no formulário de conexão
 let whatsappYcloudWebhookPath = null;
+let whatsappYcloudSecretOk = false;
 let whatsappTwilioWebhookPath = null;
 let agenteIaAtivo = false;
 let iaProativaAtiva = false;
@@ -1222,6 +1223,7 @@ async function loadWhatsappStatus(){
     iaProativaAtiva = !!data.iaProativaAtiva;
     whatsappProvedor = (data.provedor === 'ycloud' || data.provedor === 'twilio') ? data.provedor : 'meta';
     whatsappYcloudWebhookPath = data.ycloudWebhookPath || null;
+    whatsappYcloudSecretOk = !!data.ycloudSecretConfigurado;
     whatsappTwilioWebhookPath = data.twilioWebhookPath || null;
   }catch(e){
     whatsappConnected = false;
@@ -1312,6 +1314,7 @@ async function salvarWhatsappConfig(){
     whatsappConnected = true;
     whatsappProvedor = whatsappProvedorEscolhido;
     whatsappYcloudWebhookPath = (resp && resp.ycloudWebhookPath) || null;
+    whatsappYcloudSecretOk = !!val('wa-yc-secret');
     whatsappTwilioWebhookPath = (resp && resp.twilioWebhookPath) || null;
     whatsappConfigMsg = { tipo:'ok', texto:'Conectado com sucesso.' };
   }catch(e){
@@ -1320,12 +1323,26 @@ async function salvarWhatsappConfig(){
   whatsappSalvando = false;
   renderApp();
 }
+async function salvarYcloudSecret(){
+  const el = document.getElementById('wa-yc-secret-novo');
+  const valor = el ? el.value.trim() : '';
+  if(!valor){ whatsappConfigMsg = { tipo:'erro', texto:'Cole o secret (whsec_…) mostrado pela YCloud.' }; renderApp(); return; }
+  try{
+    await apiRequest('POST', '/whatsapp/ycloud-secret', { webhookSecret: valor });
+    whatsappYcloudSecretOk = true;
+    whatsappConfigMsg = { tipo:'ok', texto:'Secret salvo. Agora mande uma mensagem de outro celular pra testar.' };
+  }catch(e){
+    whatsappConfigMsg = { tipo:'erro', texto: (e && e.message) || 'Não foi possível salvar o secret.' };
+  }
+  renderApp();
+}
 async function desconectarWhatsapp(){
   try{
     await apiRequest('POST', '/whatsapp/desconectar');
     whatsappConnected = false;
     whatsappProvedor = 'meta';
     whatsappYcloudWebhookPath = null;
+    whatsappYcloudSecretOk = false;
     whatsappTwilioWebhookPath = null;
   }catch(e){
     errorMsg = 'Não foi possível desconectar o WhatsApp Business.';
@@ -6181,7 +6198,13 @@ function renderConfigWhatsapp(){
           <label>Endereço do webhook (cole na YCloud)</label>
           <input type="text" readonly value="${esc(location.origin + whatsappYcloudWebhookPath)}" onclick="this.select()" />
         </div>
-        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b> e <b>whatsapp.message.updated</b>. Copie o secret (whsec_…) que ela mostrar e, se ainda não colou aqui, desconecte e conecte de novo informando o secret.</p>` : ''}` : ''}
+        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b> e <b>whatsapp.message.updated</b>. Depois de criar, a YCloud mostra o secret (whsec_…): cole no campo abaixo.</p>` : ''}
+        <div class="field">
+          <label>Secret do webhook (whsec_…) ${whatsappYcloudSecretOk ? '— ✓ já salvo' : '— ainda não salvo'}</label>
+          <input type="password" id="wa-yc-secret-novo" placeholder="${whatsappYcloudSecretOk ? 'Cole aqui só para trocar o secret' : 'Cole o secret mostrado pela YCloud'}" />
+        </div>
+        <button class="btn-primary" data-action="salvar-ycloud-secret">Salvar secret</button>
+        ${whatsappConfigMsg ? `<p class="settings-page-msg ${whatsappConfigMsg.tipo}">${esc(whatsappConfigMsg.texto)}</p>` : ''}` : ''}
         ${integracoesConfig.assistenteIA ? `
         <div class="settings-page-row">
           <span>Agente IA (responde clientes sozinho)</span>
@@ -6235,7 +6258,7 @@ function renderConfigWhatsapp(){
           <label>Secret do webhook (whsec_…)</label>
           <input type="password" id="wa-yc-secret" placeholder="Mostrado pela YCloud ao criar o webhook" />
         </div>
-        <p class="settings-page-note">Depois de conectar, o painel mostra o endereço do webhook pra você colar na YCloud. O secret pode ser informado agora ou depois (desconectando e conectando de novo).</p>
+        <p class="settings-page-note">Depois de conectar, o painel mostra o endereço do webhook pra você colar na YCloud. Pode deixar o secret em branco agora: a YCloud só mostra o secret depois de criar o endpoint, e você cola ele aqui depois de conectar.</p>
         ` : `
         <div class="field">
           <label>Phone Number ID</label>
@@ -7361,6 +7384,8 @@ function bindAppEvents(){
   if(salvarWaBtn) salvarWaBtn.addEventListener('click', salvarWhatsappConfig);
   const waProvEl = document.getElementById('wa-provedor');
   if(waProvEl) waProvEl.addEventListener('change', ()=>{ whatsappProvedorEscolhido = (waProvEl.value==='ycloud' || waProvEl.value==='twilio') ? waProvEl.value : 'meta'; whatsappConfigMsg = null; renderApp(); });
+  const salvarYcSecretBtn = app.querySelector('[data-action="salvar-ycloud-secret"]');
+  if(salvarYcSecretBtn) salvarYcSecretBtn.addEventListener('click', salvarYcloudSecret);
   const desconectarWaBtn = app.querySelector('[data-action="desconectar-whatsapp"]');
   if(desconectarWaBtn) desconectarWaBtn.addEventListener('click', desconectarWhatsapp);
 
