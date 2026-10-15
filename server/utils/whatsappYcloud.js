@@ -107,6 +107,28 @@ function normalizarEventoYcloud(evento, numeroConta) {
       statuses: [{ id: m.wamid || m.id, ids: [m.wamid, m.id].filter(Boolean), status }],
     };
   }
+
+  // Mensagem que VOCÊ mandou pelo app WhatsApp Business (celular) num número em modo "coexistência":
+  // a YCloud avisa com um "eco". Vira uma mensagem enviada (direction 'out') no card do cliente.
+  const TIPOS_ECO = ['whatsapp.smb.message.echoes', 'whatsapp.smb.message.created', 'whatsapp.echo_message.created'];
+  if (TIPOS_ECO.includes(evento.type) && evento.whatsappMessage) {
+    const m = evento.whatsappMessage;
+    const rotulos = { image: '📷 Foto', audio: '🎤 Áudio', document: '📄 Documento', video: '🎥 Vídeo', sticker: 'Figurinha' };
+    const texto = m.type === 'text' && m.text ? m.text.body : ((m[m.type] && m[m.type].caption) || rotulos[m.type] || '[mensagem em formato não suportado]');
+    return {
+      metadata,
+      contacts: [],
+      messages: [],
+      statuses: [],
+      ecos: [{
+        to: String(m.to || '').replace(/\D/g, ''),
+        id: m.wamid || m.id,
+        ids: [m.wamid, m.id].filter(Boolean),
+        texto,
+        timestamp: m.sendTime ? String(Math.floor(new Date(m.sendTime).getTime() / 1000)) : undefined,
+      }],
+    };
+  }
   return null;
 }
 

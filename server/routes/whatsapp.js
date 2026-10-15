@@ -273,6 +273,27 @@ async function processarEventoDeMensagens(value) {
   const user = await User.findOne({ 'whatsappBusiness.phoneNumberId': phoneNumberId });
   if (!user) return; // número não pertence a nenhuma conta cadastrada aqui
 
+  // ecos: mensagens que o próprio usuário mandou pelo app do celular (modo coexistência)
+  for (const eco of value.ecos || []) {
+    try {
+      const jaExiste = (eco.ids || [eco.id]).filter(Boolean);
+      if (jaExiste.length && (await Message.findOne({ whatsappMessageId: { $in: jaExiste }, direction: 'out' }))) continue; // já veio do CRM ou é repetição
+      const cardDoEco = await Card.findOne({ userId: user._id, telefoneNormalizado: normalizarTelefone(eco.to) });
+      if (!cardDoEco) continue; // só registra conversa de quem já está no funil
+      await Message.create({
+        userId: user._id,
+        cardId: cardDoEco._id,
+        direction: 'out',
+        texto: eco.texto,
+        status: 'sent',
+        whatsappMessageId: eco.id,
+        timestamp: eco.timestamp ? new Date(parseInt(eco.timestamp, 10) * 1000) : new Date(),
+      });
+    } catch (err) {
+      console.error('[whatsapp] erro ao registrar mensagem enviada pelo celular:', err.message);
+    }
+  }
+
   for (const msg of value.messages || []) {
     // os provedores reenviam o mesmo evento se demorarmos a responder: não salva duas vezes
     if (msg.id && (await Message.findOne({ whatsappMessageId: msg.id, direction: 'in' }))) continue;

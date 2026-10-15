@@ -137,3 +137,16 @@ test('assinatura aceita o secret com prefixo whsec_ lido de formas diferentes e 
   assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave(secret), '', o), 'secret_nao_configurado');
   assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave(secret), secret, { agoraSeg: t + 9999 }), 'evento_antigo_demais');
 });
+
+test('eco de mensagem enviada pelo app do celular vira "eco" normalizado', () => {
+  const { normalizarEventoYcloud } = require('../utils/whatsappYcloud');
+  const v = normalizarEventoYcloud({
+    type: 'whatsapp.smb.message.echoes',
+    whatsappMessage: { id: 'y1', wamid: 'w1', from: '+5515988053447', to: '+5515981701736', type: 'text', text: { body: 'Oi, tudo bem?' }, sendTime: '2026-10-15T15:30:00Z' },
+  }, '5515988053447');
+  assert.equal(v.messages.length, 0);
+  assert.equal(v.ecos.length, 1);
+  assert.equal(v.ecos[0].to, '5515981701736');
+  assert.equal(v.ecos[0].texto, 'Oi, tudo bem?');
+  assert.deepEqual(v.ecos[0].ids, ['w1', 'y1']);
+});
