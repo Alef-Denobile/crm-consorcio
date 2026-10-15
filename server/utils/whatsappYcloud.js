@@ -16,24 +16,50 @@ function paraE164(numero) {
 // onde hmac = HMAC-SHA256(secret, `${t}.${corpoCru}`) em hexadecimal. O corpo precisa ser o cru
 // (bytes originais), nunca o JSON re-serializado. Rejeita eventos velhos demais (anti-replay).
 function assinaturaYcloudValida(corpoCru, cabecalho, secret, opcoes = {}) {
+  return motivoAssinaturaYcloud(corpoCru, cabecalho, secret, opcoes) === 'ok';
+}
+
+// Chaves possíveis a partir do secret que a YCloud mostra ("whsec_..."): o texto inteiro, sem o
+// prefixo, e (como em outros serviços de webhook) o trecho depois do prefixo lido como base64.
+// Todas derivam do mesmo secret, então aceitar qualquer uma não enfraquece a conferência.
+function chavesDoSecret(secret) {
+  const s = String(secret || '').trim();
+  const chaves = [s];
+  const semPrefixo = s.replace(/^whsec_/, '');
+  if (semPrefixo !== s) {
+    chaves.push(semPrefixo);
+    try { const b = Buffer.from(semPrefixo, 'base64'); if (b.length) chaves.push(b); } catch (e) { /* ignora */ }
+  }
+  return chaves;
+}
+
+// Devolve 'ok' ou o motivo da recusa (usado nos logs, pra dar pra diagnosticar sem ver o secret).
+function motivoAssinaturaYcloud(corpoCru, cabecalho, secret, opcoes = {}) {
   const toleranciaSeg = opcoes.toleranciaSeg || 300;
   const agoraSeg = opcoes.agoraSeg || Math.floor(Date.now() / 1000);
-  if (!secret || !cabecalho || !corpoCru) return false;
+  if (!secret) return 'secret_nao_configurado';
+  if (!cabecalho) return 'sem_cabecalho_de_assinatura';
+  if (!corpoCru) return 'sem_corpo_cru';
   const partes = {};
   for (const p of String(cabecalho).split(',')) {
     const i = p.indexOf('=');
     if (i > 0) partes[p.slice(0, i).trim()] = p.slice(i + 1).trim();
   }
-  if (!partes.t || !partes.s) return false;
+  if (!partes.t || !partes.s) return 'cabecalho_mal_formado';
   const bruto = Buffer.isBuffer(corpoCru) ? corpoCru.toString('utf8') : String(corpoCru);
-  const esperado = crypto.createHmac('sha256', secret).update(`${partes.t}.${bruto}`).digest('hex');
-  const a = Buffer.from(esperado);
   const b = Buffer.from(partes.s);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
+  let confere = false;
+  for (const chave of chavesDoSecret(secret)) {
+    const esperado = crypto.createHmac('sha256', chave).update(`${partes.t}.${bruto}`).digest('hex');
+    const a = Buffer.from(esperado);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) { confere = true; break; }
+  }
+  if (!confere) return 'assinatura_diferente';
   let t = Number(partes.t);
-  if (!Number.isFinite(t)) return false;
+  if (!Number.isFinite(t)) return 'cabecalho_mal_formado';
   if (t > 1e12) t = Math.floor(t / 1000); // veio em milissegundos
-  return Math.abs(agoraSeg - t) <= toleranciaSeg;
+  if (Math.abs(agoraSeg - t) > toleranciaSeg) return 'evento_antigo_demais';
+  return 'ok';
 }
 
 const TIPOS_MIDIA = ['image', 'audio', 'document', 'video'];
@@ -128,6 +154,7 @@ module.exports = {
   YCLOUD_API,
   paraE164,
   assinaturaYcloudValida,
+  motivoAssinaturaYcloud,
   normalizarEventoYcloud,
   enviarTextoYcloud,
   enviarTemplateYcloud,

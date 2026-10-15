@@ -121,3 +121,19 @@ test('provedor padrão é Meta e o envio da Meta continua igual', () =>
     assert.strictEqual(JSON.parse(chamadas[0].opts.body).messaging_product, 'whatsapp');
     assert.strictEqual(r.messages[0].id, 'wamid.M');
   }));
+
+test('assinatura aceita o secret com prefixo whsec_ lido de formas diferentes e informa o motivo', () => {
+  const { motivoAssinaturaYcloud } = require('../utils/whatsappYcloud');
+  const corpo = '{"a":1}';
+  const t = 1800000000;
+  const secret = 'whsec_' + Buffer.from('chave-binaria-123').toString('base64');
+  const comChave = (k) => `t=${t},s=` + crypto.createHmac('sha256', k).update(`${t}.${corpo}`).digest('hex');
+  const o = { agoraSeg: t };
+  assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave(secret), secret, o), 'ok');
+  assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave(secret.slice(6)), secret, o), 'ok');
+  assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave(Buffer.from('chave-binaria-123')), secret, o), 'ok');
+  assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave('outra'), secret, o), 'assinatura_diferente');
+  assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), '', secret, o), 'sem_cabecalho_de_assinatura');
+  assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave(secret), '', o), 'secret_nao_configurado');
+  assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave(secret), secret, { agoraSeg: t + 9999 }), 'evento_antigo_demais');
+});

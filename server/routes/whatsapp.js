@@ -76,7 +76,7 @@ async function baixarMidiaDoWhatsapp(user, card, mediaId, nomeSugerido, linkDire
 
 // Envio de texto/modelo: ver utils/whatsappEnvio.js (escolhe Meta ou YCloud conforme o usuário).
 const { provedorDe, enviarTexto: enviarMensagemGraph, enviarTemplate: enviarTemplateGraph } = require('../utils/whatsappEnvio');
-const { assinaturaYcloudValida, normalizarEventoYcloud } = require('../utils/whatsappYcloud');
+const { motivoAssinaturaYcloud, normalizarEventoYcloud } = require('../utils/whatsappYcloud');
 const { assinaturaTwilioValida, normalizarEventoTwilio, cabecalhoBasic } = require('../utils/whatsappTwilio');
 const crypto = require('crypto');
 
@@ -221,11 +221,17 @@ router.post('/ycloud-webhook/:token', async (req, res) => {
   try {
     const token = String(req.params.token || '');
     const user = token.length >= 16 ? await User.findOne({ 'whatsappBusiness.webhookToken': token, 'whatsappBusiness.provedor': 'ycloud' }) : null;
-    const secret = user && user.whatsappBusiness.webhookSecret;
-    if (!user || !secret || !assinaturaYcloudValida(req.rawBody, req.get('ycloud-signature'), secret)) {
+    if (!user) {
+      console.warn('[ycloud] webhook recusado: código do endereço não bate com nenhum usuário conectado na YCloud');
+      return res.sendStatus(403);
+    }
+    const motivo = motivoAssinaturaYcloud(req.rawBody, req.get('ycloud-signature'), user.whatsappBusiness.webhookSecret);
+    if (motivo !== 'ok') {
+      console.warn(`[ycloud] webhook recusado: ${motivo}`);
       return res.sendStatus(403);
     }
     res.sendStatus(200); // responde rápido: a YCloud reenvia se não receber 2xx
+    console.log(`[ycloud] evento recebido: ${req.body && req.body.type}`);
     const value = normalizarEventoYcloud(req.body, user.whatsappBusiness.phoneNumberId);
     if (value) await processarEventoDeMensagens(value);
   } catch (err) {
@@ -240,10 +246,14 @@ router.post('/twilio-webhook/:token', express.urlencoded({ extended: false }), a
   try {
     const token = String(req.params.token || '');
     const user = token.length >= 16 ? await User.findOne({ 'whatsappBusiness.webhookToken': token, 'whatsappBusiness.provedor': 'twilio' }) : null;
-    if (!user) return res.sendStatus(403);
+    if (!user) {
+      console.warn('[twilio] webhook recusado: código do endereço não bate com nenhum usuário conectado na Twilio');
+      return res.sendStatus(403);
+    }
     const base = String(process.env.APP_URL || '').replace(/\/$/, '') || `${req.protocol}://${req.get('host')}`;
     const url = `${base}/api/whatsapp/twilio-webhook/${token}`;
     if (!assinaturaTwilioValida(url, req.body, user.whatsappBusiness.accessToken, req.get('x-twilio-signature'))) {
+      console.warn(`[twilio] webhook recusado: assinatura diferente (URL usada na conferência: ${url})`);
       return res.sendStatus(403);
     }
     res.status(200).type('text/xml').send('<Response></Response>'); // vazio = não responde nada automaticamente
@@ -273,7 +283,7 @@ async function processarEventoDeMensagens(value) {
     if (!card) {
       // mensagem de um número que ainda não existe no funil — cria um lead novo automaticamente
       const coluna = await Column.findOne({ userId: user._id, tipo: 'aberto' }).sort({ ordem: 1 });
-      if (!coluna) continue; // usuário não tem nenhuma coluna "em aberto" pra receber o lead
+      if (!coluna) { console.warn('[whatsapp] mensagem recebida, mas o usuário não tem coluna "em aberto" pra criar o lead'); continue; } // usuário não tem nenhuma coluna "em aberto" pra receber o lead
       const nomeContato =
         (value.contacts && value.contacts[0] && value.contacts[0].profile && value.contacts[0].profile.name) ||
         'Novo contato (WhatsApp)';
