@@ -3,26 +3,7 @@ const Card = require('../models/Card');
 const Message = require('../models/Message');
 const User = require('../models/User');
 
-const { GRAPH_API } = require('./meta');
-
-async function enviarMensagemGraphSimples(user, card, texto) {
-  const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.phoneNumberId}/messages`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${user.whatsappBusiness.accessToken}`,
-    },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: card.telefoneNormalizado,
-      type: 'text',
-      text: { body: texto },
-    }),
-  });
-  const data = await resp.json();
-  if (!resp.ok) throw new Error((data.error && data.error.message) || 'Erro ao enviar mensagem.');
-  return data;
-}
+const { enviarTexto: enviarMensagemGraphSimples } = require('./whatsappEnvio');
 
 // Roda periodicamente (chamado de server.js via setInterval). Manda cada mensagem
 // agendada cujo horário já chegou, e marca o resultado.

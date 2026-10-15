@@ -69,12 +69,12 @@ process.on('unhandledRejection', (motivo) => {
 });
 
 app.use(cors());
-// Guarda o corpo CRU só dos webhooks da Meta — a conferência da assinatura (X-Hub-Signature-256)
+// Guarda o corpo CRU só dos webhooks (Meta e YCloud) — a conferência da assinatura (X-Hub-Signature-256)
 // precisa dos bytes exatos que a Meta mandou, e depois do parse do JSON isso se perde.
 app.use(express.json({
   limit: '50mb',
   verify: (req, _res, buf) => {
-    if (req.originalUrl.startsWith('/api/whatsapp/webhook') || req.originalUrl.startsWith('/api/instagram/webhook')) {
+    if (req.originalUrl.startsWith('/api/whatsapp/webhook') || req.originalUrl.startsWith('/api/whatsapp/ycloud-webhook') || req.originalUrl.startsWith('/api/instagram/webhook')) {
       req.rawBody = buf;
     }
   },

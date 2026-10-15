@@ -15,6 +15,10 @@ const whatsappBusinessSchema = new mongoose.Schema(
     phoneNumberId: { type: String, default: null },
     accessToken: { type: String, default: null },
     wabaId: { type: String, default: null },
+    provedor: { type: String, enum: ['meta', 'ycloud', 'twilio'], default: 'meta' }, // quem entrega o WhatsApp: Meta direto, YCloud ou Twilio
+    accountSid: { type: String, default: null }, // Twilio: Account SID (o Auth Token fica em accessToken)
+    webhookToken: { type: String, default: null }, // YCloud: identifica o usuário no endereço do webhook
+    webhookSecret: { type: String, default: null }, // YCloud: secret whsec_... pra conferir a assinatura
     agenteIaAtivo: { type: Boolean, default: false }, // responde clientes sozinho, sem revisão humana
     iaProativaAtiva: { type: Boolean, default: false }, // só sugere no card, nunca envia nada sozinha
   },

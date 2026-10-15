@@ -207,6 +207,11 @@ let assistenteBolhaY = null;
 let assistenteAberto = false;
 let assistenteMensagens = [];
 let assistenteEnviando = false;
+let assistenteAnimando = null; // 'abrindo' | 'fechando' | null — só anima na abertura/fechamento, não a cada re-render
+let assistenteEditandoNome = false;
+const ASSISTENTE_NOME_PADRAO = 'Assistente do CRM';
+let assistenteNome = ASSISTENTE_NOME_PADRAO;
+try{ assistenteNome = (localStorage.getItem('assistente-nome')||'').trim().slice(0,30) || ASSISTENTE_NOME_PADRAO; }catch(err){}
 let assistenteDrag = null; // { startX, startY, bolhaXInicial, bolhaYInicial, moveu, pointerId }
 try{
   const posSalva = JSON.parse(localStorage.getItem('assistente-bolha-pos')||'null');
@@ -229,6 +234,10 @@ let icsGerando = false;
 let whatsappConnected = false;
 let whatsappSalvando = false;
 let whatsappConfigMsg = null;
+let whatsappProvedor = 'meta'; // provedor ativo do usuário (vem do servidor)
+let whatsappProvedorEscolhido = 'meta'; // escolha no formulário de conexão
+let whatsappYcloudWebhookPath = null;
+let whatsappTwilioWebhookPath = null;
 let agenteIaAtivo = false;
 let iaProativaAtiva = false;
 let agendamentos = [];
@@ -1211,6 +1220,9 @@ async function loadWhatsappStatus(){
     whatsappConnected = !!data.connected;
     agenteIaAtivo = !!data.agenteIaAtivo;
     iaProativaAtiva = !!data.iaProativaAtiva;
+    whatsappProvedor = (data.provedor === 'ycloud' || data.provedor === 'twilio') ? data.provedor : 'meta';
+    whatsappYcloudWebhookPath = data.ycloudWebhookPath || null;
+    whatsappTwilioWebhookPath = data.twilioWebhookPath || null;
   }catch(e){
     whatsappConnected = false;
   }
@@ -1268,23 +1280,39 @@ async function definirAgenteIa(ativo){
   renderApp();
 }
 async function salvarWhatsappConfig(){
-  const phoneEl = document.getElementById('wa-phone-id');
-  const tokenEl = document.getElementById('wa-token');
-  const wabaEl = document.getElementById('wa-waba-id');
-  const phoneNumberId = phoneEl ? phoneEl.value.trim() : '';
-  const accessToken = tokenEl ? tokenEl.value.trim() : '';
-  const wabaId = wabaEl ? wabaEl.value.trim() : '';
-  if(!phoneNumberId || !accessToken){
-    whatsappConfigMsg = { tipo:'erro', texto:'Preencha o Phone Number ID e o Access Token.' };
-    renderApp();
-    return;
+  const val = (id)=>{ const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  let payload;
+  if(whatsappProvedorEscolhido === 'twilio'){
+    payload = { provedor:'twilio', numero: val('wa-tw-numero'), accountSid: val('wa-tw-sid'), authToken: val('wa-tw-token') };
+    if(!payload.numero || !payload.accountSid || !payload.authToken){
+      whatsappConfigMsg = { tipo:'erro', texto:'Preencha o número do WhatsApp, o Account SID e o Auth Token da Twilio.' };
+      renderApp();
+      return;
+    }
+  } else if(whatsappProvedorEscolhido === 'ycloud'){
+    payload = { provedor:'ycloud', numero: val('wa-yc-numero'), apiKey: val('wa-yc-apikey'), webhookSecret: val('wa-yc-secret') };
+    if(!payload.numero || !payload.apiKey){
+      whatsappConfigMsg = { tipo:'erro', texto:'Preencha o número do WhatsApp e a API Key da YCloud.' };
+      renderApp();
+      return;
+    }
+  } else {
+    payload = { phoneNumberId: val('wa-phone-id'), accessToken: val('wa-token'), wabaId: val('wa-waba-id') };
+    if(!payload.phoneNumberId || !payload.accessToken){
+      whatsappConfigMsg = { tipo:'erro', texto:'Preencha o Phone Number ID e o Access Token.' };
+      renderApp();
+      return;
+    }
   }
   whatsappSalvando = true;
   whatsappConfigMsg = null;
   renderApp();
   try{
-    await apiRequest('POST', '/whatsapp/configurar', { phoneNumberId, accessToken, wabaId });
+    const resp = await apiRequest('POST', '/whatsapp/configurar', payload);
     whatsappConnected = true;
+    whatsappProvedor = whatsappProvedorEscolhido;
+    whatsappYcloudWebhookPath = (resp && resp.ycloudWebhookPath) || null;
+    whatsappTwilioWebhookPath = (resp && resp.twilioWebhookPath) || null;
     whatsappConfigMsg = { tipo:'ok', texto:'Conectado com sucesso.' };
   }catch(e){
     whatsappConfigMsg = { tipo:'erro', texto: e.message || 'Não foi possível salvar a configuração.' };
@@ -1296,6 +1324,9 @@ async function desconectarWhatsapp(){
   try{
     await apiRequest('POST', '/whatsapp/desconectar');
     whatsappConnected = false;
+    whatsappProvedor = 'meta';
+    whatsappYcloudWebhookPath = null;
+    whatsappTwilioWebhookPath = null;
   }catch(e){
     errorMsg = 'Não foi possível desconectar o WhatsApp Business.';
   }
@@ -4601,15 +4632,17 @@ function renderAssistente(){
   const posBolha = assistenteBolhaX!=null ? `left:${assistenteBolhaX}px; top:${assistenteBolhaY}px; right:auto; bottom:auto;` : '';
 
   root.innerHTML = `
-    <button id="assistente-bolha" class="assistente-bolha" style="${posBolha}" title="Assistente do CRM">${assistenteAberto ? '✕' : '💬'}</button>
+    <button id="assistente-bolha" class="assistente-bolha" style="${posBolha}" title="${esc(assistenteNome)}">${assistenteAberto ? '✕' : '💬'}</button>
     ${assistenteAberto ? `
-      <div class="assistente-painel" id="assistente-painel">
+      <div class="assistente-painel${assistenteAnimando ? ' '+assistenteAnimando : ''}" id="assistente-painel">
         <div class="assistente-painel-head">
-          <span>✨ Assistente do CRM</span>
+          ${assistenteEditandoNome
+            ? `<span class="assistente-nome-edit">✨ <input type="text" id="assistente-nome-input" maxlength="30" value="${esc(assistenteNome)}" aria-label="Nome do assistente" /></span>`
+            : `<span class="assistente-nome">✨ <span class="assistente-nome-txt">${esc(assistenteNome)}</span><button id="assistente-editar-nome" class="assistente-editar-nome" title="Editar nome" aria-label="Editar nome do assistente">${ICON_EDIT}</button></span>`}
           <button id="assistente-fechar" title="Fechar">✕</button>
         </div>
         <div class="assistente-mensagens" id="assistente-mensagens-lista">
-          ${!assistenteMensagens.length ? `<div class="assistente-msg assistente-msg-assistant">Oi! Pode perguntar qualquer coisa sobre como usar o CRM — Pipeline, Agenda, GEROT, Comissões, Fluxos, o que precisar.</div>` : ''}
+          ${!assistenteMensagens.length ? `<div class="assistente-msg assistente-msg-assistant">Oi! Eu sou ${esc(assistenteNome)}. Pode perguntar qualquer coisa sobre como usar o CRM — Pipeline, Agenda, GEROT, Comissões, Fluxos, o que precisar.</div>` : ''}
           ${assistenteMensagens.map(m=>`<div class="assistente-msg assistente-msg-${m.role}">${esc(m.content)}</div>`).join('')}
           ${assistenteEnviando ? `<div class="assistente-msg assistente-msg-assistant assistente-digitando">Digitando…</div>` : ''}
         </div>
@@ -4622,6 +4655,8 @@ function renderAssistente(){
   `;
   if(assistenteAberto) posicionarPainelAssistente();
   ligarBindingsAssistente();
+  assistenteAnimando = null; // a animação roda uma vez; re-renders seguintes (ex.: nova mensagem) não repetem
+  if(assistenteEditandoNome){ const ni = document.getElementById('assistente-nome-input'); if(ni){ ni.focus(); ni.select(); } }
   const lista = document.getElementById('assistente-mensagens-lista');
   if(lista) lista.scrollTop = lista.scrollHeight;
 }
@@ -4640,6 +4675,35 @@ function posicionarPainelAssistente(){
   top = Math.min(Math.max(12, top), window.innerHeight - altura - 12);
   painel.style.left = left+'px';
   painel.style.top = top+'px';
+  // cresce/encolhe a partir da bolinha
+  painel.style.transformOrigin = (rectBolha.left + rectBolha.width/2 - left)+'px '+(rectBolha.top + rectBolha.height/2 - top)+'px';
+}
+function alternarAssistente(){
+  if(assistenteAberto){
+    if(assistenteAnimando==='fechando') return;
+    const painel = document.getElementById('assistente-painel');
+    const reduz = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if(!painel || reduz){ assistenteAberto = false; assistenteEditandoNome = false; renderAssistente(); return; }
+    assistenteAnimando = 'fechando';
+    painel.classList.add('fechando');
+    const bolha = document.getElementById('assistente-bolha');
+    if(bolha) bolha.textContent = '💬';
+    setTimeout(()=>{ assistenteAberto = false; assistenteEditandoNome = false; assistenteAnimando = null; renderAssistente(); }, 220);
+  } else {
+    assistenteAberto = true;
+    assistenteAnimando = 'abrindo';
+    renderAssistente();
+  }
+}
+function salvarNomeAssistente(){
+  const ni = document.getElementById('assistente-nome-input');
+  if(ni){
+    const novo = ni.value.trim().slice(0,30) || ASSISTENTE_NOME_PADRAO;
+    assistenteNome = novo;
+    try{ localStorage.setItem('assistente-nome', novo); }catch(err){}
+  }
+  assistenteEditandoNome = false;
+  renderAssistente();
 }
 async function enviarMensagemAssistente(){
   const input = document.getElementById('assistente-input');
@@ -4694,8 +4758,7 @@ function ligarBindingsAssistente(){
         assistenteBolhaY = parseFloat(bolha.style.top);
         try{ localStorage.setItem('assistente-bolha-pos', JSON.stringify({x:assistenteBolhaX, y:assistenteBolhaY})); }catch(err){}
       } else {
-        assistenteAberto = !assistenteAberto;
-        renderAssistente();
+        alternarAssistente();
       }
       assistenteDrag = null;
     };
@@ -4703,7 +4766,18 @@ function ligarBindingsAssistente(){
     bolha.addEventListener('pointercancel', ()=>{ assistenteDrag = null; });
   }
   const fecharBtn = document.getElementById('assistente-fechar');
-  if(fecharBtn) fecharBtn.addEventListener('click', ()=>{ assistenteAberto = false; renderAssistente(); });
+  if(fecharBtn) fecharBtn.addEventListener('click', alternarAssistente);
+  const editarNomeBtn = document.getElementById('assistente-editar-nome');
+  if(editarNomeBtn) editarNomeBtn.addEventListener('click', ()=>{ assistenteEditandoNome = true; renderAssistente(); });
+  const nomeInput = document.getElementById('assistente-nome-input');
+  if(nomeInput){
+    let cancelado = false;
+    nomeInput.addEventListener('keydown', (e)=>{
+      if(e.key==='Enter'){ e.preventDefault(); nomeInput.blur(); }
+      else if(e.key==='Escape'){ cancelado = true; assistenteEditandoNome = false; renderAssistente(); }
+    });
+    nomeInput.addEventListener('blur', ()=>{ if(!cancelado && assistenteEditandoNome) salvarNomeAssistente(); });
+  }
   const enviarBtn = document.getElementById('assistente-enviar');
   if(enviarBtn) enviarBtn.addEventListener('click', enviarMensagemAssistente);
   const input = document.getElementById('assistente-input');
@@ -6092,6 +6166,22 @@ function renderConfigWhatsapp(){
       </div>
       ${whatsappConnected ? `
         <p class="settings-page-note">Conversas ficam registradas dentro do card de cada cliente. Pra reconfigurar, desconecte e conecte de novo com os dados atualizados.</p>
+        ${whatsappProvedor==='twilio' ? `
+        <div class="settings-page-row"><span>Provedor</span><span>Twilio</span></div>
+        ${whatsappTwilioWebhookPath ? `
+        <div class="field">
+          <label>Endereço do webhook (cole na Twilio)</label>
+          <input type="text" readonly value="${esc((location.origin) + whatsappTwilioWebhookPath)}" onclick="this.select()" />
+        </div>
+        <p class="settings-page-note">Na Twilio, no número/remetente de WhatsApp: em <b>“When a message comes in”</b> cole esse endereço, com o método <b>HTTP POST</b>. Os status de entrega chegam pelo mesmo endereço.</p>` : ''}` : ''}
+        ${whatsappProvedor==='ycloud' ? `
+        <div class="settings-page-row"><span>Provedor</span><span>YCloud</span></div>
+        ${whatsappYcloudWebhookPath ? `
+        <div class="field">
+          <label>Endereço do webhook (cole na YCloud)</label>
+          <input type="text" readonly value="${esc(location.origin + whatsappYcloudWebhookPath)}" onclick="this.select()" />
+        </div>
+        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b> e <b>whatsapp.message.updated</b>. Copie o secret (whsec_…) que ela mostrar e, se ainda não colou aqui, desconecte e conecte de novo informando o secret.</p>` : ''}` : ''}
         ${integracoesConfig.assistenteIA ? `
         <div class="settings-page-row">
           <span>Agente IA (responde clientes sozinho)</span>
@@ -6111,6 +6201,43 @@ function renderConfigWhatsapp(){
         <button class="btn-outline" data-action="desconectar-whatsapp">Desconectar</button>
       ` : `
         <div class="field">
+          <label>Provedor</label>
+          <select id="wa-provedor">
+            <option value="meta" ${whatsappProvedorEscolhido==='meta'?'selected':''}>Meta (API oficial direta)</option>
+            <option value="ycloud" ${whatsappProvedorEscolhido==='ycloud'?'selected':''}>YCloud</option>
+            <option value="twilio" ${whatsappProvedorEscolhido==='twilio'?'selected':''}>Twilio</option>
+          </select>
+        </div>
+        ${whatsappProvedorEscolhido==='twilio' ? `
+        <div class="field">
+          <label>Número do WhatsApp na Twilio</label>
+          <input type="text" id="wa-tw-numero" placeholder="Ex: 5515988053447 (com DDI e DDD). No sandbox: 14155238886" />
+        </div>
+        <div class="field">
+          <label>Account SID</label>
+          <input type="text" id="wa-tw-sid" placeholder="Começa com AC… (painel principal da Twilio)" />
+        </div>
+        <div class="field">
+          <label>Auth Token</label>
+          <input type="password" id="wa-tw-token" placeholder="Painel principal da Twilio → Auth Token" />
+        </div>
+        <p class="settings-page-note">Depois de conectar, o painel mostra o endereço do webhook pra você colar na Twilio. O mesmo Auth Token é usado pra conferir a assinatura dos webhooks.</p>
+        ` : whatsappProvedorEscolhido==='ycloud' ? `
+        <div class="field">
+          <label>Número do WhatsApp conectado na YCloud</label>
+          <input type="text" id="wa-yc-numero" placeholder="Ex: 5515988053447 (com DDI e DDD)" />
+        </div>
+        <div class="field">
+          <label>API Key da YCloud</label>
+          <input type="password" id="wa-yc-apikey" placeholder="Developers → API Keys" />
+        </div>
+        <div class="field">
+          <label>Secret do webhook (whsec_…)</label>
+          <input type="password" id="wa-yc-secret" placeholder="Mostrado pela YCloud ao criar o webhook" />
+        </div>
+        <p class="settings-page-note">Depois de conectar, o painel mostra o endereço do webhook pra você colar na YCloud. O secret pode ser informado agora ou depois (desconectando e conectando de novo).</p>
+        ` : `
+        <div class="field">
           <label>Phone Number ID</label>
           <input type="text" id="wa-phone-id" placeholder="Ex: 109xxxxxxxxxxxx" />
         </div>
@@ -6121,11 +6248,11 @@ function renderConfigWhatsapp(){
         <div class="field">
           <label>WABA ID (opcional)</label>
           <input type="text" id="wa-waba-id" placeholder="ID da conta comercial do WhatsApp" />
-        </div>
+        </div>`}
         ${whatsappConfigMsg ? `<p class="settings-page-msg ${whatsappConfigMsg.tipo}">${esc(whatsappConfigMsg.texto)}</p>` : ''}
         <button class="btn-primary" data-action="salvar-whatsapp-config" ${whatsappSalvando?'disabled':''}>${whatsappSalvando?'Salvando…':'Conectar'}</button>
       `}
-      <p class="settings-page-note">Requer conta comercial no Meta com o produto WhatsApp ativado. Passo a passo completo no README.</p>
+      <p class="settings-page-note">${whatsappProvedorEscolhido==='twilio' ? 'Requer conta na Twilio com um remetente de WhatsApp. Passo a passo no README.' : whatsappProvedorEscolhido==='ycloud' ? 'Requer conta na YCloud com um número de WhatsApp conectado. Passo a passo no README.' : 'Requer conta comercial no Meta com o produto WhatsApp ativado. Passo a passo completo no README.'}</p>
     </div>
 
     <div class="settings-page-section">
@@ -7232,6 +7359,8 @@ function bindAppEvents(){
 
   const salvarWaBtn = app.querySelector('[data-action="salvar-whatsapp-config"]');
   if(salvarWaBtn) salvarWaBtn.addEventListener('click', salvarWhatsappConfig);
+  const waProvEl = document.getElementById('wa-provedor');
+  if(waProvEl) waProvEl.addEventListener('change', ()=>{ whatsappProvedorEscolhido = (waProvEl.value==='ycloud' || waProvEl.value==='twilio') ? waProvEl.value : 'meta'; whatsappConfigMsg = null; renderApp(); });
   const desconectarWaBtn = app.querySelector('[data-action="desconectar-whatsapp"]');
   if(desconectarWaBtn) desconectarWaBtn.addEventListener('click', desconectarWhatsapp);
 

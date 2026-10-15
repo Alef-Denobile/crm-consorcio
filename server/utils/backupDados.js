@@ -25,7 +25,7 @@ async function montarBackup(userId, { incluirAnexos = true } = {}) {
     automacoes, fluxos, fluxoExecucoes, camposPersonalizados,
     mensagensAgendadas, metasVendas, possiveisLeads, regras, anexos,
   ] = await Promise.all([
-    User.findById(userId).select('-senhaHash -whatsappBusiness.accessToken -googleCalendar.accessToken -googleCalendar.refreshToken -twoFactorSecret -resetSenhaHash -resetSenhaExpira -icsToken'),
+    User.findById(userId).select('-senhaHash -whatsappBusiness.accessToken -whatsappBusiness.webhookSecret -whatsappBusiness.webhookToken -whatsappBusiness.accountSid -googleCalendar.accessToken -googleCalendar.refreshToken -twoFactorSecret -resetSenhaHash -resetSenhaExpira -icsToken'),
     Card.find({ userId }),
     Column.find({ userId }),
     Funil.find({ userId }),

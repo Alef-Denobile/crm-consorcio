@@ -277,6 +277,82 @@ com tarefas vencendo, leads novos e mensagens recebidas nas últimas
 48h — calculado na hora a partir do que já está carregado, sem
 nenhuma tabela nova no banco.
 
+## WhatsApp pela YCloud (alternativa à Meta direta)
+
+Em vez de criar e manter um app na Meta, você pode usar a **YCloud**
+(provedor oficial, parceiro da Meta). O caminho da Meta continua
+funcionando igual — você escolhe o provedor em Configurações →
+Integrações → WhatsApp Business API → **Provedor**.
+
+**Na YCloud (ycloud.com):**
+
+1. Crie a conta e conecte o número (Embedded Signup — login com o Meta
+   Business; o número precisa ser dedicado à API)
+2. Developers → **API Keys** → crie uma chave
+3. Guarde o **número** conectado, com DDI e DDD (ex.: `5515988053447`)
+
+**No painel do CRM:**
+
+1. Provedor **YCloud** → informe o número e a API Key → Conectar
+2. O painel mostra o **endereço do webhook** (único por usuário)
+3. Na YCloud: Developers → **Webhooks** → criar endpoint com esse endereço,
+   marcando `whatsapp.inbound_message.received` e `whatsapp.message.updated`
+4. Copie o **secret** (`whsec_…`) que a YCloud mostra e informe no painel
+   (desconectando e conectando de novo, ou já na primeira conexão). Sem o
+   secret, todos os webhooks são recusados — é a conferência de assinatura
+   (`YCloud-Signature`)
+
+**Diferenças em relação à Meta direta:**
+
+- Os **modelos de mensagem** (templates) são criados e aprovados no painel
+  da YCloud; no CRM você só envia pelo nome (Disparos → "Usar modelo")
+- Texto livre só dentro da janela de 24h depois que o cliente escreve
+- Não precisa de variáveis novas no Render: chave e secret ficam guardados
+  por usuário no banco (nunca saem do servidor nem entram no backup)
+- Pra voltar à Meta: Desconectar → escolher Provedor "Meta" → conectar
+
+⚠️ Integração escrita pela documentação da YCloud, ainda não testada com
+uma conta real. Teste com uma mensagem sua antes de usar com clientes.
+
+## WhatsApp pela Twilio (outra alternativa à Meta direta)
+
+Mesma ideia da YCloud: você escolhe o provedor em Configurações →
+Integrações → WhatsApp Business API → **Provedor → Twilio**. Meta e YCloud
+continuam funcionando igual.
+
+**Na Twilio (twilio.com/console):**
+
+1. Crie a conta e, em Messaging → Try it out → **Send a WhatsApp message**, use
+   o **sandbox** pra testar (número `14155238886`; cada celular precisa
+   mandar a frase "join …" que a Twilio mostra, uma vez). Em produção, registre
+   um remetente de WhatsApp (Messaging → Senders → WhatsApp senders)
+2. No painel principal, copie o **Account SID** (começa com `AC`) e o
+   **Auth Token**
+
+**No painel do CRM:**
+
+1. Provedor **Twilio** → número (com DDI/DDD), Account SID e Auth Token → Conectar
+2. O painel mostra o **endereço do webhook** (único por usuário). Na Twilio,
+   no sandbox (Sandbox settings) ou no remetente, cole em **"When a message
+   comes in"** com método **POST**. Os status de entrega (enviado/entregue/lido)
+   chegam no mesmo endereço (o painel já manda esse endereço como StatusCallback
+   se a variável `APP_URL` estiver configurada no Render)
+3. Os webhooks são conferidos pela assinatura `X-Twilio-Signature` (usa o
+   Auth Token e a URL exata; por isso `APP_URL` precisa ser o endereço público
+   com https, igual ao que está na Twilio)
+
+**Diferenças em relação à Meta direta:**
+
+- Modelos de mensagem: crie e aprove no **Content Template Builder** da Twilio;
+  no CRM (Disparos → "Usar modelo") informe o **Content SID** (começa com `HX`).
+  As variáveis são enviadas numeradas ({{1}}, {{2}}…)
+- Texto livre só dentro de 24h depois que o cliente escreve
+- O Auth Token fica guardado por usuário no banco (não entra no backup)
+- A Twilio cobra a mensagem dela somada à tarifa da Meta (cobrança em dólar)
+
+⚠️ Integração escrita pela documentação da Twilio, ainda não testada com
+uma conta real. Teste com uma mensagem sua antes de usar com clientes.
+
 ## Configurar a API do WhatsApp Business (opcional)
 
 Isso é diferente do botão de WhatsApp que já existia (aquele só abre uma
