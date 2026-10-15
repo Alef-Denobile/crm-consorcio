@@ -610,7 +610,8 @@ router.post('/desconectar', auth, async (req, res) => {
       'whatsappBusiness.wabaId': null,
       'whatsappBusiness.provedor': 'meta',
       'whatsappBusiness.webhookSecret': null,
-      'whatsappBusiness.webhookToken': null,
+      // o código do endereço do webhook (webhookToken) é mantido de propósito: assim, desconectar e
+      // reconectar não invalida o endereço que já foi cadastrado na YCloud/Twilio.
       'whatsappBusiness.accountSid': null,
     });
     res.status(204).end();
