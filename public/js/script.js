@@ -1323,18 +1323,53 @@ async function salvarWhatsappConfig(){
   whatsappSalvando = false;
   renderApp();
 }
-async function salvarYcloudSecret(){
-  const el = document.getElementById('wa-yc-secret-novo');
-  const valor = el ? el.value.trim() : '';
-  if(!valor){ whatsappConfigMsg = { tipo:'erro', texto:'Cole o secret (whsec_…) mostrado pela YCloud.' }; renderApp(); return; }
-  try{
-    await apiRequest('POST', '/whatsapp/ycloud-secret', { webhookSecret: valor });
-    whatsappYcloudSecretOk = true;
-    whatsappConfigMsg = { tipo:'ok', texto:'Secret salvo. Agora mande uma mensagem de outro celular pra testar.' };
-  }catch(e){
-    whatsappConfigMsg = { tipo:'erro', texto: (e && e.message) || 'Não foi possível salvar o secret.' };
-  }
-  renderApp();
+function fecharYcloudSecretModal(){ document.getElementById('modal-root').innerHTML=''; }
+function abrirYcloudSecretModal(){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="overlay" id="yc-secret-overlay">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Secret do webhook (YCloud)</h3>
+          <button id="yc-secret-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-page-note" style="margin:0">O secret é uma senha que a YCloud gera quando você cria o endpoint de webhook. Com ela o CRM confere se cada aviso (mensagem recebida, entregue, lida) veio mesmo da YCloud e não de outra pessoa. Sem o secret, o CRM recusa os avisos e as mensagens não aparecem.</p>
+          <ol class="settings-page-note" style="margin:0;padding-left:18px">
+            <li>Na YCloud, crie o endpoint com o endereço do webhook mostrado aqui no CRM.</li>
+            <li>Copie o secret que ela mostrar (começa com <b>whsec_</b>).</li>
+            <li>Cole abaixo e salve.</li>
+          </ol>
+          <div class="field"><label>Secret (whsec_…)</label><input type="password" id="yc-secret-input" autocomplete="off" placeholder="${whatsappYcloudSecretOk ? 'Já existe um salvo — cole aqui só para trocar' : 'whsec_…'}" /></div>
+          <p class="settings-page-msg erro" id="yc-secret-erro" style="display:none"></p>
+        </div>
+        <div class="modal-foot">
+          <span></span>
+          <div class="modal-foot-actions">
+            <button class="btn-outline" id="yc-secret-cancel">Cancelar</button>
+            <button class="btn-save" id="yc-secret-salvar">Salvar secret</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  const erro = (t)=>{ const el = document.getElementById('yc-secret-erro'); el.textContent = t; el.style.display = 'block'; };
+  document.getElementById('yc-secret-close').addEventListener('click', fecharYcloudSecretModal);
+  document.getElementById('yc-secret-cancel').addEventListener('click', fecharYcloudSecretModal);
+  document.getElementById('yc-secret-overlay').addEventListener('click', (e)=>{ if(e.target.id==='yc-secret-overlay') fecharYcloudSecretModal(); });
+  document.getElementById('yc-secret-input').focus();
+  document.getElementById('yc-secret-salvar').addEventListener('click', async ()=>{
+    const valor = document.getElementById('yc-secret-input').value.trim();
+    if(!valor){ erro('Cole o secret (whsec_…) mostrado pela YCloud.'); return; }
+    try{
+      await apiRequest('POST', '/whatsapp/ycloud-secret', { webhookSecret: valor });
+      whatsappYcloudSecretOk = true;
+      fecharYcloudSecretModal();
+      renderApp();
+    }catch(e){
+      erro((e && e.message) || 'Não foi possível salvar o secret.');
+    }
+  });
 }
 async function desconectarWhatsapp(){
   try{
@@ -6198,13 +6233,15 @@ function renderConfigWhatsapp(){
           <label>Endereço do webhook (cole na YCloud)</label>
           <input type="text" readonly value="${esc(location.origin + whatsappYcloudWebhookPath)}" onclick="this.select()" />
         </div>
-        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b> e <b>whatsapp.message.updated</b>. Depois de criar, a YCloud mostra o secret (whsec_…): cole no campo abaixo.</p>` : ''}
-        <div class="field">
-          <label>Secret do webhook (whsec_…) ${whatsappYcloudSecretOk ? '— ✓ já salvo' : '— ainda não salvo'}</label>
-          <input type="password" id="wa-yc-secret-novo" placeholder="${whatsappYcloudSecretOk ? 'Cole aqui só para trocar o secret' : 'Cole o secret mostrado pela YCloud'}" />
+        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b> e <b>whatsapp.message.updated</b>. Depois de criar, a YCloud mostra o secret (whsec_…): clique em “Adicionar secret” abaixo.</p>` : ''}
+        <div class="settings-page-row">
+          <span>Secret do webhook</span>
+          <span style="display:flex;align-items:center;gap:10px;">
+            <span class="${whatsappYcloudSecretOk?'':'wa-secret-pendente'}" style="font-size:12px;">${whatsappYcloudSecretOk ? '✓ Secret adicionado' : '⚠️ Secret ainda não adicionado'}</span>
+            <button class="btn-outline" data-action="abrir-ycloud-secret">${whatsappYcloudSecretOk ? 'Trocar secret' : 'Adicionar secret'}</button>
+          </span>
         </div>
-        <button class="btn-primary" data-action="salvar-ycloud-secret">Salvar secret</button>
-        ${whatsappConfigMsg ? `<p class="settings-page-msg ${whatsappConfigMsg.tipo}">${esc(whatsappConfigMsg.texto)}</p>` : ''}` : ''}
+        ` : ''}
         ${integracoesConfig.assistenteIA ? `
         <div class="settings-page-row">
           <span>Agente IA (responde clientes sozinho)</span>
@@ -7384,8 +7421,8 @@ function bindAppEvents(){
   if(salvarWaBtn) salvarWaBtn.addEventListener('click', salvarWhatsappConfig);
   const waProvEl = document.getElementById('wa-provedor');
   if(waProvEl) waProvEl.addEventListener('change', ()=>{ whatsappProvedorEscolhido = (waProvEl.value==='ycloud' || waProvEl.value==='twilio') ? waProvEl.value : 'meta'; whatsappConfigMsg = null; renderApp(); });
-  const salvarYcSecretBtn = app.querySelector('[data-action="salvar-ycloud-secret"]');
-  if(salvarYcSecretBtn) salvarYcSecretBtn.addEventListener('click', salvarYcloudSecret);
+  const abrirYcSecretBtn = app.querySelector('[data-action="abrir-ycloud-secret"]');
+  if(abrirYcSecretBtn) abrirYcSecretBtn.addEventListener('click', abrirYcloudSecretModal);
   const desconectarWaBtn = app.querySelector('[data-action="desconectar-whatsapp"]');
   if(desconectarWaBtn) desconectarWaBtn.addEventListener('click', desconectarWhatsapp);
 

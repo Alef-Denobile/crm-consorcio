@@ -894,3 +894,4 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
   margin-bottom:18px; font-size:13px; font-weight:600;
 }
 .dashboard-readonly-banner .btn-outline{ background:transparent; border-color:var(--paper); color:var(--paper); flex-shrink:0; }
+.wa-secret-pendente{ color:var(--danger); }
