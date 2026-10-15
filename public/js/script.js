@@ -6233,7 +6233,7 @@ function renderConfigWhatsapp(){
           <label>Endereço do webhook (cole na YCloud)</label>
           <input type="text" readonly value="${esc(location.origin + whatsappYcloudWebhookPath)}" onclick="this.select()" />
         </div>
-        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b> e <b>whatsapp.message.updated</b>. Depois de criar, a YCloud mostra o secret (whsec_…): clique em “Adicionar secret” abaixo.</p>` : ''}
+        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b>, <b>whatsapp.message.updated</b> e <b>whatsapp.smb.message.echoes</b> (o que você digita no celular). Para histórico e alertas, marque também <b>whatsapp.smb.history</b>, <b>whatsapp.template.reviewed</b>, <b>whatsapp.phone_number.quality_updated</b>, <b>whatsapp.business_account.updated</b> e <b>whatsapp.business_account.reviewed</b>. Depois de criar, a YCloud mostra o secret (whsec_…): clique em “Adicionar secret” abaixo.</p>` : ''}
         <div class="settings-page-row">
           <span>Secret do webhook</span>
           <span style="display:flex;align-items:center;gap:10px;">

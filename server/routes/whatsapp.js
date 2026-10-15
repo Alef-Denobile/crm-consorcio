@@ -273,6 +273,33 @@ async function processarEventoDeMensagens(value) {
   const user = await User.findOne({ 'whatsappBusiness.phoneNumberId': phoneNumberId });
   if (!user) return; // número não pertence a nenhuma conta cadastrada aqui
 
+  // alertas da conta (template aprovado/rejeitado, qualidade do número, restrições…): vão como notificação
+  for (const a of value.alertas || []) {
+    console.log(`[whatsapp] alerta: ${a.titulo} — ${a.corpo}`);
+    enviarPush(user._id, { titulo: a.titulo, corpo: a.corpo, tag: a.tag, url: '/index.html', tipo: 'alerta' });
+  }
+
+  // histórico importado (coexistência): só entra em cards que já existem — não cria lead de conversa antiga
+  for (const h of value.historico || []) {
+    try {
+      const ids = (h.ids || [h.id]).filter(Boolean);
+      if (ids.length && (await Message.findOne({ userId: user._id, whatsappMessageId: { $in: ids } }))) continue;
+      const cardDoHistorico = await Card.findOne({ userId: user._id, telefoneNormalizado: normalizarTelefone(h.telefone) });
+      if (!cardDoHistorico) continue;
+      await Message.create({
+        userId: user._id,
+        cardId: cardDoHistorico._id,
+        direction: h.direcao,
+        texto: h.texto,
+        status: h.direcao === 'out' ? 'sent' : null,
+        whatsappMessageId: h.id,
+        timestamp: h.timestamp ? new Date(parseInt(h.timestamp, 10) * 1000) : new Date(),
+      });
+    } catch (err) {
+      console.error('[whatsapp] erro ao importar histórico:', err.message);
+    }
+  }
+
   // ecos: mensagens que o próprio usuário mandou pelo app do celular (modo coexistência)
   for (const eco of value.ecos || []) {
     try {

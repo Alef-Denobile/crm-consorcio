@@ -129,6 +129,65 @@ function normalizarEventoYcloud(evento, numeroConta) {
       }],
     };
   }
+
+  // Histórico de conversas antigas, enviado quando o número é conectado em coexistência.
+  // Cada evento traz uma mensagem (recebida ou enviada) ou só o andamento da sincronização.
+  if (evento.type === 'whatsapp.smb.history') {
+    const vazio = { metadata, contacts: [], messages: [], statuses: [] };
+    const rotulos = { image: '📷 Foto', audio: '🎤 Áudio', document: '📄 Documento', video: '🎥 Vídeo', sticker: 'Figurinha' };
+    const dados = evento.whatsappInboundMessage || evento.whatsappMessage;
+    if (!dados) return vazio; // só andamento (phase/progress)
+    const recebida = !!evento.whatsappInboundMessage;
+    const texto = dados.type === 'text' && dados.text ? dados.text.body : ((dados[dados.type] && dados[dados.type].caption) || rotulos[dados.type] || '[mensagem em formato não suportado]');
+    return {
+      ...vazio,
+      historico: [{
+        direcao: recebida ? 'in' : 'out',
+        telefone: String(recebida ? dados.from : dados.to || '').replace(/\D/g, ''),
+        id: dados.wamid || dados.id,
+        ids: [dados.wamid, dados.id].filter(Boolean),
+        texto,
+        timestamp: dados.sendTime ? String(Math.floor(new Date(dados.sendTime).getTime() / 1000)) : undefined,
+      }],
+    };
+  }
+
+  // Avisos sobre a conta/número/templates: viram alertas (notificação) pro usuário.
+  const alerta = montarAlertaYcloud(evento);
+  if (alerta) return { metadata, contacts: [], messages: [], statuses: [], alertas: [alerta] };
+  return null;
+}
+
+// Transforma eventos de conta, número e templates da YCloud num aviso curto em português.
+function montarAlertaYcloud(evento) {
+  if (!evento || typeof evento !== 'object') return null;
+  if (evento.type === 'whatsapp.template.reviewed' && evento.whatsappTemplate) {
+    const t = evento.whatsappTemplate;
+    const nomes = { APPROVED: 'aprovado ✅', REJECTED: 'rejeitado ❌', PAUSED: 'pausado ⚠️', DISABLED: 'desativado ⚠️', ARCHIVED: 'arquivado', IN_APPEAL: 'em recurso' };
+    const status = String(t.status || '').toUpperCase();
+    return { titulo: 'WhatsApp · Template', corpo: `O template "${t.name || '?'}" foi ${nomes[status] || `atualizado (${status || 'sem status'})`}.`, tag: `wa-template-${t.id || t.name}` };
+  }
+  if (evento.type === 'whatsapp.phone_number.quality_updated' && evento.whatsappPhoneNumber) {
+    const n = evento.whatsappPhoneNumber;
+    const cores = { GREEN: 'alta (verde)', YELLOW: 'média (amarelo) ⚠️', RED: 'baixa (vermelho) 🚨' };
+    const q = String(n.qualityRating || '').toUpperCase();
+    const partes = [`Qualidade do número ${n.displayPhoneNumber || ''}: ${cores[q] || q || 'atualizada'}.`.replace('  ', ' ')];
+    if (n.messagingLimit) partes.push(`Limite de envio: ${n.messagingLimit}.`);
+    return { titulo: 'WhatsApp · Qualidade do número', corpo: partes.join(' '), tag: 'wa-qualidade' };
+  }
+  if (evento.type === 'whatsapp.business_account.updated' && evento.whatsappBusinessAccount) {
+    const c = evento.whatsappBusinessAccount;
+    const restricoes = (c.restrictions || []).map((r) => r.restrictionType).filter(Boolean).join(', ');
+    const corpo = c.updateEvent === 'ACCOUNT_RESTRICTION'
+      ? `Sua conta do WhatsApp recebeu uma restrição${restricoes ? ` (${restricoes})` : ''}. Veja o painel da YCloud/Meta.`
+      : `Sua conta do WhatsApp foi atualizada${c.updateEvent ? ` (${c.updateEvent})` : ''}.`;
+    return { titulo: 'WhatsApp · Conta', corpo, tag: 'wa-conta' };
+  }
+  if (evento.type === 'whatsapp.business_account.reviewed' && evento.whatsappBusinessAccount) {
+    const c = evento.whatsappBusinessAccount;
+    const detalhe = c.reviewStatus || c.status || c.accountReviewStatus || '';
+    return { titulo: 'WhatsApp · Análise da conta', corpo: `A Meta analisou sua conta do WhatsApp${detalhe ? ` (resultado: ${detalhe})` : ''}. Veja o painel da YCloud para os detalhes.`, tag: 'wa-conta-analise' };
+  }
   return null;
 }
 
