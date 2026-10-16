@@ -14,6 +14,8 @@ const { gerarComissaoAutomaticaSeGanho, cancelarComissaoSePerdidoAposGanho } = r
 const { obterRegraPorChave } = require('../utils/regrasComissao');
 const { executarAcaoDeAutomacao } = require('../utils/executarAutomacao');
 const { dispararWebhooks } = require('../utils/dispararWebhooks');
+const { validarAtribuicao, colunaEquivalente, proximaOrdem, transferirCard } = require('../utils/atribuirLead');
+const { enviarPush } = require('../utils/push');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
@@ -95,6 +97,29 @@ router.post('/', async (req, res) => {
     const coluna = await Column.findOne({ _id: dados.columnId, userId: req.userId });
     if (!coluna) return res.status(404).json({ error: 'Coluna não encontrada.' });
 
+    // modo gestor: o lead nasce já na conta de outra pessoa da equipe
+    const atribuirParaId = req.body.atribuirParaId;
+    if (atribuirParaId && String(atribuirParaId) !== String(req.userId)) {
+      let alvoInfo;
+      try { alvoInfo = await validarAtribuicao(req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
+      const colunaAlvo = await colunaEquivalente(dados.columnId, alvoInfo.alvo._id);
+      if (!colunaAlvo) return res.status(400).json({ error: 'A pessoa escolhida não tem uma coluna "em aberto" pra receber o lead.' });
+      const cardAtribuido = await Card.create({
+        ...dados,
+        userId: alvoInfo.alvo._id,
+        columnId: colunaAlvo._id,
+        ordem: await proximaOrdem(colunaAlvo._id, alvoInfo.alvo._id),
+        atribuidoPorId: req.userId,
+      });
+      res.status(201).json({ ...cardAtribuido.toJSON(), transferido: true, atribuidoParaNome: alvoInfo.alvo.nome || alvoInfo.alvo.email });
+      enviarPush(alvoInfo.alvo._id, { titulo: 'Novo lead pra você', corpo: `${alvoInfo.gestor.nome || 'O gestor'} passou o lead "${cardAtribuido.cliente}" pra você.`, tag: `lead-${cardAtribuido._id}`, url: '/index.html', tipo: 'lead' });
+      executarAutomacoesDaColuna(alvoInfo.alvo._id, colunaAlvo._id, cardAtribuido);
+      iniciarFluxosDaColuna(alvoInfo.alvo._id, colunaAlvo._id, cardAtribuido);
+      gerarComissaoAutomaticaSeGanho(alvoInfo.alvo._id, cardAtribuido, colunaAlvo._id);
+      dispararWebhooks(alvoInfo.alvo._id, 'lead.criado', { id: cardAtribuido._id.toString(), cliente: cardAtribuido.cliente, telefone: cardAtribuido.telefone, valor: cardAtribuido.valor, columnId: cardAtribuido.columnId.toString() });
+      return;
+    }
+
     const ultimoCard = await Card.findOne({ columnId: dados.columnId, userId: req.userId }).sort('-ordem');
     dados.ordem = ultimoCard ? ultimoCard.ordem + 1000 : 1000;
 
@@ -119,6 +144,20 @@ router.put('/:id', async (req, res) => {
     if (dados.columnId) {
       const coluna = await Column.findOne({ _id: dados.columnId, userId: req.userId });
       if (!coluna) return res.status(404).json({ error: 'Coluna inválida.' });
+    }
+
+    // modo gestor: salva as alterações e passa o lead (com tudo que está ligado a ele) pra outra pessoa da equipe
+    const atribuirParaId = req.body.atribuirParaId;
+    if (atribuirParaId && String(atribuirParaId) !== String(req.userId)) {
+      let alvoInfo;
+      try { alvoInfo = await validarAtribuicao(req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
+      const doGestor = await Card.findOneAndUpdate({ _id: req.params.id, userId: req.userId }, dados, { new: true, runValidators: true });
+      if (!doGestor) return res.status(404).json({ error: 'Cliente não encontrado.' });
+      let transferido;
+      try { transferido = await transferirCard(doGestor, alvoInfo.alvo, req.userId); } catch (e) { return res.status(e.status || 500).json({ error: e.mensagem || e.message }); }
+      res.json({ ...transferido.toJSON(), transferido: true, atribuidoParaNome: alvoInfo.alvo.nome || alvoInfo.alvo.email });
+      enviarPush(alvoInfo.alvo._id, { titulo: 'Lead passado pra você', corpo: `${alvoInfo.gestor.nome || 'O gestor'} passou o lead "${transferido.cliente}" pra você.`, tag: `lead-${transferido._id}`, url: '/index.html', tipo: 'lead' });
+      return;
     }
 
     // guarda o estado anterior do "mês de venda" só quando ele está sendo alterado

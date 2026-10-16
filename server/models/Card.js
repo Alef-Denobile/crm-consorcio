@@ -37,6 +37,7 @@ const cardSchema = new mongoose.Schema(
     etiquetas: { type: [String], default: [] },
     camposPersonalizados: { type: mongoose.Schema.Types.Mixed, default: {} }, // { campoId: valor }
     arquivado: { type: Boolean, default: false },
+    atribuidoPorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, // gestor que passou esse lead pra esta pessoa
   },
   {
     timestamps: true,

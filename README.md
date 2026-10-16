@@ -296,7 +296,7 @@ Integrações → WhatsApp Business API → **Provedor**.
 1. Provedor **YCloud** → informe o número e a API Key → Conectar
 2. O painel mostra o **endereço do webhook** (único por usuário)
 3. Na YCloud: Developers → **Webhooks** → criar endpoint com esse endereço,
-   marcando `whatsapp.inbound_message.received` e `whatsapp.message.updated`
+   marcando `whatsapp.inbound_message.received`, `whatsapp.message.updated` e `whatsapp.smb.message.echoes` (o que você digita no celular). Opcionais: `whatsapp.smb.history` (histórico), `whatsapp.template.reviewed`, `whatsapp.phone_number.quality_updated`, `whatsapp.business_account.updated` e `whatsapp.business_account.reviewed` (viram notificações)
 4. Copie o **secret** (`whsec_…`) que a YCloud mostra e informe no painel
    (desconectando e conectando de novo, ou já na primeira conexão). Sem o
    secret, todos os webhooks são recusados — é a conferência de assinatura

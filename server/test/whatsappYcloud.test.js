@@ -137,3 +137,40 @@ test('assinatura aceita o secret com prefixo whsec_ lido de formas diferentes e 
   assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave(secret), '', o), 'secret_nao_configurado');
   assert.strictEqual(motivoAssinaturaYcloud(Buffer.from(corpo), comChave(secret), secret, { agoraSeg: t + 9999 }), 'evento_antigo_demais');
 });
+
+test('eco de mensagem enviada pelo app do celular vira "eco" normalizado', () => {
+  const { normalizarEventoYcloud } = require('../utils/whatsappYcloud');
+  const v = normalizarEventoYcloud({
+    type: 'whatsapp.smb.message.echoes',
+    whatsappMessage: { id: 'y1', wamid: 'w1', from: '+5515988053447', to: '+5515981701736', type: 'text', text: { body: 'Oi, tudo bem?' }, sendTime: '2026-10-15T15:30:00Z' },
+  }, '5515988053447');
+  assert.equal(v.messages.length, 0);
+  assert.equal(v.ecos.length, 1);
+  assert.equal(v.ecos[0].to, '5515981701736');
+  assert.equal(v.ecos[0].texto, 'Oi, tudo bem?');
+  assert.deepEqual(v.ecos[0].ids, ['w1', 'y1']);
+});
+
+test('histórico (coexistência) vira lista "historico"; só andamento é ignorado', () => {
+  const { normalizarEventoYcloud } = require('../utils/whatsappYcloud');
+  const rec = normalizarEventoYcloud({ type: 'whatsapp.smb.history', phase: 1, progress: 40, whatsappInboundMessage: { id: 'a', wamid: 'wa', from: '+5515981701736', to: '+5515988053447', type: 'text', text: { body: 'oi' }, sendTime: '2026-09-01T10:00:00Z' } }, '5515988053447');
+  assert.equal(rec.historico[0].direcao, 'in');
+  assert.equal(rec.historico[0].telefone, '5515981701736');
+  const env = normalizarEventoYcloud({ type: 'whatsapp.smb.history', whatsappMessage: { id: 'b', from: '+5515988053447', to: '+5515981701736', type: 'text', text: { body: 'olá' } } }, '5515988053447');
+  assert.equal(env.historico[0].direcao, 'out');
+  assert.equal(env.historico[0].telefone, '5515981701736');
+  const so = normalizarEventoYcloud({ type: 'whatsapp.smb.history', phase: 1, progress: 10 }, '5515988053447');
+  assert.equal((so.historico || []).length, 0);
+});
+
+test('eventos de template, qualidade e conta viram alertas em português', () => {
+  const { normalizarEventoYcloud } = require('../utils/whatsappYcloud');
+  const t = normalizarEventoYcloud({ type: 'whatsapp.template.reviewed', whatsappTemplate: { id: '1', name: 'boas_vindas', status: 'APPROVED' } }, 'x');
+  assert.match(t.alertas[0].corpo, /boas_vindas.*aprovado/);
+  const q = normalizarEventoYcloud({ type: 'whatsapp.phone_number.quality_updated', whatsappPhoneNumber: { displayPhoneNumber: '+55 15 98805-3447', qualityRating: 'RED', messagingLimit: 'TIER_1K' } }, 'x');
+  assert.match(q.alertas[0].corpo, /baixa/);
+  const c = normalizarEventoYcloud({ type: 'whatsapp.business_account.updated', whatsappBusinessAccount: { updateEvent: 'ACCOUNT_RESTRICTION', restrictions: [{ restrictionType: 'X' }] } }, 'x');
+  assert.match(c.alertas[0].corpo, /restrição/);
+  const r = normalizarEventoYcloud({ type: 'whatsapp.business_account.reviewed', whatsappBusinessAccount: { id: '1' } }, 'x');
+  assert.match(r.alertas[0].titulo, /Análise/);
+});

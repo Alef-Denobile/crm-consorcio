@@ -84,7 +84,8 @@ router.post('/webhook', exigirAssinaturaMeta, async (req, res) => {
         valor: 0,
         temperatura: 'morno',
         obs: `Capturado via anúncio do Instagram/Facebook.${email ? ` E-mail: ${email}` : ''}`,
-        mes: new Date().toISOString().slice(0, 7),
+        mes: '', // mês de venda fica em branco até a venda acontecer de verdade
+        mesInicioContato: new Date().toISOString().slice(0, 7), // o lead acabou de chegar: esse é o mês de início do contato
       });
       dispararWebhooks(user._id, 'lead.criado', { id: novoCard._id.toString(), cliente: novoCard.cliente, telefone: novoCard.telefone, origem: 'instagram_leadgen' });
     }
@@ -125,7 +126,8 @@ async function processarMensagensDiretas(entry) {
         valor: 0,
         temperatura: 'morno',
         obs: '',
-        mes: new Date().toISOString().slice(0, 7),
+        mes: '', // mês de venda fica em branco até a venda acontecer de verdade
+        mesInicioContato: new Date().toISOString().slice(0, 7), // o lead acabou de chegar: esse é o mês de início do contato
       });
       dispararWebhooks(user._id, 'lead.criado', { id: card._id.toString(), cliente: card.cliente, origem: 'instagram_dm' });
     }

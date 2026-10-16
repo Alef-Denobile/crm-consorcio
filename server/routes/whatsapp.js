@@ -214,6 +214,16 @@ router.post('/webhook', exigirAssinaturaMeta, async (req, res) => {
   }
 });
 
+// Avisos de webhook recusado se repetem sem parar (a YCloud reenvia até 7 vezes): mostra o mesmo aviso só 1 vez por minuto.
+const avisosRecentes = new Map();
+function avisarUmaVez(mensagem) {
+  const agora = Date.now();
+  const ultimo = avisosRecentes.get(mensagem) || 0;
+  if (agora - ultimo < 60000) return;
+  avisosRecentes.set(mensagem, agora);
+  console.warn(mensagem);
+}
+
 // POST /api/whatsapp/ycloud-webhook/:token -> a YCloud chama aqui (um endereço próprio por usuário).
 // O :token identifica quem é o dono do número; a assinatura (YCloud-Signature) é conferida com o
 // secret "whsec_..." que a YCloud mostra ao criar o webhook e que a pessoa cola em Configurações.
@@ -222,12 +232,12 @@ router.post('/ycloud-webhook/:token', async (req, res) => {
     const token = String(req.params.token || '');
     const user = token.length >= 16 ? await User.findOne({ 'whatsappBusiness.webhookToken': token, 'whatsappBusiness.provedor': 'ycloud' }) : null;
     if (!user) {
-      console.warn('[ycloud] webhook recusado: código do endereço não bate com nenhum usuário conectado na YCloud');
+      avisarUmaVez('[ycloud] webhook recusado: código do endereço não bate com nenhum usuário conectado na YCloud');
       return res.sendStatus(403);
     }
     const motivo = motivoAssinaturaYcloud(req.rawBody, req.get('ycloud-signature'), user.whatsappBusiness.webhookSecret);
     if (motivo !== 'ok') {
-      console.warn(`[ycloud] webhook recusado: ${motivo}`);
+      avisarUmaVez(`[ycloud] webhook recusado: ${motivo}`);
       return res.sendStatus(403);
     }
     res.sendStatus(200); // responde rápido: a YCloud reenvia se não receber 2xx
@@ -273,6 +283,54 @@ async function processarEventoDeMensagens(value) {
   const user = await User.findOne({ 'whatsappBusiness.phoneNumberId': phoneNumberId });
   if (!user) return; // número não pertence a nenhuma conta cadastrada aqui
 
+  // alertas da conta (template aprovado/rejeitado, qualidade do número, restrições…): vão como notificação
+  for (const a of value.alertas || []) {
+    console.log(`[whatsapp] alerta: ${a.titulo} — ${a.corpo}`);
+    enviarPush(user._id, { titulo: a.titulo, corpo: a.corpo, tag: a.tag, url: '/index.html', tipo: 'alerta' });
+  }
+
+  // histórico importado (coexistência): só entra em cards que já existem — não cria lead de conversa antiga
+  for (const h of value.historico || []) {
+    try {
+      const ids = (h.ids || [h.id]).filter(Boolean);
+      if (ids.length && (await Message.findOne({ userId: user._id, whatsappMessageId: { $in: ids } }))) continue;
+      const cardDoHistorico = await Card.findOne({ userId: user._id, telefoneNormalizado: normalizarTelefone(h.telefone) });
+      if (!cardDoHistorico) continue;
+      await Message.create({
+        userId: user._id,
+        cardId: cardDoHistorico._id,
+        direction: h.direcao,
+        texto: h.texto,
+        status: h.direcao === 'out' ? 'sent' : null,
+        whatsappMessageId: h.id,
+        timestamp: h.timestamp ? new Date(parseInt(h.timestamp, 10) * 1000) : new Date(),
+      });
+    } catch (err) {
+      console.error('[whatsapp] erro ao importar histórico:', err.message);
+    }
+  }
+
+  // ecos: mensagens que o próprio usuário mandou pelo app do celular (modo coexistência)
+  for (const eco of value.ecos || []) {
+    try {
+      const jaExiste = (eco.ids || [eco.id]).filter(Boolean);
+      if (jaExiste.length && (await Message.findOne({ whatsappMessageId: { $in: jaExiste }, direction: 'out' }))) continue; // já veio do CRM ou é repetição
+      const cardDoEco = await Card.findOne({ userId: user._id, telefoneNormalizado: normalizarTelefone(eco.to) });
+      if (!cardDoEco) continue; // só registra conversa de quem já está no funil
+      await Message.create({
+        userId: user._id,
+        cardId: cardDoEco._id,
+        direction: 'out',
+        texto: eco.texto,
+        status: 'sent',
+        whatsappMessageId: eco.id,
+        timestamp: eco.timestamp ? new Date(parseInt(eco.timestamp, 10) * 1000) : new Date(),
+      });
+    } catch (err) {
+      console.error('[whatsapp] erro ao registrar mensagem enviada pelo celular:', err.message);
+    }
+  }
+
   for (const msg of value.messages || []) {
     // os provedores reenviam o mesmo evento se demorarmos a responder: não salva duas vezes
     if (msg.id && (await Message.findOne({ whatsappMessageId: msg.id, direction: 'in' }))) continue;
@@ -295,7 +353,8 @@ async function processarEventoDeMensagens(value) {
         valor: 0,
         temperatura: 'morno',
         obs: '',
-        mes: new Date().toISOString().slice(0, 7),
+        mes: '', // mês de venda fica em branco até a venda acontecer de verdade
+        mesInicioContato: new Date().toISOString().slice(0, 7), // o lead acabou de chegar: esse é o mês de início do contato
       });
       eraContatoNovo = true;
     }

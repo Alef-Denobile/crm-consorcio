@@ -895,3 +895,7 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 }
 .dashboard-readonly-banner .btn-outline{ background:transparent; border-color:var(--paper); color:var(--paper); flex-shrink:0; }
 .wa-secret-pendente{ color:var(--danger); }
+.modo-gestor-toggle{ display:flex; gap:6px; }
+.modo-gestor-btn{ flex:1; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--col-bg); color:var(--ink); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
+.modo-gestor-btn:hover{ border-color:var(--accent); }
+.modo-gestor-btn.ativo{ background:var(--accent); border-color:var(--accent); color:#fff; }

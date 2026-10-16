@@ -67,7 +67,8 @@ router.post('/:id/promover', async (req, res) => {
       valor: valor || 0,
       temperatura: temperatura || 'morno',
       obs: obs || '',
-      mes: mes || new Date().toISOString().slice(0, 7),
+      mes: mes || '', // mês de venda só é preenchido quando a venda acontece
+      mesInicioContato: new Date().toISOString().slice(0, 7),
     });
     await PossivelLead.findByIdAndDelete(possivel._id);
     res.status(201).json(card.toJSON());

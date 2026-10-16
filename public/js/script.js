@@ -446,6 +446,31 @@ let eventoGoogleModalForm = null; // { eventId, titulo, data, hora } — edita o
 let confirmState = null;         // { message, onConfirm }
 
 /* ---------- comunicação com a API ---------- */
+/* ---------- aviso de erro: aparece uma vez só ---------- */
+// O mesmo erro não reaparece por 60 s depois de dispensado (clique ou sumiço automático),
+// e some sozinho depois de 8 s. Assim uma falha repetida (API fora do ar, por exemplo) não enche a tela.
+let erroUltimoTexto = null, erroDispensadoEm = 0, erroTimerAuto = null;
+function dispensarErro(){
+  erroDispensadoEm = Date.now();
+  errorMsg = null;
+  if(erroTimerAuto){ clearTimeout(erroTimerAuto); erroTimerAuto = null; }
+}
+function erroParaMostrar(){
+  if(!errorMsg) return null;
+  const agora = Date.now();
+  if(errorMsg === erroUltimoTexto && erroDispensadoEm && agora - erroDispensadoEm < 60000){
+    errorMsg = null; // mesmo erro de novo, logo depois de dispensado: não mostra de novo
+    return null;
+  }
+  if(errorMsg !== erroUltimoTexto || !erroTimerAuto){
+    erroUltimoTexto = errorMsg;
+    erroDispensadoEm = 0;
+    if(erroTimerAuto) clearTimeout(erroTimerAuto);
+    erroTimerAuto = setTimeout(()=>{ erroTimerAuto = null; if(errorMsg){ dispensarErro(); renderApp(); } }, 8000);
+  }
+  return errorMsg;
+}
+
 async function apiRequest(method, path, body, timeoutMs){
   const opts = { method, headers: {} };
   const token = getToken();
@@ -2167,8 +2192,13 @@ async function excluirAgendamento(id){
     await apiRequest('DELETE', `/agendamentos/${id}`);
     await loadAgendamentos(); // recarrega pra atualizar a contagem por status também
   }catch(e){
+    if(e && /não encontrado/i.test(e.message || '')){
+      // já tinha sido excluído (ex.: dois cliques seguidos ou outra aba): some da lista e pronto
+      await loadAgendamentos();
+      return;
+    }
     agendamentos.splice(idx,0,removido);
-    errorMsg = 'Não foi possível excluir o agendamento.';
+    errorMsg = 'Não foi possível excluir o agendamento' + (e && e.message ? ` (${e.message})` : '.');
     renderApp();
   }
 }
@@ -4025,30 +4055,56 @@ async function addColumn(){
   renderApp();
 }
 
+/* ---------- modo gestor: passar o lead pra outra pessoa da equipe ---------- */
+function podeAtribuirLeads(){
+  return !!(equipe && equipe.souSupervisor && (equipe.membros||[]).some(m=>!m.souEu));
+}
+
 async function saveCardFromModal(){
   if(salvandoCard) return; // já tem um salvamento em andamento — ignora cliques repetidos
   const nomeFinal = (modalForm.tipoPessoa==='juridica' ? modalForm.clienteJuridica : modalForm.clienteFisica) || '';
   if(!nomeFinal.trim()) return;
   const eraNovo = modalForm.__isNew;
-  const { __isNew, id, clienteFisica, clienteJuridica, ...dados } = modalForm;
+  const { __isNew, id, clienteFisica, clienteJuridica, __modoGestor, __atribuirParaId, ...dados } = modalForm;
   dados.cliente = nomeFinal.trim();
+  // modo gestor: precisa escolher pra quem vai o lead
+  const atribuindo = !!(__modoGestor && podeAtribuirLeads());
+  if(atribuindo){
+    if(!__atribuirParaId){
+      errorMsg = 'Escolha para quem vai o lead.';
+      renderModal();
+      renderApp();
+      return;
+    }
+    dados.atribuirParaId = __atribuirParaId;
+  }
   salvandoCard = true;
   renderModal();
+  let nomeDestino = null;
   try{
     if(__isNew){
       const novoCard = await apiRequest('POST', '/cards', dados);
-      board.cards.push(novoCard);
+      if(novoCard && novoCard.transferido){
+        nomeDestino = novoCard.atribuidoParaNome; // o lead foi pra conta de outra pessoa: não entra no pipeline daqui
+      } else {
+        board.cards.push(novoCard);
+      }
     } else {
       const atualizado = await apiRequest('PUT', `/cards/${id}`, dados);
       const idx = board.cards.findIndex(c=>c.id===id);
-      if(idx>-1) board.cards[idx] = atualizado;
+      if(atualizado && atualizado.transferido){
+        nomeDestino = atualizado.atribuidoParaNome;
+        if(idx>-1) board.cards.splice(idx, 1); // saiu do meu pipeline
+      } else if(idx>-1){
+        board.cards[idx] = atualizado;
+      }
     }
     salvandoCard = false;
-    if(eraNovo){
+    if(eraNovo || nomeDestino){
       // mostra "Novo lead adicionado" por cima do botão (fade in, sobe um pouco, fade
       // out) antes de fechar — assim a pessoa vê claramente que salvou, em vez de só
       // sumir a tela de repente sem confirmação nenhuma.
-      mensagemSalvoCard = 'Novo lead adicionado';
+      mensagemSalvoCard = nomeDestino ? `Lead enviado para ${nomeDestino}` : 'Novo lead adicionado';
       renderModal();
       await new Promise(resolve=> setTimeout(resolve, 1300));
       mensagemSalvoCard = null;
@@ -4057,7 +4113,7 @@ async function saveCardFromModal(){
     renderApp();
   }catch(e){
     salvandoCard = false;
-    errorMsg = 'Não foi possível salvar o cliente.';
+    errorMsg = atribuindo && e && e.message ? e.message : 'Não foi possível salvar o cliente.';
     renderModal();
     renderApp();
   }
@@ -4896,7 +4952,7 @@ function renderApp(){
           </div>
           </div>
         </div>
-        ${errorMsg ? `<div class="error-banner" data-action="dismiss-error" title="Clique para fechar">⚠ ${esc(errorMsg)}</div>` : ''}
+        ${erroParaMostrar() ? `<div class="error-banner" data-action="dismiss-error" title="Clique para fechar">⚠ ${esc(errorMsg)}</div>` : ''}
         ${pageHtml}
       </div>
     </div>
@@ -6233,7 +6289,7 @@ function renderConfigWhatsapp(){
           <label>Endereço do webhook (cole na YCloud)</label>
           <input type="text" readonly value="${esc(location.origin + whatsappYcloudWebhookPath)}" onclick="this.select()" />
         </div>
-        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b> e <b>whatsapp.message.updated</b>. Depois de criar, a YCloud mostra o secret (whsec_…): clique em “Adicionar secret” abaixo.</p>` : ''}
+        <p class="settings-page-note">Na YCloud: Developers → Webhooks → criar endpoint com esse endereço, marcando os eventos <b>whatsapp.inbound_message.received</b>, <b>whatsapp.message.updated</b> e <b>whatsapp.smb.message.echoes</b> (o que você digita no celular). Para histórico e alertas, marque também <b>whatsapp.smb.history</b>, <b>whatsapp.template.reviewed</b>, <b>whatsapp.phone_number.quality_updated</b>, <b>whatsapp.business_account.updated</b> e <b>whatsapp.business_account.reviewed</b>. Depois de criar, a YCloud mostra o secret (whsec_…): clique em “Adicionar secret” abaixo.</p>` : ''}
         <div class="settings-page-row">
           <span>Secret do webhook</span>
           <span style="display:flex;align-items:center;gap:10px;">
@@ -6807,7 +6863,7 @@ function bindAppEvents(){
   if(notifBtn) notifBtn.addEventListener('click', (e)=>{ e.stopPropagation(); notifOpen = !notifOpen; renderApp(); });
 
   const errorBanner = app.querySelector('[data-action="dismiss-error"]');
-  if(errorBanner) errorBanner.addEventListener('click', ()=>{ errorMsg=null; renderApp(); });
+  if(errorBanner) errorBanner.addEventListener('click', ()=>{ dispensarErro(); renderApp(); });
 
   const logoutBtn = app.querySelector('[data-action="logout"]');
   if(logoutBtn) logoutBtn.addEventListener('click', logout);
@@ -8448,6 +8504,22 @@ function renderModal(){
           <button id="modal-close">✕</button>
         </div>
         <div class="modal-body">
+          ${podeAtribuirLeads() ? `
+          <div class="field">
+            <label>Modo</label>
+            <div class="modo-gestor-toggle">
+              <button type="button" class="modo-gestor-btn ${!f.__modoGestor?'ativo':''}" data-modo-gestor="0">Padrão</button>
+              <button type="button" class="modo-gestor-btn ${f.__modoGestor?'ativo':''}" data-modo-gestor="1">⭐ Gestor</button>
+            </div>
+            ${f.__modoGestor ? `
+              <label style="margin-top:10px">${f.__isNew ? 'Adicionar este lead para' : 'Passar este lead para'}</label>
+              <select id="f-atribuir-para">
+                <option value="">Selecione uma pessoa…</option>
+                ${equipe.membros.filter(m=>!m.souEu).map(m=>`<option value="${m.id}" ${f.__atribuirParaId===m.id?'selected':''}>${esc(m.nome||m.email)}${m.papel==='supervisor'?' ⭐':''}</option>`).join('')}
+              </select>
+              <p class="settings-page-note" style="margin:6px 0 0">${f.__isNew ? 'O lead vai direto para o pipeline da pessoa escolhida, na coluna de mesmo nome (ou na primeira em aberto).' : 'O lead sai do seu pipeline e vai para o da pessoa escolhida, junto com conversas, anexos, tarefas e histórico.'}</p>
+            ` : ''}
+          </div>` : ''}
           <div class="field">
             <button type="button" class="tipo-pessoa-select-btn" id="f-tipo-pessoa-select">
               <span>${f.tipoPessoa==='juridica' ? '🏢 Pessoa jurídica' : '👤 Pessoa física'}</span>
@@ -8719,6 +8791,11 @@ function renderModal(){
   const contatoCargoInput = document.getElementById('f-contato-cargo');
   if(contatoCargoInput) contatoCargoInput.addEventListener('input', (e)=> modalForm.contatoCargo = e.target.value);
 
+  root.querySelectorAll('[data-modo-gestor]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ modalForm.__modoGestor = btn.dataset.modoGestor==='1'; if(!modalForm.__modoGestor) modalForm.__atribuirParaId = ''; renderModal(); });
+  });
+  const atribuirParaSel = document.getElementById('f-atribuir-para');
+  if(atribuirParaSel) atribuirParaSel.addEventListener('change', (e)=> modalForm.__atribuirParaId = e.target.value);
   document.getElementById('f-save').addEventListener('click', saveCardFromModal);
   if(!f.__isNew){
     document.getElementById('f-delete').addEventListener('click', ()=>{
