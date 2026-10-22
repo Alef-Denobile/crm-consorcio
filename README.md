@@ -20,11 +20,11 @@ MongoDB) também disparam um **alerta no Telegram**, se configurado (veja
 completo de como criar o bot está em `server/utils/telegramAlerta.js`). Não
 depende da API do WhatsApp Business nem de verificação de empresa na Meta.
 
-⚠️ **Cache do navegador:** `style.css`, `script.js` e `login.js` são
+⚠️ **Cache do navegador:** `style.css`, os arquivos de `js/app/` e `login.js` são
 carregados com `?v=AAAAMMDD` no final da URL (ex: `style.css?v=20261082`).
 Isso existe só pra forçar o navegador a buscar a versão nova depois de um
 deploy — sem isso, quem já tinha o site aberto continua vendo o CSS/JS
-antigo em cache, às vezes por dias. **Toda vez que `style.css`, `script.js`
+antigo em cache, às vezes por dias. **Toda vez que `style.css`, `js/app/*.js`
 ou `login.js` for alterado, atualize esse número** (nos três arquivos:
 `index.html` e `login.html`) pra data do dia, senão a mudança não aparece
 pra quem já visitou o site antes.
@@ -45,7 +45,7 @@ crm-consorcio/
     index.html            (painel — exige login)
     login.html             (tela de entrar / criar conta)
     css/style.css
-    js/script.js           (lógica do painel)
+    js/app/*.js            (lógica do painel, dividida por área: 01-base … 16-conversas-e-inicio; carregados nessa ordem)
     js/login.js             (lógica do login/cadastro)
   server/                 <- back-end
     server.js
@@ -312,45 +312,6 @@ Integrações → WhatsApp Business API → **Provedor**.
 - Pra voltar à Meta: Desconectar → escolher Provedor "Meta" → conectar
 
 ⚠️ Integração escrita pela documentação da YCloud, ainda não testada com
-uma conta real. Teste com uma mensagem sua antes de usar com clientes.
-
-## WhatsApp pela Twilio (outra alternativa à Meta direta)
-
-Mesma ideia da YCloud: você escolhe o provedor em Configurações →
-Integrações → WhatsApp Business API → **Provedor → Twilio**. Meta e YCloud
-continuam funcionando igual.
-
-**Na Twilio (twilio.com/console):**
-
-1. Crie a conta e, em Messaging → Try it out → **Send a WhatsApp message**, use
-   o **sandbox** pra testar (número `14155238886`; cada celular precisa
-   mandar a frase "join …" que a Twilio mostra, uma vez). Em produção, registre
-   um remetente de WhatsApp (Messaging → Senders → WhatsApp senders)
-2. No painel principal, copie o **Account SID** (começa com `AC`) e o
-   **Auth Token**
-
-**No painel do CRM:**
-
-1. Provedor **Twilio** → número (com DDI/DDD), Account SID e Auth Token → Conectar
-2. O painel mostra o **endereço do webhook** (único por usuário). Na Twilio,
-   no sandbox (Sandbox settings) ou no remetente, cole em **"When a message
-   comes in"** com método **POST**. Os status de entrega (enviado/entregue/lido)
-   chegam no mesmo endereço (o painel já manda esse endereço como StatusCallback
-   se a variável `APP_URL` estiver configurada no Render)
-3. Os webhooks são conferidos pela assinatura `X-Twilio-Signature` (usa o
-   Auth Token e a URL exata; por isso `APP_URL` precisa ser o endereço público
-   com https, igual ao que está na Twilio)
-
-**Diferenças em relação à Meta direta:**
-
-- Modelos de mensagem: crie e aprove no **Content Template Builder** da Twilio;
-  no CRM (Disparos → "Usar modelo") informe o **Content SID** (começa com `HX`).
-  As variáveis são enviadas numeradas ({{1}}, {{2}}…)
-- Texto livre só dentro de 24h depois que o cliente escreve
-- O Auth Token fica guardado por usuário no banco (não entra no backup)
-- A Twilio cobra a mensagem dela somada à tarifa da Meta (cobrança em dólar)
-
-⚠️ Integração escrita pela documentação da Twilio, ainda não testada com
 uma conta real. Teste com uma mensagem sua antes de usar com clientes.
 
 ## Configurar a API do WhatsApp Business (opcional)

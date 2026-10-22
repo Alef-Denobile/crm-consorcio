@@ -56,3 +56,32 @@ test('a coluna equivalente é a de mesmo nome e tipo; senão a primeira em abert
   colunas.origem.nome = 'Outra coisa';
   assert.equal((await colunaEquivalente('origem', MEMBRO))._id, 'x1');
 });
+
+test('transferirTodosOsCards passa todos os leads em lote, mapeando colunas, e leva os dados ligados', async () => {
+  const Card = require('../models/Card');
+  const Message = require('../models/Message');
+  const Task = require('../models/Task');
+  const { transferirTodosOsCards } = require('../utils/atribuirLead');
+  const modelos = ['Anexo', 'HistoricoContato', 'MensagemAgendada', 'Contrato', 'FluxoExecucao'].map((n) => require(`../models/${n}`));
+
+  const chamadas = [];
+  Card.find = () => ({ select: async () => [{ _id: 'c1', columnId: 'origem' }, { _id: 'c2', columnId: 'origem' }] });
+  Card.findOne = () => ({ sort: async () => ({ ordem: 3000 }) });
+  Card.updateMany = async (f, u) => { chamadas.push(['Card', f, u]); };
+  Message.updateMany = async (f, u) => { chamadas.push(['Message', f, u]); };
+  Task.updateMany = async (f, u) => { chamadas.push(['Task', f, u]); };
+  for (const m of modelos) m.updateMany = async (f, u) => { chamadas.push([m.modelName, f, u]); };
+  Column.findById = async () => ({ _id: 'origem', nome: 'Leads', tipo: 'aberto' });
+  Column.find = () => ({ sort: async () => [{ _id: 'dest1', nome: 'Leads', tipo: 'aberto', ordem: 1 }] });
+
+  const total = await transferirTodosOsCards('antigo', { _id: 'novo' }, 'gestor');
+  assert.equal(total, 2);
+  const card = chamadas.find((c) => c[0] === 'Card');
+  assert.deepEqual(card[1]._id.$in, ['c1', 'c2']);
+  assert.equal(card[2][0].$set.columnId, 'dest1');
+  assert.equal(card[2][0].$set.userId, 'novo');
+  // tudo que é ligado aos leads também troca de dono
+  for (const nome of ['Message', 'Task', 'Anexo', 'HistoricoContato', 'MensagemAgendada', 'Contrato', 'FluxoExecucao']) {
+    assert.ok(chamadas.some((c) => c[0] === nome && c[2].userId === 'novo'), `${nome} não foi transferido`);
+  }
+});

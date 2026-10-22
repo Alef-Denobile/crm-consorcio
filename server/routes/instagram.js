@@ -1,4 +1,5 @@
 const express = require('express');
+const { escolherPorRodizio } = require('../utils/rodizio');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Card = require('../models/Card');
@@ -73,11 +74,18 @@ router.post('/webhook', exigirAssinaturaMeta, async (req, res) => {
       const telefone = extrairCampo(campos, ['phone_number', 'telefone', 'phone']);
       const email = extrairCampo(campos, ['email', 'e-mail']);
 
-      const coluna = await Column.findOne({ userId: user._id, tipo: 'aberto' }).sort({ ordem: 1 });
+      // rodízio ligado: o lead já nasce na conta da próxima pessoa da vez
+      let donoDoLead = user;
+      let coluna = null;
+      let atribuidoPorId = null;
+      const vez = await escolherPorRodizio(user);
+      if (vez) { donoDoLead = vez.alvo; coluna = vez.coluna; atribuidoPorId = String(vez.alvo._id) === String(user._id) ? null : user._id; }
+      if (!coluna) coluna = await Column.findOne({ userId: user._id, tipo: 'aberto' }).sort({ ordem: 1 });
       if (!coluna) continue; // usuário não tem nenhuma coluna "em aberto" pra receber o lead
 
       const novoCard = await Card.create({
-        userId: user._id,
+        userId: donoDoLead._id,
+        atribuidoPorId,
         columnId: coluna._id,
         cliente: nome,
         telefone,
@@ -87,7 +95,8 @@ router.post('/webhook', exigirAssinaturaMeta, async (req, res) => {
         mes: '', // mês de venda fica em branco até a venda acontecer de verdade
         mesInicioContato: new Date().toISOString().slice(0, 7), // o lead acabou de chegar: esse é o mês de início do contato
       });
-      dispararWebhooks(user._id, 'lead.criado', { id: novoCard._id.toString(), cliente: novoCard.cliente, telefone: novoCard.telefone, origem: 'instagram_leadgen' });
+      dispararWebhooks(donoDoLead._id, 'lead.criado', { id: novoCard._id.toString(), cliente: novoCard.cliente, telefone: novoCard.telefone, origem: 'instagram_leadgen' });
+      if (atribuidoPorId) enviarPush(donoDoLead._id, { titulo: 'Novo lead pra você', corpo: `${novoCard.cliente} chegou pelo rodízio.`, tag: 'lead-rodizio', url: '/index.html', tipo: 'lead' });
     }
   } catch (err) {
     console.error('Erro ao processar webhook do Instagram:', err.message);

@@ -63,4 +63,47 @@ async function transferirCard(card, alvo, gestorId) {
   return card;
 }
 
-module.exports = { validarAtribuicao, colunaEquivalente, proximaOrdem, transferirCard };
+// Passa TODOS os leads de uma pessoa pra outra (usado quando o gestor remove alguém da equipe e escolhe
+// redistribuir). Em lote: cada coluna de origem vira a coluna equivalente do destino, e tudo que está
+// ligado aos leads (conversas, anexos, histórico, tarefas do lead, agendamentos, contratos, fluxos) vai junto.
+// Devolve quantos leads foram passados.
+async function transferirTodosOsCards(origemId, alvo, gestorId) {
+  const cards = await Card.find({ userId: origemId }).select('_id columnId');
+  if (!cards.length) return 0;
+
+  // coluna de destino de cada coluna de origem
+  const idsColunas = [...new Set(cards.map((c) => String(c.columnId)))];
+  const destinoDe = {};
+  for (const colId of idsColunas) {
+    const destino = await colunaEquivalente(colId, alvo._id);
+    if (!destino) {
+      throw Object.assign(new Error('A pessoa escolhida não tem uma coluna "em aberto" pra receber os leads.'), { status: 400, mensagem: 'A pessoa escolhida não tem uma coluna "em aberto" pra receber os leads.' });
+    }
+    destinoDe[colId] = destino._id;
+  }
+
+  // a ordem nova fica depois do que já existe nas colunas de destino (sem embaralhar os leads de quem recebe)
+  for (const colId of idsColunas) {
+    const ids = cards.filter((c) => String(c.columnId) === colId).map((c) => c._id);
+    const base = await proximaOrdem(destinoDe[colId], alvo._id);
+    await Card.updateMany(
+      { _id: { $in: ids }, userId: origemId },
+      [{ $set: { userId: alvo._id, columnId: destinoDe[colId], ordem: { $add: [{ $ifNull: ['$ordem', 0] }, base] }, atribuidoPorId: gestorId, colunaDesde: new Date() } }]
+    );
+  }
+
+  const todosIds = cards.map((c) => c._id);
+  const filtro = { cardId: { $in: todosIds }, userId: origemId };
+  await Promise.all([
+    Message.updateMany(filtro, { userId: alvo._id }),
+    Anexo.updateMany(filtro, { userId: alvo._id }),
+    HistoricoContato.updateMany(filtro, { userId: alvo._id }),
+    MensagemAgendada.updateMany(filtro, { userId: alvo._id }),
+    Contrato.updateMany(filtro, { userId: alvo._id }),
+    FluxoExecucao.updateMany(filtro, { userId: alvo._id }),
+    Task.updateMany({ leadId: { $in: todosIds }, userId: origemId }, { userId: alvo._id }),
+  ]);
+  return cards.length;
+}
+
+module.exports = { validarAtribuicao, colunaEquivalente, proximaOrdem, transferirCard, transferirTodosOsCards };

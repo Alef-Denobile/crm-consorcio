@@ -26,12 +26,10 @@ const { normalizarTelefone } = require('../utils/telefone');
 async function baixarMidiaDoWhatsapp(user, card, mediaId, nomeSugerido, linkDireto) {
   try {
     if (provedorDe(user) !== 'meta') {
-      // YCloud e Twilio mandam um link já pronto da mídia (baixa com a credencial do provedor)
+      // A YCloud manda um link já pronto da mídia (baixa com a credencial do provedor)
       if (!linkDireto) return null;
       const wb = user.whatsappBusiness;
-      const cab = provedorDe(user) === 'twilio'
-        ? { Authorization: cabecalhoBasic(wb.accountSid, wb.accessToken) }
-        : { 'X-API-Key': wb.accessToken };
+      const cab = { 'X-API-Key': wb.accessToken };
       const r = await fetch(linkDireto, { headers: cab });
       if (!r.ok) return null;
       const buf = Buffer.from(await r.arrayBuffer());
@@ -75,9 +73,9 @@ async function baixarMidiaDoWhatsapp(user, card, mediaId, nomeSugerido, linkDire
 }
 
 // Envio de texto/modelo: ver utils/whatsappEnvio.js (escolhe Meta ou YCloud conforme o usuário).
+const { escolherPorRodizio } = require('../utils/rodizio');
 const { provedorDe, enviarTexto: enviarMensagemGraph, enviarTemplate: enviarTemplateGraph } = require('../utils/whatsappEnvio');
 const { motivoAssinaturaYcloud, normalizarEventoYcloud } = require('../utils/whatsappYcloud');
-const { assinaturaTwilioValida, normalizarEventoTwilio, cabecalhoBasic } = require('../utils/whatsappTwilio');
 const crypto = require('crypto');
 
 // Gera a resposta do agente a partir do histórico recente da conversa.
@@ -250,31 +248,6 @@ router.post('/ycloud-webhook/:token', async (req, res) => {
   }
 });
 
-// POST /api/whatsapp/twilio-webhook/:token -> a Twilio chama aqui (mensagens recebidas e status de entrega).
-// A Twilio manda formulário (não JSON) e assina com o Auth Token do próprio usuário (X-Twilio-Signature).
-router.post('/twilio-webhook/:token', express.urlencoded({ extended: false }), async (req, res) => {
-  try {
-    const token = String(req.params.token || '');
-    const user = token.length >= 16 ? await User.findOne({ 'whatsappBusiness.webhookToken': token, 'whatsappBusiness.provedor': 'twilio' }) : null;
-    if (!user) {
-      console.warn('[twilio] webhook recusado: código do endereço não bate com nenhum usuário conectado na Twilio');
-      return res.sendStatus(403);
-    }
-    const base = String(process.env.APP_URL || '').replace(/\/$/, '') || `${req.protocol}://${req.get('host')}`;
-    const url = `${base}/api/whatsapp/twilio-webhook/${token}`;
-    if (!assinaturaTwilioValida(url, req.body, user.whatsappBusiness.accessToken, req.get('x-twilio-signature'))) {
-      console.warn(`[twilio] webhook recusado: assinatura diferente (URL usada na conferência: ${url})`);
-      return res.sendStatus(403);
-    }
-    res.status(200).type('text/xml').send('<Response></Response>'); // vazio = não responde nada automaticamente
-    const value = normalizarEventoTwilio(req.body, user.whatsappBusiness.phoneNumberId);
-    if (value) await processarEventoDeMensagens(value);
-  } catch (err) {
-    console.error('Erro ao processar webhook da Twilio:', err.message);
-    if (!res.headersSent) res.sendStatus(500);
-  }
-});
-
 // field "messages" -> mensagem recebida ou atualização de status de entrega/leitura
 // (é a lógica que já existia, só isolada numa função pra caber no loop de vários campos)
 async function processarEventoDeMensagens(value) {
@@ -335,18 +308,27 @@ async function processarEventoDeMensagens(value) {
     // os provedores reenviam o mesmo evento se demorarmos a responder: não salva duas vezes
     if (msg.id && (await Message.findOne({ whatsappMessageId: msg.id, direction: 'in' }))) continue;
     const telefone = normalizarTelefone(msg.from);
-    let card = await Card.findOne({ userId: user._id, telefoneNormalizado: telefone });
+    // o lead pode estar na minha conta ou na de alguém que o rodízio escolheu (aí ele guarda quem o atribuiu: eu)
+    let card = (await Card.findOne({ userId: user._id, telefoneNormalizado: telefone }))
+      || (await Card.findOne({ atribuidoPorId: user._id, telefoneNormalizado: telefone }));
     let eraContatoNovo = false;
 
     if (!card) {
       // mensagem de um número que ainda não existe no funil — cria um lead novo automaticamente
-      const coluna = await Column.findOne({ userId: user._id, tipo: 'aberto' }).sort({ ordem: 1 });
+      // (se o rodízio estiver ligado, o lead já nasce na conta da próxima pessoa da vez)
+      let donoDoLead = user._id;
+      let coluna = null;
+      let atribuidoPorId = null;
+      const vez = await escolherPorRodizio(user);
+      if (vez) { donoDoLead = vez.alvo._id; coluna = vez.coluna; atribuidoPorId = String(vez.alvo._id) === String(user._id) ? null : user._id; }
+      if (!coluna) coluna = await Column.findOne({ userId: user._id, tipo: 'aberto' }).sort({ ordem: 1 });
       if (!coluna) { console.warn('[whatsapp] mensagem recebida, mas o usuário não tem coluna "em aberto" pra criar o lead'); continue; } // usuário não tem nenhuma coluna "em aberto" pra receber o lead
       const nomeContato =
         (value.contacts && value.contacts[0] && value.contacts[0].profile && value.contacts[0].profile.name) ||
         'Novo contato (WhatsApp)';
       card = await Card.create({
-        userId: user._id,
+        userId: donoDoLead,
+        atribuidoPorId,
         columnId: coluna._id,
         cliente: nomeContato,
         telefone: msg.from,
@@ -375,7 +357,7 @@ async function processarEventoDeMensagens(value) {
       if (anexo) anexoId = anexo._id;
     }
     await Message.create({
-      userId: user._id,
+      userId: card.userId,
       cardId: card._id,
       direction: 'in',
       texto,
@@ -384,13 +366,15 @@ async function processarEventoDeMensagens(value) {
       whatsappMessageId: msg.id,
       timestamp: msg.timestamp ? new Date(parseInt(msg.timestamp, 10) * 1000) : new Date(),
     });
-    dispararWebhooks(user._id, 'mensagem.recebida', { cardId: card._id.toString(), cliente: card.cliente, telefone: card.telefone, texto, midiaTipo });
-    enviarPush(user._id, montarPayloadMensagem({ cliente: card.cliente, texto, canal: 'WhatsApp', cardId: card._id }));
+    dispararWebhooks(card.userId, 'mensagem.recebida', { cardId: card._id.toString(), cliente: card.cliente, telefone: card.telefone, texto, midiaTipo });
+    enviarPush(card.userId, montarPayloadMensagem({ cliente: card.cliente, texto, canal: 'WhatsApp', cardId: card._id }));
 
-    let tratadoPeloMenu = false;
+    // lead que o rodízio mandou pra outra pessoa: o menu de triagem e o agente de IA são do gestor, então não rodam aqui
+    const leadDoGestor = String(card.userId) === String(user._id);
+    let tratadoPeloMenu = !leadDoGestor;
 
     // contato novo + menu de triagem ativo -> manda o menu e espera a resposta
-    if (eraContatoNovo && user.menuTriagem && user.menuTriagem.ativo && user.menuTriagem.mensagemInicial) {
+    if (leadDoGestor && eraContatoNovo && user.menuTriagem && user.menuTriagem.ativo && user.menuTriagem.mensagemInicial) {
       try {
         await enviarMensagemGraph(user, card, user.menuTriagem.mensagemInicial);
         await Message.create({
@@ -402,7 +386,7 @@ async function processarEventoDeMensagens(value) {
       } catch (e) {
         console.error('Erro ao enviar menu de triagem:', e.message);
       }
-    } else if (card.aguardandoMenuTriagem) {
+    } else if (leadDoGestor && card.aguardandoMenuTriagem) {
       // já mandamos o menu antes — confere se a resposta bate com alguma opção
       const escolha = (texto || '').trim();
       const opcao = (user.menuTriagem.opcoes || []).find((o) => o.numero === escolha);
@@ -517,9 +501,8 @@ router.get('/status', auth, async (req, res) => {
     const wb = (user && user.whatsappBusiness) || {};
     res.json({
       connected: conectado, agenteIaAtivo, iaProativaAtiva,
-      provedor: wb.provedor === 'ycloud' || wb.provedor === 'twilio' ? wb.provedor : 'meta',
+      provedor: wb.provedor === 'ycloud' ? 'ycloud' : 'meta',
       ycloudWebhookPath: wb.provedor === 'ycloud' && wb.webhookToken ? `/api/whatsapp/ycloud-webhook/${wb.webhookToken}` : null,
-      twilioWebhookPath: wb.provedor === 'twilio' && wb.webhookToken ? `/api/whatsapp/twilio-webhook/${wb.webhookToken}` : null,
       ycloudSecretConfigurado: wb.provedor === 'ycloud' && !!wb.webhookSecret,
     });
   } catch (err) {
@@ -601,29 +584,6 @@ router.post('/agente-ia', auth, async (req, res) => {
 router.post('/configurar', auth, async (req, res) => {
   try {
     const { phoneNumberId, accessToken, wabaId } = req.body;
-    if (req.body.provedor === 'twilio') {
-      const numero = String(req.body.numero || '').replace(/\D/g, '');
-      const sid = String(req.body.accountSid || '').trim();
-      const authToken = String(req.body.authToken || '').trim();
-      if (numero.length < 10 || !/^AC[0-9a-fA-F]{32}$/.test(sid) || !authToken) {
-        return res.status(400).json({ error: 'Preencha o número do WhatsApp (com DDI e DDD), o Account SID (começa com AC) e o Auth Token da Twilio.' });
-      }
-      const doOutro = await User.findOne({ 'whatsappBusiness.phoneNumberId': numero, _id: { $ne: req.userId } });
-      if (doOutro) return res.status(400).json({ error: 'Esse número já está conectado em outra conta.' });
-      const atual = await User.findById(req.userId);
-      const tokenAtual = atual && atual.whatsappBusiness && atual.whatsappBusiness.webhookToken;
-      const webhookToken = tokenAtual || crypto.randomBytes(24).toString('hex');
-      await User.findByIdAndUpdate(req.userId, {
-        'whatsappBusiness.provedor': 'twilio',
-        'whatsappBusiness.phoneNumberId': numero,
-        'whatsappBusiness.accountSid': sid,
-        'whatsappBusiness.accessToken': authToken,
-        'whatsappBusiness.webhookToken': webhookToken,
-        'whatsappBusiness.webhookSecret': null,
-        'whatsappBusiness.wabaId': null,
-      });
-      return res.json({ twilioWebhookPath: `/api/whatsapp/twilio-webhook/${webhookToken}` });
-    }
     if (req.body.provedor === 'ycloud') {
       const numero = String(req.body.numero || '').replace(/\D/g, '');
       const apiKey = String(req.body.apiKey || '').trim();
@@ -636,15 +596,16 @@ router.post('/configurar', auth, async (req, res) => {
       const atual = await User.findById(req.userId);
       const tokenAtual = atual && atual.whatsappBusiness && atual.whatsappBusiness.webhookToken;
       const webhookToken = tokenAtual || crypto.randomBytes(24).toString('hex');
+      const secretFinal = secret || (atual && atual.whatsappBusiness && atual.whatsappBusiness.webhookSecret) || null;
       await User.findByIdAndUpdate(req.userId, {
         'whatsappBusiness.provedor': 'ycloud',
         'whatsappBusiness.phoneNumberId': numero,
         'whatsappBusiness.accessToken': apiKey,
-        'whatsappBusiness.webhookSecret': secret || (atual && atual.whatsappBusiness && atual.whatsappBusiness.webhookSecret) || null,
+        'whatsappBusiness.webhookSecret': secretFinal,
         'whatsappBusiness.webhookToken': webhookToken,
         'whatsappBusiness.wabaId': null,
       });
-      return res.json({ ycloudWebhookPath: `/api/whatsapp/ycloud-webhook/${webhookToken}` });
+      return res.json({ ycloudWebhookPath: `/api/whatsapp/ycloud-webhook/${webhookToken}`, ycloudSecretConfigurado: !!secretFinal });
     }
     if (!phoneNumberId || !accessToken) {
       return res.status(400).json({ error: 'Preencha o Phone Number ID e o Access Token.' });
@@ -687,7 +648,7 @@ router.post('/desconectar', auth, async (req, res) => {
       'whatsappBusiness.provedor': 'meta',
       'whatsappBusiness.webhookSecret': null,
       // o código do endereço do webhook (webhookToken) é mantido de propósito: assim, desconectar e
-      // reconectar não invalida o endereço que já foi cadastrado na YCloud/Twilio.
+      // reconectar não invalida o endereço que já foi cadastrado na YCloud.
       'whatsappBusiness.accountSid': null,
     });
     res.status(204).end();
@@ -798,12 +759,18 @@ router.post('/enviar', auth, async (req, res) => {
       return res.status(201).json(msg.toJSON());
     }
 
-    if (!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) {
+    // lead que veio pelo rodízio: se a pessoa não tem WhatsApp próprio conectado, responde pelo número do gestor que distribuiu
+    let remetente = user;
+    if ((!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) && card.atribuidoPorId) {
+      const gestor = await User.findById(card.atribuidoPorId);
+      if (gestor && gestor.equipeId && user && String(gestor.equipeId) === String(user.equipeId) && gestor.whatsappBusiness && gestor.whatsappBusiness.accessToken) remetente = gestor;
+    }
+    if (!remetente || !remetente.whatsappBusiness || !remetente.whatsappBusiness.accessToken) {
       return res.status(400).json({ error: 'WhatsApp Business não está conectado.' });
     }
     if (!card.telefoneNormalizado) return res.status(400).json({ error: 'Esse cliente não tem telefone cadastrado.' });
 
-    const data = await enviarMensagemGraph(user, card, texto);
+    const data = await enviarMensagemGraph(remetente, card, texto);
 
     const msg = await Message.create({
       userId: req.userId,
@@ -829,9 +796,7 @@ router.get('/templates', auth, async (req, res) => {
       return res.status(400).json({ error: 'WhatsApp Business não está conectado.' });
     }
     if (provedorDe(user) !== 'meta') {
-      const onde = provedorDe(user) === 'twilio'
-        ? 'Com a Twilio, crie e aprove os modelos no Content Template Builder do console da Twilio. Aqui no painel você envia informando o Content SID do modelo (começa com HX).'
-        : 'Com a YCloud, crie e aprove os modelos no painel da YCloud (WhatsApp → Templates). Aqui no painel você só envia pelo nome do modelo.';
+      const onde = 'Com a YCloud, crie e aprove os modelos no painel da YCloud (WhatsApp → Templates). Aqui no painel você só envia pelo nome do modelo.';
       return res.status(400).json({ error: onde });
     }
     if (!user.whatsappBusiness.wabaId) {
@@ -869,9 +834,7 @@ router.post('/templates', auth, async (req, res) => {
       return res.status(400).json({ error: 'WhatsApp Business não está conectado.' });
     }
     if (provedorDe(user) !== 'meta') {
-      const onde = provedorDe(user) === 'twilio'
-        ? 'Com a Twilio, crie e aprove os modelos no Content Template Builder do console da Twilio. Aqui no painel você envia informando o Content SID do modelo (começa com HX).'
-        : 'Com a YCloud, crie e aprove os modelos no painel da YCloud (WhatsApp → Templates). Aqui no painel você só envia pelo nome do modelo.';
+      const onde = 'Com a YCloud, crie e aprove os modelos no painel da YCloud (WhatsApp → Templates). Aqui no painel você só envia pelo nome do modelo.';
       return res.status(400).json({ error: onde });
     }
     if (!user.whatsappBusiness.wabaId) {

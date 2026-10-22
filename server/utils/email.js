@@ -96,6 +96,16 @@ function montarEmailBackup({ nome, geradoEm, anexado, tamanhoMb }) {
   return { assunto: anexado ? 'Seu backup semanal — Painel CRM' : 'Backup semanal grande demais para e-mail — Painel CRM', html: moldeEmail('Backup semanal', corpoHtml), texto };
 }
 
+function montarEmailConviteEquipe({ gestorNome, link }) {
+  const quem = gestorNome ? escaparHtml(gestorNome) : 'Um gestor';
+  const html = moldeEmail('Você foi convidado para uma equipe', `
+<p style="line-height:1.55;">${quem} convidou você para a equipe dele no Painel CRM.</p>
+<p style="margin:24px 0;"><a href="${escaparHtml(link)}" style="background:#141414;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;display:inline-block;">Abrir o Painel CRM</a></p>
+<p style="line-height:1.55;font-size:14px;color:#555;">Entre com este e-mail, abra a aba Equipe e aceite o convite. Seu funil continua só seu. Se não esperava este convite, ignore este e-mail.</p>`);
+  const texto = `${gestorNome || 'Um gestor'} convidou você para a equipe dele no Painel CRM. Entre com este e-mail, abra a aba Equipe e aceite o convite: ${link}`;
+  return { assunto: 'Convite para equipe — Painel CRM', html, texto };
+}
+
 module.exports = {
   emailConfigurado,
   urlBaseDoApp,
@@ -103,5 +113,6 @@ module.exports = {
   montarEmailRecuperacao,
   montarEmailSenhaAlterada,
   montarEmailBackup,
+  montarEmailConviteEquipe,
   escaparHtml,
 };

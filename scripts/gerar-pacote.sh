@@ -9,7 +9,7 @@
 #      aqui e não gera pacote nenhum (passe --pular-verificacao pra
 #      pular essa etapa, só em emergência).
 #   2. Aumenta em 1 o número de cache-bust (o "?v=NNNNNNNN" no final
-#      de style.css, script.js e login.js dentro do index.html e do
+#      de style.css, js/app/*.js e login.js dentro do index.html e do
 #      login.html) — isso obriga o navegador (e o app instalado no
 #      celular) a baixar a versão nova em vez de usar a antiga que
 #      ficou guardada em cache. Veja o aviso sobre cache no README.md.

@@ -15,8 +15,7 @@ const whatsappBusinessSchema = new mongoose.Schema(
     phoneNumberId: { type: String, default: null },
     accessToken: { type: String, default: null },
     wabaId: { type: String, default: null },
-    provedor: { type: String, enum: ['meta', 'ycloud', 'twilio'], default: 'meta' }, // quem entrega o WhatsApp: Meta direto, YCloud ou Twilio
-    accountSid: { type: String, default: null }, // Twilio: Account SID (o Auth Token fica em accessToken)
+    provedor: { type: String, enum: ['meta', 'ycloud'], default: 'meta' }, // quem entrega o WhatsApp: Meta direto ou YCloud
     webhookToken: { type: String, default: null }, // YCloud: identifica o usuário no endereço do webhook
     webhookSecret: { type: String, default: null }, // YCloud: secret whsec_... pra conferir a assinatura
     agenteIaAtivo: { type: Boolean, default: false }, // responde clientes sozinho, sem revisão humana
@@ -63,6 +62,12 @@ const userSchema = new mongoose.Schema(
     menuTriagem: { type: menuTriagemSchema, default: () => ({ opcoes: [] }) },
     equipeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipe', default: null },
     papelEquipe: { type: String, enum: ['supervisor', 'membro'], default: 'membro' },
+    // rodízio de leads novos (só faz sentido pra gestor): ver utils/rodizio.js
+    rodizio: {
+      ativo: { type: Boolean, default: false },
+      membros: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+      contador: { type: Number, default: 0 },
+    },
     supervisorDeDados: { type: Boolean, default: false }, // acesso ao monitoramento de erros — separado do papel de gestor da equipe
     agendamentoPublico: {
       ativo: { type: Boolean, default: false },

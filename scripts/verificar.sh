@@ -72,7 +72,7 @@ contar() {
 # 1) Sintaxe JS (node --check) — front-end
 # ---------------------------------------------------------------
 passo "1/5 — Sintaxe do JavaScript do front-end"
-for arquivo in public/js/*.js; do
+for arquivo in public/js/*.js public/js/app/*.js; do
   contar
   if node --check "$arquivo" 2>/tmp/erro-sintaxe.txt; then
     ok "$arquivo"
@@ -127,12 +127,23 @@ done
 # ---------------------------------------------------------------
 # 4) Cobertura dos data-action (binding)
 # ---------------------------------------------------------------
-passo "5/5 — Cobertura dos data-action (script.js)"
+passo "5/5 — Cobertura dos data-action (public/js/app)"
 contar
 if node scripts/verificar-bindings.js; then
   ok "data-action com binding"
 else
   falhou "data-action sem binding (ver detalhes acima)"
+fi
+
+# ---------------------------------------------------------------
+# Teste de telas (Playwright com API simulada; pulado se não houver Playwright)
+# ---------------------------------------------------------------
+passo "Teste automático de telas"
+contar
+if node scripts/testar-telas.js; then
+  ok "telas (navegador sem cabeça)"
+else
+  falhou "teste de telas — algo falhou (ver acima)"
 fi
 
 # ---------------------------------------------------------------

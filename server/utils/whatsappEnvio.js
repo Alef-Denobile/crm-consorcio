@@ -1,17 +1,15 @@
 const { GRAPH_API } = require('./meta');
 const { enviarTextoYcloud, enviarTemplateYcloud } = require('./whatsappYcloud');
-const { enviarTextoTwilio, enviarTemplateTwilio } = require('./whatsappTwilio');
 
 // Ponto único de envio do WhatsApp. Cada usuário tem um provedor: 'meta' (padrão, como sempre foi)
-// 'ycloud' ou 'twilio'. Quem chama recebe sempre { messages: [{ id }] }, independente do provedor.
+// ou 'ycloud'. Quem chama recebe sempre { messages: [{ id }] }, independente do provedor.
 function provedorDe(user) {
   const p = user && user.whatsappBusiness && user.whatsappBusiness.provedor;
-  return p === 'ycloud' || p === 'twilio' ? p : 'meta';
+  return p === 'ycloud' ? p : 'meta';
 }
 
 async function enviarTexto(user, card, texto) {
   if (provedorDe(user) === 'ycloud') return enviarTextoYcloud(user, card, texto);
-  if (provedorDe(user) === 'twilio') return enviarTextoTwilio(user, card, texto);
   const resp = await fetch(`${GRAPH_API}/${user.whatsappBusiness.phoneNumberId}/messages`, {
     method: 'POST',
     headers: {
@@ -34,7 +32,6 @@ async function enviarTexto(user, card, texto) {
 
 async function enviarTemplate(user, card, nomeTemplate, idioma, variaveis) {
   if (provedorDe(user) === 'ycloud') return enviarTemplateYcloud(user, card, nomeTemplate, idioma, variaveis);
-  if (provedorDe(user) === 'twilio') return enviarTemplateTwilio(user, card, nomeTemplate, idioma, variaveis);
   const components = [];
   if (Array.isArray(variaveis) && variaveis.length) {
     components.push({
