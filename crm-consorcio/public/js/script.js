@@ -4422,7 +4422,7 @@ function painelDashboardAberto(id){
 function renderCabecalhoPainelDashboard(id, titulo, extraHtml){
   const aberto = painelDashboardAberto(id);
   return `
-    <div class="dash-panel-title dash-panel-title-recolhivel">
+    <div class="dash-panel-title dash-panel-title-recolhivel" style="${aberto?'':'margin-bottom:0;'}">
       <button type="button" class="dash-panel-toggle" data-action="toggle-painel-dashboard" data-painel-id="${id}">
         <span class="dash-panel-seta ${aberto?'aberta':''}">▾</span> ${titulo}
       </button>
