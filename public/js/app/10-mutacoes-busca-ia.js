@@ -157,6 +157,21 @@ async function bulkMoverLeads(columnId){
   renderApp();
   await Promise.all(ids.map(id=> moveCard(id, columnId)));
 }
+async function bulkTransferirLeads(destinoId){
+  const ids = [...leadsSelecionados];
+  if(!ids.length) return;
+  try{
+    const r = await apiRequest('POST', '/cards/transferir-lote', { ids, atribuirParaId: destinoId });
+    const feitos = new Set(r.ids || []);
+    board.cards = board.cards.filter(c=>!feitos.has(c.id));
+    leadsSelecionados.clear();
+    equipeMsg = { tipo:'ok', texto: `${r.transferidos} lead(s) enviado(s) para ${r.destinoNome}.` };
+    errorMsg = null;
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível passar os leads.';
+  }
+  renderApp();
+}
 async function bulkArquivarLeads(){
   const ids = [...leadsSelecionados];
   leadsSelecionados.clear();
@@ -901,7 +916,7 @@ async function importarLeadsCsv(){
     try{
       const novo = await apiRequest('POST', '/cards', {
         columnId, cliente: linha.nome, telefone: linha.telefone, valor: linha.valor,
-        temperatura: 'morno', obs: '', mes: currentMonthKey(),
+        temperatura: 'morno', obs: '', mes: '', mesInicioContato: hojeLocalISO(),
       });
       board.cards.push(novo);
       sucesso++;

@@ -96,6 +96,19 @@ function montarEmailBackup({ nome, geradoEm, anexado, tamanhoMb }) {
   return { assunto: anexado ? 'Seu backup semanal — Painel CRM' : 'Backup semanal grande demais para e-mail — Painel CRM', html: moldeEmail('Backup semanal', corpoHtml), texto };
 }
 
+function montarEmailTarefa({ nome, titulo, descricao, quando, comHora, tipo }) {
+  const novo = tipo === 'nova';
+  const cab = novo ? 'Nova tarefa no seu CRM' : (comHora ? 'Tarefa chegando' : 'Tarefa para hoje');
+  const html = moldeEmail(cab, `
+<p style="line-height:1.55;">${nome ? `Olá, ${escaparHtml(nome)}! ` : ''}${novo ? 'Você criou uma tarefa no Painel CRM:' : 'Lembrete da sua tarefa no Painel CRM:'}</p>
+<p style="font-size:17px;font-weight:bold;margin:14px 0 6px;">${escaparHtml(titulo)}</p>
+<p style="margin:0 0 6px;color:#555;">${escaparHtml(quando)}</p>
+${descricao ? `<p style="line-height:1.55;font-size:14px;color:#555;">${escaparHtml(descricao)}</p>` : ''}
+${novo ? '<p style="line-height:1.55;font-size:13px;color:#777;">O arquivo em anexo (.ics) adiciona esse compromisso ao seu calendário, se você abrir.</p>' : ''}`);
+  const texto = `${novo ? 'Nova tarefa' : 'Lembrete de tarefa'}: ${titulo}\n${quando}${descricao ? `\n${descricao}` : ''}`;
+  return { assunto: `${novo ? 'Nova tarefa' : (comHora ? 'Tarefa chegando' : 'Tarefa para hoje')}: ${titulo}`.slice(0, 150), html, texto };
+}
+
 function montarEmailConviteEquipe({ gestorNome, link }) {
   const quem = gestorNome ? escaparHtml(gestorNome) : 'Um gestor';
   const html = moldeEmail('Você foi convidado para uma equipe', `
@@ -114,5 +127,6 @@ module.exports = {
   montarEmailSenhaAlterada,
   montarEmailBackup,
   montarEmailConviteEquipe,
+  montarEmailTarefa,
   escaparHtml,
 };

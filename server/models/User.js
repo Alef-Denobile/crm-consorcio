@@ -68,6 +68,7 @@ const userSchema = new mongoose.Schema(
       membros: { type: [mongoose.Schema.Types.ObjectId], default: [] },
       contador: { type: Number, default: 0 },
     },
+    emailTarefas: { type: Boolean, default: false }, // recebe por e-mail as tarefas novas e o lembrete no dia
     supervisorDeDados: { type: Boolean, default: false }, // acesso ao monitoramento de erros — separado do papel de gestor da equipe
     agendamentoPublico: {
       ativo: { type: Boolean, default: false },

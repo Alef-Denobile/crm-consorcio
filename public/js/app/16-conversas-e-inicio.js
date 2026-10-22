@@ -744,14 +744,22 @@ function renderImportExportPage(){
 
     <div class="settings-page-section">
       <h3>2. Possíveis leads (${possiveisLeads.length})</h3>
-      <p class="settings-page-note">Complete as informações de cada um pra adicioná-lo de vez aos Leads.</p>
+      <p class="settings-page-note">Complete as informações de cada um, ou passe vários de uma vez para os Leads. O início de contato fica com a data de hoje e o mês de venda em branco.</p>
+      ${(possiveisLeadsCarregados && possiveisLeads.length) ? `
+        <div class="settings-btn-row" style="margin-bottom:10px; align-items:center; flex-wrap:wrap;">
+          ${podeAtribuirLeads() ? `<select id="possiveis-destino" title="Para quem vão os leads">${opcoesDestinoEquipe(possiveisDestinoId, true)}</select>` : ''}
+          <button class="btn-primary" data-action="possiveis-passar-todos" ${possiveisPassandoLote?'disabled':''}>Passar todos para Leads (${possiveisLeads.length})</button>
+          <button class="btn-outline" data-action="possiveis-passar-selecionados" ${(possiveisPassandoLote||!possiveisSelecionados.size)?'disabled':''}>Passar selecionados (${possiveisSelecionados.size})</button>
+        </div>` : ''}
+      ${possiveisLoteMsg ? `<p class="settings-page-msg ${possiveisLoteMsg.tipo}">${esc(possiveisLoteMsg.texto)}</p>` : ''}
       ${!possiveisLeadsCarregados ? `<p class="settings-page-note">Carregando…</p>` : (possiveisLeads.length ? `
         <div class="leads-table-wrap">
           <table class="leads-table">
-            <thead><tr><th>Nome</th><th>Telefone</th><th>Serviço desejado</th><th>Ações</th></tr></thead>
+            <thead><tr><th style="width:34px;"><input type="checkbox" data-action="possiveis-select-all" ${(possiveisLeads.length && possiveisLeads.every(l=>possiveisSelecionados.has(l.id)))?'checked':''} /></th><th>Nome</th><th>Telefone</th><th>Serviço desejado</th><th>Ações</th></tr></thead>
             <tbody>
               ${possiveisLeads.map(l=>`
                 <tr>
+                  <td><input type="checkbox" data-action="possiveis-select-um" data-lead-id="${l.id}" ${possiveisSelecionados.has(l.id)?'checked':''} /></td>
                   <td>${esc(l.nome)||'—'}</td>
                   <td>${esc(l.telefone)||'—'}</td>
                   <td>${esc(l.tipoServico)||'—'}</td>

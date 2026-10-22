@@ -1,9 +1,12 @@
 const express = require('express');
+const { hojeBR } = require('../utils/dataBR');
 const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const PossivelLead = require('../models/PossivelLead');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
+const { validarAtribuicao, colunaEquivalente, proximaOrdem } = require('../utils/atribuirLead');
+const { enviarPush } = require('../utils/push');
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
 
 const router = express.Router();
@@ -44,6 +47,64 @@ router.post('/importar', async (req, res) => {
   }
 });
 
+// POST /api/possiveis-leads/promover-lote -> passa vários possíveis leads (ou todos) pra Leads reais de uma vez.
+// body: { ids?: [..] (vazio/ausente = todos), columnId?, atribuirParaId? (só gestor: manda pra outra pessoa da equipe) }
+router.post('/promover-lote', async (req, res) => {
+  try {
+    const { ids, columnId, atribuirParaId } = req.body || {};
+    const filtro = { userId: req.userId };
+    if (Array.isArray(ids) && ids.length) {
+      const validos = ids.filter((i) => mongoose.isValidObjectId(i));
+      if (!validos.length) return res.status(400).json({ error: 'Seleção inválida.' });
+      filtro._id = { $in: validos };
+    }
+    const possiveis = await PossivelLead.find(filtro).sort({ createdAt: 1 }).limit(2000);
+    if (!possiveis.length) return res.status(400).json({ error: 'Não há possíveis leads para passar.' });
+
+    let donoId = req.userId;
+    let alvoInfo = null;
+    if (atribuirParaId && String(atribuirParaId) !== String(req.userId)) {
+      try { alvoInfo = await validarAtribuicao(req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
+      donoId = alvoInfo.alvo._id;
+    }
+
+    // coluna de destino: a escolhida (ou a equivalente na conta da outra pessoa); sem escolha, a primeira "em aberto"
+    let coluna = null;
+    if (alvoInfo) coluna = await colunaEquivalente(columnId, donoId);
+    else if (columnId && mongoose.isValidObjectId(columnId)) coluna = await Column.findOne({ _id: columnId, userId: req.userId });
+    if (!coluna && !alvoInfo) coluna = await Column.findOne({ userId: req.userId, tipo: 'aberto' }).sort({ ordem: 1 });
+    if (!coluna) return res.status(400).json({ error: alvoInfo ? 'A pessoa escolhida não tem uma coluna "em aberto" pra receber os leads.' : 'Você não tem uma coluna "em aberto" pra receber os leads.' });
+
+    let ordem = await proximaOrdem(coluna._id, donoId);
+    const hoje = hojeBR();
+    const criados = [];
+    for (const p of possiveis) {
+      const card = await Card.create({
+        userId: donoId,
+        columnId: coluna._id,
+        cliente: (p.nome || '').trim() || (p.telefone || '').trim() || 'Sem nome',
+        telefone: (p.telefone || '').trim(),
+        valor: 0,
+        temperatura: 'morno',
+        obs: p.tipoServico ? `Serviço de interesse: ${p.tipoServico}` : '',
+        mes: '', // mês de venda só é preenchido quando a venda acontece
+        mesInicioContato: hoje, // dia em que o lead entrou no Pipeline
+        ordem,
+        atribuidoPorId: alvoInfo ? req.userId : null,
+      });
+      ordem += 1000;
+      criados.push(card);
+    }
+    await PossivelLead.deleteMany({ _id: { $in: possiveis.map((p) => p._id) } });
+    if (alvoInfo) {
+      enviarPush(donoId, { titulo: 'Novos leads pra você', corpo: `${alvoInfo.gestor.nome || 'O gestor'} passou ${criados.length} lead(s) pra você.`, tag: 'leads-lote', url: '/index.html', tipo: 'lead' });
+    }
+    res.status(201).json({ total: criados.length, cards: alvoInfo ? [] : criados.map((c) => c.toJSON()), destinoNome: alvoInfo ? (alvoInfo.alvo.nome || alvoInfo.alvo.email) : null });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao passar os possíveis leads para Leads.' });
+  }
+});
+
 // POST /api/possiveis-leads/:id/promover -> completa os dados e vira um cliente de verdade
 router.post('/:id/promover', async (req, res) => {
   try {
@@ -67,8 +128,8 @@ router.post('/:id/promover', async (req, res) => {
       valor: valor || 0,
       temperatura: temperatura || 'morno',
       obs: obs || '',
-      mes: mes || '', // mês de venda só é preenchido quando a venda acontece
-      mesInicioContato: new Date().toISOString().slice(0, 7),
+      mes: '', // mês de venda só é preenchido quando a venda acontece
+      mesInicioContato: hojeBR(), // dia em que o lead entrou no Pipeline
     });
     await PossivelLead.findByIdAndDelete(possivel._id);
     res.status(201).json(card.toJSON());

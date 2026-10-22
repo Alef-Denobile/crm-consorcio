@@ -15,6 +15,13 @@ if('serviceWorker' in navigator){
 }
 
 /* ---------- helpers ---------- */
+// data de hoje no fuso do aparelho (AAAA-MM-DD); toISOString() usaria UTC e viraria o dia à noite
+// em equipe, só o gestor exclui leads (o servidor também confere)
+function podeExcluirLeads(){ return !(typeof equipe !== 'undefined' && equipe && !equipe.souSupervisor); }
+function hojeLocalISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 const fmtBRL = (n) => new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL', minimumFractionDigits:2, maximumFractionDigits:2 }).format(n || 0);
 const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
 const MESES_CHEIO = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -311,6 +318,10 @@ let anexoEnviando = false;
 let anexoMsg = null;
 let possiveisLeads = [];
 let possiveisLeadsCarregados = false;
+let possiveisSelecionados = new Set(); // ids marcados na lista de possíveis leads
+let possiveisDestinoId = ''; // gestor: pra quem vão os leads ('' = pra mim)
+let possiveisPassandoLote = false;
+let possiveisLoteMsg = null;
 let importPlanilhaLinhas = [];
 let importPlanilhaColunas = [];
 let importPlanilhaNomeArquivo = '';

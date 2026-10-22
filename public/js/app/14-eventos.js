@@ -35,6 +35,8 @@ function bindAppEvents(){
   if(pushDesativarBtn) pushDesativarBtn.addEventListener('click', desativarPush);
   const pushTestarBtn = app.querySelector('[data-action="push-testar"]');
   if(pushTestarBtn) pushTestarBtn.addEventListener('click', testarPush);
+  const emailTarefasBtn = app.querySelector('[data-action="email-tarefas-alternar"]');
+  if(emailTarefasBtn) emailTarefasBtn.addEventListener('click', alternarEmailTarefas);
   const backupAutoAlternarBtn = app.querySelector('[data-action="backup-auto-alternar"]');
   if(backupAutoAlternarBtn) backupAutoAlternarBtn.addEventListener('click', alternarBackupAuto);
   const backupAutoAgoraBtn = app.querySelector('[data-action="backup-auto-agora"]');
@@ -380,6 +382,29 @@ function bindAppEvents(){
   if(mapServicoEl) mapServicoEl.addEventListener('change', (e)=> importMapServico = e.target.value);
   const confirmarImportBtn = document.getElementById('confirmar-import-planilha');
   if(confirmarImportBtn) confirmarImportBtn.addEventListener('click', confirmarImportPlanilha);
+  const possiveisDestinoSel = document.getElementById('possiveis-destino');
+  if(possiveisDestinoSel) possiveisDestinoSel.addEventListener('change', (e)=>{ possiveisDestinoId = e.target.value; });
+  const passarTodosBtn = app.querySelector('[data-action="possiveis-passar-todos"]');
+  if(passarTodosBtn) passarTodosBtn.addEventListener('click', ()=>{
+    const qtd = possiveisLeads.length;
+    const destino = possiveisDestinoId ? ((equipe.membros||[]).find(m=>m.id===possiveisDestinoId)||{}).nome || 'a pessoa escolhida' : 'os seus Leads';
+    showConfirm({
+      message: `Passar ${qtd} possível${qtd===1?'':'is'} lead${qtd===1?'':'s'} para ${destino}?`,
+      confirmLabel: 'Passar todos',
+      onConfirm: ()=>{ closeConfirm(); passarPossiveisParaLeads(true); },
+    });
+  });
+  const passarSelBtn = app.querySelector('[data-action="possiveis-passar-selecionados"]');
+  if(passarSelBtn) passarSelBtn.addEventListener('click', ()=> passarPossiveisParaLeads(false));
+  const possiveisSelectAll = app.querySelector('[data-action="possiveis-select-all"]');
+  if(possiveisSelectAll) possiveisSelectAll.addEventListener('change', ()=>{
+    const todos = possiveisLeads.length && possiveisLeads.every(l=>possiveisSelecionados.has(l.id));
+    possiveisSelecionados = new Set(todos ? [] : possiveisLeads.map(l=>l.id));
+    renderApp();
+  });
+  app.querySelectorAll('[data-action="possiveis-select-um"]').forEach(el=>{
+    el.addEventListener('change', ()=>{ if(el.checked) possiveisSelecionados.add(el.dataset.leadId); else possiveisSelecionados.delete(el.dataset.leadId); renderApp(); });
+  });
   app.querySelectorAll('[data-action="completar-possivel-lead"]').forEach(btn=>{
     btn.addEventListener('click', ()=> abrirCompletarLead(btn.dataset.leadId));
   });
@@ -747,6 +772,19 @@ function bindAppEvents(){
   });
   const bulkColunaSelect = document.getElementById('leads-bulk-coluna');
   if(bulkColunaSelect) bulkColunaSelect.addEventListener('change', (e)=> bulkMoverLeads(e.target.value));
+  const bulkGestorSel = document.getElementById('leads-bulk-gestor-destino');
+  if(bulkGestorSel) bulkGestorSel.addEventListener('change', (e)=>{
+    const destinoId = e.target.value;
+    if(!destinoId) return;
+    const nome = ((equipe.membros||[]).find(m=>m.id===destinoId)||{}).nome || 'a pessoa escolhida';
+    const qtd = leadsSelecionados.size;
+    showConfirm({
+      message: `Passar ${qtd} lead${qtd===1?'':'s'} para ${nome}? Eles levam conversas, anexos, tarefas e histórico.`,
+      confirmLabel: 'Passar leads',
+      onConfirm: ()=>{ closeConfirm(); bulkTransferirLeads(destinoId); },
+    });
+    e.target.value = '';
+  });
   const bulkArquivarBtn = app.querySelector('[data-action="leads-bulk-arquivar"]');
   if(bulkArquivarBtn) bulkArquivarBtn.addEventListener('click', bulkArquivarLeads);
   const bulkExcluirBtn = app.querySelector('[data-action="leads-bulk-excluir"]');

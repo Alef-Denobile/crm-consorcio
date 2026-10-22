@@ -1,4 +1,5 @@
 const express = require('express');
+const { hojeBR } = require('../utils/dataBR');
 const { escolherPorRodizio } = require('../utils/rodizio');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
@@ -93,7 +94,7 @@ router.post('/webhook', exigirAssinaturaMeta, async (req, res) => {
         temperatura: 'morno',
         obs: `Capturado via anúncio do Instagram/Facebook.${email ? ` E-mail: ${email}` : ''}`,
         mes: '', // mês de venda fica em branco até a venda acontecer de verdade
-        mesInicioContato: new Date().toISOString().slice(0, 7), // o lead acabou de chegar: esse é o mês de início do contato
+        mesInicioContato: hojeBR(), // o lead acabou de chegar: esse é o dia de início do contato
       });
       dispararWebhooks(donoDoLead._id, 'lead.criado', { id: novoCard._id.toString(), cliente: novoCard.cliente, telefone: novoCard.telefone, origem: 'instagram_leadgen' });
       if (atribuidoPorId) enviarPush(donoDoLead._id, { titulo: 'Novo lead pra você', corpo: `${novoCard.cliente} chegou pelo rodízio.`, tag: 'lead-rodizio', url: '/index.html', tipo: 'lead' });
@@ -136,7 +137,7 @@ async function processarMensagensDiretas(entry) {
         temperatura: 'morno',
         obs: '',
         mes: '', // mês de venda fica em branco até a venda acontecer de verdade
-        mesInicioContato: new Date().toISOString().slice(0, 7), // o lead acabou de chegar: esse é o mês de início do contato
+        mesInicioContato: hojeBR(), // o lead acabou de chegar: esse é o dia de início do contato
       });
       dispararWebhooks(user._id, 'lead.criado', { id: card._id.toString(), cliente: card.cliente, origem: 'instagram_dm' });
     }

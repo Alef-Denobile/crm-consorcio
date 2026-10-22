@@ -32,8 +32,8 @@ function renderEscolhaTipoPessoaModal(){
 }
 function abrirNovoCardComTipo(columnId, tipoPessoa){
   // se a pessoa estiver vendo um mês específico no Pipeline, começa nesse mês (dia 1);
-  // se estiver em "Geral", usa a data de hoje mesmo, com o dia certinho
-  const dataInicial = filterMonth ? `${filterMonth}-01` : new Date().toISOString().slice(0,10);
+  // no mês atual ou em "Geral", usa a data de hoje, com o dia certinho
+  const dataInicial = (filterMonth && filterMonth !== hojeLocalISO().slice(0,7)) ? `${filterMonth}-01` : hojeLocalISO();
   modalForm = {
     __isNew: true, id:null, columnId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
@@ -107,7 +107,7 @@ function removerLinhaDeTarefa(idx){
 async function criarTarefaRapidaDoCard(){
   if(!modalForm || modalForm.__isNew) return;
   const validas = tarefasRapidasLista
-    .map(t=> ({ titulo: t.titulo.trim(), data: t.data || new Date().toISOString().slice(0,10) }))
+    .map(t=> ({ titulo: t.titulo.trim(), data: t.data || hojeLocalISO() }))
     .filter(t=> t.titulo);
   if(!validas.length) return;
 
@@ -568,7 +568,7 @@ function renderModal(){
           ` : ''}
         </div>
         <div class="modal-foot">
-          ${!f.__isNew ? `<button class="delete-link" id="f-delete">🗑 Excluir</button>` : '<span></span>'}
+          ${(!f.__isNew && podeExcluirLeads()) ? `<button class="delete-link" id="f-delete">🗑 Excluir</button>` : '<span></span>'}
           <div class="modal-foot-actions">
             ${mensagemSalvoCard ? `<span class="mensagem-salvo-toast">${esc(mensagemSalvoCard)}</span>` : ''}
             <button class="btn-outline" id="f-cancel" ${salvandoCard?'disabled':''}>Cancelar</button>
@@ -708,7 +708,7 @@ function renderModal(){
   const atribuirParaSel = document.getElementById('f-atribuir-para');
   if(atribuirParaSel) atribuirParaSel.addEventListener('change', (e)=> modalForm.__atribuirParaId = e.target.value);
   document.getElementById('f-save').addEventListener('click', saveCardFromModal);
-  if(!f.__isNew){
+  if(!f.__isNew && document.getElementById('f-delete')){
     document.getElementById('f-delete').addEventListener('click', ()=>{
       showConfirm({
         message: 'Excluir este cliente do funil? Essa ação não pode ser desfeita.',

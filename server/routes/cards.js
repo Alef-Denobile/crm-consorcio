@@ -1,7 +1,9 @@
 const express = require('express');
+const { hojeBR } = require('../utils/dataBR');
 const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const Card = require('../models/Card');
+const User = require('../models/User');
 const Column = require('../models/Column');
 const Automacao = require('../models/Automacao');
 const Task = require('../models/Task');
@@ -96,6 +98,8 @@ router.post('/', async (req, res) => {
     // garante que a coluna de destino pertence a este usuário
     const coluna = await Column.findOne({ _id: dados.columnId, userId: req.userId });
     if (!coluna) return res.status(404).json({ error: 'Coluna não encontrada.' });
+
+    if (dados.mesInicioContato === undefined) dados.mesInicioContato = hojeBR(); // lead novo: início de contato = hoje
 
     // modo gestor: o lead nasce já na conta de outra pessoa da equipe
     const atribuirParaId = req.body.atribuirParaId;
@@ -302,11 +306,40 @@ router.put('/:id/move', async (req, res) => {
   }
 });
 
+// POST /api/cards/transferir-lote -> o gestor passa vários leads de uma vez pra qualquer pessoa da equipe
+router.post('/transferir-lote', async (req, res) => {
+  try {
+    const { ids, atribuirParaId } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Selecione pelo menos um lead.' });
+    let alvoInfo;
+    try { alvoInfo = await validarAtribuicao(req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
+    if (String(alvoInfo.alvo._id) === String(req.userId)) return res.status(400).json({ error: 'Escolha outra pessoa da equipe.' });
+    const validos = ids.filter((i) => mongoose.isValidObjectId(i)).slice(0, 500);
+    const cards = await Card.find({ _id: { $in: validos }, userId: req.userId });
+    let transferidos = 0;
+    for (const card of cards) {
+      try { await transferirCard(card, alvoInfo.alvo, req.userId); transferidos++; } catch (e) { if (e.status === 400) return res.status(400).json({ error: e.mensagem || e.message, transferidos }); throw e; }
+    }
+    if (transferidos) {
+      registrarAuditoria(req.userId, 'leads_transferidos', `Passou ${transferidos} lead(s) para ${alvoInfo.alvo.nome || alvoInfo.alvo.email}`);
+      enviarPush(alvoInfo.alvo._id, { titulo: 'Novos leads pra você', corpo: `${alvoInfo.gestor.nome || 'O gestor'} passou ${transferidos} lead(s) pra você.`, tag: 'leads-lote', url: '/index.html', tipo: 'lead' });
+    }
+    res.json({ transferidos, ids: cards.map((c) => c._id.toString()), destinoNome: alvoInfo.alvo.nome || alvoInfo.alvo.email });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao passar os leads.' });
+  }
+});
+
 // DELETE /api/cards/:id -> remove o cliente (só se for do usuário logado)
 router.delete('/:id', async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ error: 'ID inválido.' });
+    }
+    // em equipe, só o gestor exclui leads (o membro pode mover pra "Perdido" ou arquivar)
+    const quem = await User.findById(req.userId).select('equipeId papelEquipe');
+    if (quem && quem.equipeId && quem.papelEquipe !== 'supervisor') {
+      return res.status(403).json({ error: 'Em equipe, só o gestor pode excluir leads. Você pode movê-lo para "Perdido" ou arquivá-lo.' });
     }
     const card = await Card.findOneAndDelete({ _id: req.params.id, userId: req.userId });
     if (!card) return res.status(404).json({ error: 'Cliente não encontrado.' });

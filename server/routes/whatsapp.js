@@ -1,4 +1,5 @@
 const express = require('express');
+const { hojeBR } = require('../utils/dataBR');
 const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
@@ -336,7 +337,7 @@ async function processarEventoDeMensagens(value) {
         temperatura: 'morno',
         obs: '',
         mes: '', // mês de venda fica em branco até a venda acontecer de verdade
-        mesInicioContato: new Date().toISOString().slice(0, 7), // o lead acabou de chegar: esse é o mês de início do contato
+        mesInicioContato: hojeBR(), // o lead acabou de chegar: esse é o dia de início do contato
       });
       eraContatoNovo = true;
     }

@@ -68,12 +68,13 @@ function respostas(cenario) {
     'GET /api/funis': { funis: [] },
     'GET /api/tasks': { tasks: [] },
     'GET /api/calendar/status': { connected: false },
-    'GET /api/equipe': cenario === 'semEquipe' ? semEquipe : { equipe: equipeGestor, convitesRecebidos: [] },
+    'GET /api/equipe': cenario === 'semEquipe' ? semEquipe : { equipe: cenario === 'membro' ? { ...equipeGestor, souSupervisor: false, rodizio: null, convitesPendentes: [], codigoConvite: null } : equipeGestor, convitesRecebidos: [] },
     'GET /api/equipe/supervisao': { mes, membros: [
       { userId: 'u1', nome: 'Gestor Teste', papel: 'supervisor', totalLeads: 2, ganhoValor: 80000, perdidoValor: 0, abertoValor: 50000, vendidoNoMes: 80000, metaMes: 0 },
       { userId: 'u2', nome: 'Ana Vendas', papel: 'membro', totalLeads: 5, ganhoValor: 30000, perdidoValor: 1000, abertoValor: 9000, vendidoNoMes: 30000, metaMes: 60000 },
     ] },
     'GET /api/equipe/membro/u2/leads': { total: 5 },
+    'GET /api/possiveis-leads': { leads: [{ id: 'p1', nome: 'Pedro', telefone: '1511', tipoServico: 'auto' }, { id: 'p2', nome: 'Paula', telefone: '1522', tipoServico: '' }] },
     'GET /api/whatsapp/status': { connected: false, provedor: 'meta' },
     'GET /api/metas/': { valorMeta: 0 },
     'GET /api/equipe/meta-vendas/': { valorMeta: 100000, vendidoNoMes: 80000, souGestor: true },
@@ -166,6 +167,36 @@ async function abrir(browser, url, cenario, extra = {}) {
       checar('janela de remover membro abre (manter / passar leads)', (await t.page.locator('#rm-destino').count()) >= 1 || (await t.page.locator('input[type=radio]').count()) >= 2);
     } else checar('botão Remover existe', false);
     checar('sem erro de JavaScript na página Equipe', t.erros.length === 0, t.erros[t.erros.length - 1]);
+
+    console.log('Importar/Exportar: possíveis leads em lote');
+    await t.page.evaluate(() => { document.getElementById('modal-root').innerHTML = ''; });
+    await t.page.click('[data-action="nav"][data-page="import-export"]');
+    await t.page.waitForTimeout(500);
+    checar('gestor vê "Passar todos para Leads"', (await t.page.locator('[data-action="possiveis-passar-todos"]').count()) === 1);
+    checar('gestor escolhe o destino (Para mim / pessoa)', (await t.page.locator('#possiveis-destino').count()) === 1);
+    await t.page.check('[data-action="possiveis-select-um"] >> nth=0');
+    await t.page.waitForTimeout(150);
+    checar('selecionar habilita "Passar selecionados (1)"', (await t.page.locator('[data-action="possiveis-passar-selecionados"]').innerText()).includes('(1)'));
+    await t.page.selectOption('#possiveis-destino', 'u2');
+    await t.page.click('[data-action="possiveis-passar-selecionados"]');
+    await t.page.waitForTimeout(400);
+    const lote = t.chamadas.find((c) => c.caminho === '/api/possiveis-leads/promover-lote');
+    checar('envia ids selecionados e a pessoa escolhida', !!lote && JSON.parse(lote.corpo).ids.length === 1 && JSON.parse(lote.corpo).atribuirParaId === 'u2', lote && lote.corpo);
+    console.log('Leads: gestor passa em lote e exclui; membro não exclui');
+    await t.page.click('[data-action="nav"][data-page="leads"]');
+    await t.page.waitForTimeout(300);
+    await t.page.click('[data-action="leads-select-um"] >> nth=0');
+    await t.page.waitForTimeout(150);
+    checar('gestor tem "Passar para…" e Excluir na barra', (await t.page.locator('#leads-bulk-gestor-destino').count()) === 1 && (await t.page.locator('[data-action="leads-bulk-excluir"]').count()) === 1);
+    await t.ctx.close();
+    t = await abrir(browser, url, 'membro');
+    await t.page.click('[data-action="nav"][data-page="leads"]');
+    await t.page.waitForTimeout(400);
+    await t.page.click('[data-action="leads-select-um"] >> nth=0');
+    await t.page.waitForTimeout(150);
+    checar('membro de equipe NÃO vê Excluir nem Passar para…', (await t.page.locator('[data-action="leads-bulk-excluir"]').count()) === 0 && (await t.page.locator('#leads-bulk-gestor-destino').count()) === 0);
+    checar('membro ainda vê Arquivar', (await t.page.locator('[data-action="leads-bulk-arquivar"]').count()) === 1);
+    checar('sem erro de JavaScript (membro)', t.erros.length === 0, t.erros[0]);
     await t.ctx.close();
 
     console.log('Sem equipe: convite recebido');

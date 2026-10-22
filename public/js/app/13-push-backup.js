@@ -105,6 +105,42 @@ function renderConfigNotificacoes(){
   `;
 }
 
+/* ---------- Tarefas por e-mail ---------- */
+let emailTarefas = { carregado:false, disponivel:false, ativo:false, email:'', ocupado:false, msg:null };
+async function carregarEmailTarefas(){
+  emailTarefas.carregado = true;
+  try{
+    const d = await apiRequest('GET', '/tasks/config/email');
+    emailTarefas = { ...emailTarefas, ativo: !!d.ativo, disponivel: !!d.emailDisponivel, email: d.email || '' };
+  }catch(e){ emailTarefas.disponivel = false; }
+  renderApp();
+}
+async function alternarEmailTarefas(){
+  if(emailTarefas.ocupado) return;
+  emailTarefas.ocupado = true; emailTarefas.msg = null; renderApp();
+  try{
+    const d = await apiRequest('PUT', '/tasks/config/email', { ativo: !emailTarefas.ativo });
+    emailTarefas.ativo = !!d.ativo;
+    emailTarefas.msg = { tipo:'ok', texto: emailTarefas.ativo ? 'Pronto: você vai receber as tarefas por e-mail.' : 'E-mails de tarefas desativados.' };
+  }catch(e){
+    emailTarefas.msg = { tipo:'erro', texto: e.message || 'Não foi possível alterar.' };
+  }
+  emailTarefas.ocupado = false; renderApp();
+}
+function renderBlocoEmailTarefas(){
+  if(!emailTarefas.carregado){ carregarEmailTarefas(); return ''; }
+  if(!emailTarefas.disponivel) return '';
+  return `
+    <div class="settings-page-section">
+      <h3>Tarefas por e-mail</h3>
+      <p class="settings-page-note">Ao criar uma tarefa com data, enviamos um e-mail para <strong>${esc(emailTarefas.email)}</strong> (com um arquivo que adiciona o compromisso ao seu calendário). No dia da tarefa, ou 15 minutos antes se ela tiver hora, mandamos o lembrete — junto com o aviso aqui no CRM.</p>
+      <p class="settings-page-note">Status: <strong>${emailTarefas.ativo?'ativado':'desativado'}</strong></p>
+      ${emailTarefas.msg ? `<p class="settings-page-msg ${emailTarefas.msg.tipo}">${esc(emailTarefas.msg.texto)}</p>` : ''}
+      <button class="btn-outline" data-action="email-tarefas-alternar" ${emailTarefas.ocupado?'disabled':''}>${emailTarefas.ativo?'Desativar e-mails de tarefas':'Ativar e-mails de tarefas'}</button>
+    </div>
+  `;
+}
+
 /* ---------- Backup automático por e-mail ---------- */
 let backupAuto = { carregado:false, disponivel:false, ativo:false, ultimoEnvio:null, email:'', ocupado:false, msg:null };
 async function carregarBackupAuto(){
@@ -161,6 +197,7 @@ function renderConfigManutencao(){
       <p class="settings-page-note">Guarda ou restaura uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações.</p>
       <button class="btn-outline" data-action="abrir-backup-modal">📦 Backup</button>
     </div>
+    ${renderBlocoEmailTarefas()}
     ${renderBlocoBackupAuto()}
     <div class="settings-page-section">
       <h3>Início de contato nos leads antigos</h3>

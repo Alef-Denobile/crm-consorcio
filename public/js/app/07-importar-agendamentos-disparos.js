@@ -83,6 +83,34 @@ async function descartarPossivelLead(id){
     renderApp();
   }
 }
+// opções de destino para o gestor (ele mesmo + o resto da equipe)
+function opcoesDestinoEquipe(selecionado, incluirEu){
+  const membros = (equipe && equipe.membros) || [];
+  return [
+    ...(incluirEu ? [`<option value="" ${!selecionado?'selected':''}>Para mim</option>`] : []),
+    ...membros.filter(m=>!m.souEu).map(m=>`<option value="${m.id}" ${selecionado===m.id?'selected':''}>${esc(m.nome||m.email)}</option>`),
+  ].join('');
+}
+async function passarPossiveisParaLeads(todos){
+  if(possiveisPassandoLote) return;
+  const ids = todos ? [] : [...possiveisSelecionados];
+  if(!todos && !ids.length) return;
+  possiveisPassandoLote = true; possiveisLoteMsg = null; renderApp();
+  try{
+    const r = await apiRequest('POST', '/possiveis-leads/promover-lote', { ids, atribuirParaId: possiveisDestinoId || undefined });
+    (r.cards||[]).forEach(c=>board.cards.push(c));
+    const idsFeitos = new Set(todos ? possiveisLeads.map(l=>l.id) : ids);
+    possiveisLeads = possiveisLeads.filter(l=>!idsFeitos.has(l.id));
+    possiveisSelecionados.clear();
+    possiveisLoteMsg = { tipo:'ok', texto: r.destinoNome
+      ? `${r.total} lead(s) enviado(s) para ${r.destinoNome}.`
+      : `${r.total} lead(s) adicionado(s) aos Leads, com início de contato de hoje.` };
+  }catch(e){
+    possiveisLoteMsg = { tipo:'erro', texto: e.message || 'Não foi possível passar os leads.' };
+  }
+  possiveisPassandoLote = false;
+  renderApp();
+}
 function abrirCompletarLead(id){
   const lead = possiveisLeads.find(l=>l.id===id);
   if(!lead) return;
@@ -114,7 +142,6 @@ async function salvarCompletarLead(){
     const novoCard = await apiRequest('POST', `/possiveis-leads/${f.possivelLeadId}/promover`, {
       nome: f.nome, telefone: f.telefone, columnId: f.columnId, valor: f.valor,
       temperatura: f.temperatura, obs: f.tipoServico ? `Serviço de interesse: ${f.tipoServico}` : '',
-      mes: currentMonthKey(),
     });
     board.cards.push(novoCard);
     possiveisLeads = possiveisLeads.filter(l=>l.id!==f.possivelLeadId);

@@ -545,13 +545,14 @@ function renderLeadsPage(){
           <option value="">Mover para…</option>
           ${board.columns.map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('')}
         </select>
+        ${podeAtribuirLeads() ? `<select id="leads-bulk-gestor-destino"><option value="">Passar para…</option>${opcoesDestinoEquipe('', false)}</select>` : ''}
         <button class="btn-outline" data-action="leads-bulk-etiqueta">+ Etiqueta</button>
         ${leadsBulkEtiquetaAberta ? `
           <input type="text" id="leads-bulk-etiqueta-input" placeholder="Nome da etiqueta" value="${esc(leadsBulkEtiquetaValor)}" style="width:140px;" autofocus />
           <button class="btn-primary" data-action="leads-bulk-etiqueta-confirmar">Aplicar</button>
         ` : ''}
         <button class="btn-outline" data-action="leads-bulk-arquivar">📦 Arquivar</button>
-        <button class="delete-link" data-action="leads-bulk-excluir">🗑 Excluir</button>
+        ${podeExcluirLeads() ? `<button class="delete-link" data-action="leads-bulk-excluir">🗑 Excluir</button>` : ''}
         <button class="icon-btn" data-action="leads-bulk-limpar" title="Cancelar seleção" style="margin-left:auto;">✕</button>
       </div>
     ` : ''}
