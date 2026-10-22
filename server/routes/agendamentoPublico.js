@@ -119,9 +119,9 @@ router.post('/:userId/reservar', async (req, res) => {
     // procura (ou cria) um cliente com esse telefone, pra já entrar no funil
     let card = null;
     if (telefone && telefone.trim()) {
-      const { normalizarTelefone } = require('../utils/telefone');
+      const { normalizarTelefone, variantesTelefone } = require('../utils/telefone');
       const telNormalizado = normalizarTelefone(telefone);
-      card = await Card.findOne({ userId: user._id, telefoneNormalizado: telNormalizado });
+      card = await Card.findOne({ userId: user._id, telefoneNormalizado: { $in: variantesTelefone(telNormalizado) } });
       if (!card) {
         const colunaDestino = user.agendamentoPublico.colunaDestinoId;
         if (colunaDestino) {

@@ -18,6 +18,7 @@ const { executarAcaoDeAutomacao } = require('../utils/executarAutomacao');
 const { dispararWebhooks } = require('../utils/dispararWebhooks');
 const { validarAtribuicao, colunaEquivalente, proximaOrdem, transferirCard } = require('../utils/atribuirLead');
 const { enviarPush } = require('../utils/push');
+const { listarDuplicados, unificarDuplicados } = require('../utils/unificarDuplicados');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
@@ -304,6 +305,23 @@ router.put('/:id/move', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Erro ao mover cliente.' });
   }
+});
+
+// GET /api/cards/duplicados -> contatos repetidos (mesmo celular, com ou sem o 9 depois do DDD)
+router.get('/duplicados', async (req, res) => {
+  try {
+    const grupos = await listarDuplicados(req.userId);
+    res.json({ grupos: grupos.map((g) => ({ telefone: g.chave, cards: g.cards.map((c) => ({ id: c._id.toString(), cliente: c.cliente, telefone: c.telefone })) })) });
+  } catch (err) { res.status(500).json({ error: 'Erro ao procurar duplicados.' }); }
+});
+
+// POST /api/cards/unificar-duplicados -> junta cada grupo no contato mais antigo (conversas, anexos, tarefas… vão junto)
+router.post('/unificar-duplicados', async (req, res) => {
+  try {
+    const r = await unificarDuplicados(req.userId);
+    if (r.removidos) registrarAuditoria(req.userId, 'contatos_unificados', `Unificou ${r.removidos} contato(s) duplicado(s)`);
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: 'Erro ao unificar os contatos.' }); }
 });
 
 // POST /api/cards/transferir-lote -> o gestor passa vários leads de uma vez pra qualquer pessoa da equipe

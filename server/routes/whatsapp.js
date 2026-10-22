@@ -18,7 +18,7 @@ const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || '';
 const { GRAPH_API } = require('../utils/meta');
 const { exigirAssinaturaMeta } = require('../utils/webhookMeta');
 const { enviarPush, montarPayloadMensagem } = require('../utils/push');
-const { normalizarTelefone } = require('../utils/telefone');
+const { normalizarTelefone, variantesTelefone } = require('../utils/telefone');
 
 // Baixa uma mídia recebida pelo WhatsApp (foto, áudio, documento, vídeo) usando o
 // mediaId que a Meta manda no webhook, e guarda como Anexo do cliente — igual já
@@ -251,7 +251,18 @@ router.post('/ycloud-webhook/:token', async (req, res) => {
 
 // field "messages" -> mensagem recebida ou atualização de status de entrega/leitura
 // (é a lógica que já existia, só isolada numa função pra caber no loop de vários campos)
-async function processarEventoDeMensagens(value) {
+// Eventos da mesma conta são processados um de cada vez: duas mensagens chegando juntas de um número novo
+// não podem criar dois leads (cada uma não veria o lead que a outra acabou de criar).
+const filasPorConta = new Map();
+function processarEventoDeMensagens(value) {
+  const chave = String((value && value.metadata && value.metadata.phone_number_id) || 'sem-conta');
+  const anterior = filasPorConta.get(chave) || Promise.resolve();
+  const atual = anterior.catch(() => {}).then(() => processarEventoDeMensagensSemFila(value));
+  filasPorConta.set(chave, atual);
+  atual.catch(() => {}).then(() => { if (filasPorConta.get(chave) === atual) filasPorConta.delete(chave); });
+  return atual;
+}
+async function processarEventoDeMensagensSemFila(value) {
   const phoneNumberId = value.metadata && value.metadata.phone_number_id;
   if (!phoneNumberId) return;
   const user = await User.findOne({ 'whatsappBusiness.phoneNumberId': phoneNumberId });
@@ -268,7 +279,7 @@ async function processarEventoDeMensagens(value) {
     try {
       const ids = (h.ids || [h.id]).filter(Boolean);
       if (ids.length && (await Message.findOne({ userId: user._id, whatsappMessageId: { $in: ids } }))) continue;
-      const cardDoHistorico = await Card.findOne({ userId: user._id, telefoneNormalizado: normalizarTelefone(h.telefone) });
+      const cardDoHistorico = await Card.findOne({ userId: user._id, telefoneNormalizado: { $in: variantesTelefone(h.telefone) } });
       if (!cardDoHistorico) continue;
       await Message.create({
         userId: user._id,
@@ -289,7 +300,7 @@ async function processarEventoDeMensagens(value) {
     try {
       const jaExiste = (eco.ids || [eco.id]).filter(Boolean);
       if (jaExiste.length && (await Message.findOne({ whatsappMessageId: { $in: jaExiste }, direction: 'out' }))) continue; // já veio do CRM ou é repetição
-      const cardDoEco = await Card.findOne({ userId: user._id, telefoneNormalizado: normalizarTelefone(eco.to) });
+      const cardDoEco = await Card.findOne({ userId: user._id, telefoneNormalizado: { $in: variantesTelefone(eco.to) } });
       if (!cardDoEco) continue; // só registra conversa de quem já está no funil
       await Message.create({
         userId: user._id,
@@ -310,8 +321,9 @@ async function processarEventoDeMensagens(value) {
     if (msg.id && (await Message.findOne({ whatsappMessageId: msg.id, direction: 'in' }))) continue;
     const telefone = normalizarTelefone(msg.from);
     // o lead pode estar na minha conta ou na de alguém que o rodízio escolheu (aí ele guarda quem o atribuiu: eu)
-    let card = (await Card.findOne({ userId: user._id, telefoneNormalizado: telefone }))
-      || (await Card.findOne({ atribuidoPorId: user._id, telefoneNormalizado: telefone }));
+    const mesmoNumero = { $in: variantesTelefone(msg.from) }; // com ou sem o 9 depois do DDD
+    let card = (await Card.findOne({ userId: user._id, telefoneNormalizado: mesmoNumero }))
+      || (await Card.findOne({ atribuidoPorId: user._id, telefoneNormalizado: mesmoNumero }));
     let eraContatoNovo = false;
 
     if (!card) {
@@ -466,7 +478,7 @@ async function processarHistoricoImportado(value) {
   for (const historia of value.history || []) {
     for (const thread of historia.threads || []) {
       const telefone = normalizarTelefone(thread.id);
-      let card = await Card.findOne({ userId: user._id, telefoneNormalizado: telefone });
+      let card = await Card.findOne({ userId: user._id, telefoneNormalizado: { $in: variantesTelefone(telefone) } });
       if (!card) continue; // histórico de gente que não está no funil — ignora, não cria lead retroativo
 
       for (const msg of thread.messages || []) {

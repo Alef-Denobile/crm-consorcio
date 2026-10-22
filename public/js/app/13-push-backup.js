@@ -262,6 +262,53 @@ function renderConfigEmail(){
   `;
 }
 
+/* ---------- Contatos duplicados (mesmo celular com e sem o 9) ---------- */
+let duplicados = { buscou:false, grupos:[], ocupado:false, msg:null };
+async function procurarDuplicados(){
+  if(duplicados.ocupado) return;
+  duplicados.ocupado = true; duplicados.msg = null; renderApp();
+  try{
+    const d = await apiRequest('GET', '/cards/duplicados');
+    duplicados.grupos = d.grupos || [];
+    duplicados.buscou = true;
+    duplicados.msg = duplicados.grupos.length ? null : { tipo:'ok', texto:'Nenhum contato duplicado. Está tudo certo.' };
+  }catch(e){
+    duplicados.msg = { tipo:'erro', texto: e.message || 'Não foi possível procurar agora.' };
+  }
+  duplicados.ocupado = false; renderApp();
+}
+async function unificarContatosDuplicados(){
+  if(duplicados.ocupado) return;
+  duplicados.ocupado = true; duplicados.msg = null; renderApp();
+  try{
+    const r = await apiRequest('POST', '/cards/unificar-duplicados');
+    duplicados.grupos = [];
+    duplicados.msg = { tipo:'ok', texto:`Pronto: ${r.removidos} contato(s) repetido(s) foram juntados em ${r.grupos} conversa(s).` };
+    duplicados.ocupado = false;
+    await loadBoard();
+    loadConversas();
+    return;
+  }catch(e){
+    duplicados.msg = { tipo:'erro', texto: e.message || 'Não foi possível unificar agora.' };
+  }
+  duplicados.ocupado = false; renderApp();
+}
+function renderBlocoDuplicados(){
+  return `
+    <div class="settings-page-section">
+      <h3>Contatos duplicados</h3>
+      <p class="settings-page-note">O WhatsApp às vezes manda o mesmo celular com e sem o "9" depois do DDD, e isso podia criar dois contatos da mesma pessoa. Aqui você procura esses repetidos e junta tudo (conversas, anexos, tarefas) no contato mais antigo. Daqui pra frente isso não acontece mais.</p>
+      ${duplicados.grupos.length ? `
+        <div class="disparo-lista-leads" style="max-height:none; margin-bottom:10px;">
+          ${duplicados.grupos.map(g=>`<div class="disparo-lead-item" style="cursor:default;">${g.cards.map(c=>esc(c.cliente||'Sem nome')+' ('+esc(c.telefone||'')+')').join(' + ')}</div>`).join('')}
+        </div>` : ''}
+      ${duplicados.msg ? `<p class="settings-page-msg ${duplicados.msg.tipo}">${esc(duplicados.msg.texto)}</p>` : ''}
+      <button class="btn-outline" data-action="duplicados-procurar" ${duplicados.ocupado?'disabled':''}>${duplicados.ocupado?'Aguarde…':'Procurar duplicados'}</button>
+      ${duplicados.grupos.length ? `<button class="btn-primary" data-action="duplicados-unificar" ${duplicados.ocupado?'disabled':''}>Unificar ${duplicados.grupos.length} grupo(s)</button>` : ''}
+    </div>
+  `;
+}
+
 function renderConfigManutencao(){
   return `
     <div class="settings-page-section">
@@ -269,6 +316,7 @@ function renderConfigManutencao(){
       <p class="settings-page-note">Guarda ou restaura uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações.</p>
       <button class="btn-outline" data-action="abrir-backup-modal">📦 Backup</button>
     </div>
+    ${renderBlocoDuplicados()}
     <div class="settings-page-section">
       <h3>Início de contato nos leads antigos</h3>
       <p class="settings-page-note">Preenche automaticamente o "mês de início de contato" dos seus leads que ainda não têm esse campo, usando o mês de venda que já estava cadastrado como ponto de partida. Não altera leads que você já preencheu manualmente, e pode ser usado quantas vezes quiser.</p>

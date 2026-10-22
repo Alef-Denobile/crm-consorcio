@@ -78,6 +78,7 @@ function respostas(cenario) {
     'GET /api/resumo-diario': { ativo: false, emailDisponivel: true, email: 'g@x.com' },
     'GET /api/tasks/config/email': { ativo: true, emailDisponivel: true, email: 'g@x.com' },
     'GET /api/backup/automatico': { disponivel: true, ativo: false, ultimoEnvio: null, email: 'g@x.com' },
+    'GET /api/cards/duplicados': { grupos: [{ telefone: '5515988295905', cards: [{ id: 'k1', cliente: 'Willian Almeida', telefone: '5515988295905' }, { id: 'k9', cliente: 'Novo contato (WhatsApp)', telefone: '551588295905' }] }] },
     'GET /api/whatsapp/status': { connected: false, provedor: 'meta' },
     'GET /api/metas/': { valorMeta: 0 },
     'GET /api/equipe/meta-vendas/': { valorMeta: 100000, vendidoNoMes: 80000, souGestor: true },
@@ -200,6 +201,9 @@ async function abrir(browser, url, cenario, extra = {}) {
     checar('ligar resumo diário chama a API', t.chamadas.some((c) => c.metodo === 'PUT' && c.caminho === '/api/resumo-diario'));
     await t.page.click('[data-action="set-config-categoria"][data-categoria="manutencao"]');
     await t.page.waitForTimeout(300);
+    await t.page.click('[data-action="duplicados-procurar"]');
+    await t.page.waitForTimeout(300);
+    checar('Manutenção lista os contatos duplicados e oferece unificar', (await t.page.locator('[data-action="duplicados-unificar"]').count()) === 1 && (await t.page.locator('.disparo-lead-item', { hasText: 'Willian Almeida' }).count()) === 1);
     checar('Manutenção não tem mais os blocos de e-mail', (await t.page.locator('[data-action="resumo-diario-alternar"]').count()) === 0 && (await t.page.locator('[data-action="backup-auto-alternar"]').count()) === 0);
     await t.page.evaluate(() => { document.getElementById('modal-root').innerHTML = ''; });
     await t.page.click('[data-action="nav"][data-page="import-export"]');

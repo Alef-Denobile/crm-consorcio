@@ -35,6 +35,16 @@ function bindAppEvents(){
   if(pushDesativarBtn) pushDesativarBtn.addEventListener('click', desativarPush);
   const pushTestarBtn = app.querySelector('[data-action="push-testar"]');
   if(pushTestarBtn) pushTestarBtn.addEventListener('click', testarPush);
+  const dupProcurarBtn = app.querySelector('[data-action="duplicados-procurar"]');
+  if(dupProcurarBtn) dupProcurarBtn.addEventListener('click', procurarDuplicados);
+  const dupUnificarBtn = app.querySelector('[data-action="duplicados-unificar"]');
+  if(dupUnificarBtn) dupUnificarBtn.addEventListener('click', ()=>{
+    showConfirm({
+      message: `Juntar ${duplicados.grupos.length} grupo(s) de contatos repetidos? As conversas, anexos e tarefas vão para o contato mais antigo e os repetidos serão apagados. Isso não pode ser desfeito.`,
+      confirmLabel: 'Unificar',
+      onConfirm: ()=>{ closeConfirm(); unificarContatosDuplicados(); },
+    });
+  });
   const resumoAlternarBtn = app.querySelector('[data-action="resumo-diario-alternar"]');
   if(resumoAlternarBtn) resumoAlternarBtn.addEventListener('click', alternarResumoDiario);
   const resumoAgoraBtn = app.querySelector('[data-action="resumo-diario-agora"]');
