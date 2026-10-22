@@ -68,6 +68,9 @@ const userSchema = new mongoose.Schema(
       membros: { type: [mongoose.Schema.Types.ObjectId], default: [] },
       contador: { type: Number, default: 0 },
     },
+    perfil: { type: String, enum: ['consorcio', 'rh'], default: 'consorcio' }, // 'rh' = versão administrativa (recrutamento), aberta em /adm
+    resumoDiarioEmail: { type: Boolean, default: false }, // recebe todo dia útil o resumo por e-mail
+    resumoDiarioUltimo: { type: String, default: '' }, // AAAA-MM-DD do último resumo enviado (evita repetir)
     emailTarefas: { type: Boolean, default: false }, // recebe por e-mail as tarefas novas e o lembrete no dia
     supervisorDeDados: { type: Boolean, default: false }, // acesso ao monitoramento de erros — separado do papel de gestor da equipe
     agendamentoPublico: {

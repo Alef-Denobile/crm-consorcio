@@ -58,6 +58,7 @@ function gerarTempToken2FA(user) {
 router.post('/register', async (req, res) => {
   try {
     const { nome, email, senha } = req.body;
+    const perfil = req.body.perfil === 'rh' ? 'rh' : 'consorcio'; // 'rh' vem da página /adm
     if (!email || !senha) {
       return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
     }
@@ -72,10 +73,10 @@ router.post('/register', async (req, res) => {
     }
 
     const senhaHash = await bcrypt.hash(senha, 10);
-    const user = await User.create({ nome: (nome || '').trim(), email: emailNormalizado, senhaHash });
+    const user = await User.create({ nome: (nome || '').trim(), email: emailNormalizado, senhaHash, perfil });
 
-    // cada novo usuário começa com o funil padrão (Leads, Qualificação, etc.)
-    await seedColunasPadrao(user._id);
+    // cada novo usuário começa com o funil padrão (Leads, Qualificação, etc.; no /adm, o de recrutamento)
+    await seedColunasPadrao(user._id, perfil);
 
     const token = gerarToken(user);
     res.status(201).json({ token, user: user.toJSON() });
@@ -124,6 +125,7 @@ router.post('/google', async (req, res) => {
       return res.status(500).json({ error: 'Login com Google não está configurado neste servidor.' });
     }
     const { credential } = req.body;
+    const perfilNovo = req.body.perfil === 'rh' ? 'rh' : 'consorcio';
     if (!credential) {
       return res.status(400).json({ error: 'Credencial do Google ausente.' });
     }
@@ -149,8 +151,9 @@ router.post('/google', async (req, res) => {
         email: emailNormalizado,
         googleId: payload.sub,
         senhaHash: null,
+        perfil: perfilNovo,
       });
-      await seedColunasPadrao(user._id);
+      await seedColunasPadrao(user._id, perfilNovo);
     }
 
     const token = gerarToken(user);

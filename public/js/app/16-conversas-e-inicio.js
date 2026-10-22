@@ -711,34 +711,55 @@ function renderImportExportPage(){
 
     <div class="settings-page-section">
       <h3>1. Importar planilha</h3>
-      <input type="file" id="planilha-input" accept=".csv,.xlsx,.xls" />
+      <div class="import-linha">
+        <input type="file" id="planilha-input" accept=".csv,.xlsx,.xls" hidden />
+        <button type="button" class="btn-outline" data-action="escolher-planilha">Escolher planilha (.xlsx ou .csv)</button>
+        <span class="import-arquivo">${importPlanilhaNomeArquivo ? `
+          <span class="import-nome" title="${esc(importPlanilhaNomeArquivo)}">${esc(importPlanilhaNomeArquivo)}</span>
+          <button type="button" class="icon-btn import-x" data-action="fechar-planilha" title="Remover planilha" ${importandoPlanilha?'disabled':''}>✕</button>
+        ` : 'Nenhum arquivo escolhido'}</span>
+        <button type="button" class="import-modelo" data-action="baixar-modelo-planilha">Baixar planilha modelo</button>
+      </div>
       ${importPlanilhaColunas.length ? `
-        <p class="settings-page-note" style="margin-top:10px;">${importPlanilhaLinhas.length} linha(s) encontrada(s) em "${esc(importPlanilhaNomeArquivo)}". Escolha qual coluna da planilha é qual campo:</p>
-        <div class="field-row">
-          <div class="field">
-            <label>Coluna do nome</label>
-            <select id="map-nome">
-              <option value="">(nenhuma)</option>
-              ${importPlanilhaColunas.map(c=>`<option value="${esc(c)}" ${importMapNome===c?'selected':''}>${esc(c)}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field">
-            <label>Coluna do telefone</label>
-            <select id="map-telefone">
-              <option value="">(nenhuma)</option>
-              ${importPlanilhaColunas.map(c=>`<option value="${esc(c)}" ${importMapTelefone===c?'selected':''}>${esc(c)}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field">
-            <label>Coluna do serviço desejado</label>
-            <select id="map-servico">
-              <option value="">(nenhuma)</option>
-              ${importPlanilhaColunas.map(c=>`<option value="${esc(c)}" ${importMapServico===c?'selected':''}>${esc(c)}</option>`).join('')}
-            </select>
+        <div class="import-painel ${importPainelAbrindo?'':'aberto'}">
+          <div class="import-painel-inner">
+            <p class="settings-page-note" style="margin-top:14px;">${importPlanilhaLinhas.length} linha(s) encontrada(s). Escolha qual coluna da planilha é qual campo:</p>
+            <div class="field-row">
+              <div class="field">
+                <label>Coluna do nome</label>
+                <select id="map-nome">
+                  <option value="">(nenhuma)</option>
+                  ${importPlanilhaColunas.map(c=>`<option value="${esc(c)}" ${importMapNome===c?'selected':''}>${esc(c)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <label>Coluna do telefone</label>
+                <select id="map-telefone">
+                  <option value="">(nenhuma)</option>
+                  ${importPlanilhaColunas.map(c=>`<option value="${esc(c)}" ${importMapTelefone===c?'selected':''}>${esc(c)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <label>Coluna do serviço desejado</label>
+                <select id="map-servico">
+                  <option value="">(nenhuma)</option>
+                  ${importPlanilhaColunas.map(c=>`<option value="${esc(c)}" ${importMapServico===c?'selected':''}>${esc(c)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="leads-table-wrap import-previa">
+              <table class="leads-table">
+                <thead><tr>${importPlanilhaColunas.slice(0,6).map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+                <tbody>
+                  ${importPlanilhaLinhas.slice(0,5).map(l=>`<tr>${importPlanilhaColunas.slice(0,6).map(c=>`<td>${esc(String(l[c]==null?'':l[c]))}</td>`).join('')}</tr>`).join('')}
+                </tbody>
+              </table>
+            </div>
+            ${importPlanilhaLinhas.length>5 ? `<p class="settings-page-note">Mostrando as 5 primeiras de ${importPlanilhaLinhas.length} linhas.</p>` : ''}
+            ${importPlanilhaMsg ? `<p class="settings-page-msg ${importPlanilhaMsg.tipo}">${esc(importPlanilhaMsg.texto)}</p>` : ''}
+            <button class="btn-primary" id="confirmar-import-planilha" ${importandoPlanilha?'disabled':''}>${importandoPlanilha?'Importando…':'Importar planilha'}</button>
           </div>
         </div>
-        ${importPlanilhaMsg ? `<p class="settings-page-msg ${importPlanilhaMsg.tipo}">${esc(importPlanilhaMsg.texto)}</p>` : ''}
-        <button class="btn-primary" id="confirmar-import-planilha" ${importandoPlanilha?'disabled':''}>${importandoPlanilha?'Importando…':'Importar planilha'}</button>
       ` : (importPlanilhaMsg ? `<p class="settings-page-msg ${importPlanilhaMsg.tipo}">${esc(importPlanilhaMsg.texto)}</p>` : '')}
     </div>
 
@@ -777,10 +798,10 @@ function renderImportExportPage(){
 
     <div class="settings-page-section">
       <h3>3. Exportar</h3>
-      <p class="settings-page-note">Baixa todos os clientes já confirmados (que estão na aba Leads), em CSV ou em planilha do Excel.</p>
+      <p class="settings-page-note">Baixa todos os clientes já confirmados (que estão na aba Leads), em Excel (.xlsx) ou CSV.</p>
       <div class="settings-btn-row">
+        <button class="btn-outline" data-action="exportar-leads-xlsx">Exportar Leads (.xlsx)</button>
         <button class="btn-outline" data-action="exportar-leads">Exportar Leads (CSV)</button>
-        <button class="btn-outline" data-action="exportar-leads-xlsx">Exportar Leads (Excel)</button>
       </div>
     </div>
   `;

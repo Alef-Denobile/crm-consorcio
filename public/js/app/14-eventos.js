@@ -35,6 +35,10 @@ function bindAppEvents(){
   if(pushDesativarBtn) pushDesativarBtn.addEventListener('click', desativarPush);
   const pushTestarBtn = app.querySelector('[data-action="push-testar"]');
   if(pushTestarBtn) pushTestarBtn.addEventListener('click', testarPush);
+  const resumoAlternarBtn = app.querySelector('[data-action="resumo-diario-alternar"]');
+  if(resumoAlternarBtn) resumoAlternarBtn.addEventListener('click', alternarResumoDiario);
+  const resumoAgoraBtn = app.querySelector('[data-action="resumo-diario-agora"]');
+  if(resumoAgoraBtn) resumoAgoraBtn.addEventListener('click', enviarResumoDiarioAgora);
   const emailTarefasBtn = app.querySelector('[data-action="email-tarefas-alternar"]');
   if(emailTarefasBtn) emailTarefasBtn.addEventListener('click', alternarEmailTarefas);
   const backupAutoAlternarBtn = app.querySelector('[data-action="backup-auto-alternar"]');
@@ -369,6 +373,13 @@ function bindAppEvents(){
   });
 
   /* -- Importar/Exportar -- */
+  const escolherPlanilhaBtn = app.querySelector('[data-action="escolher-planilha"]');
+  if(escolherPlanilhaBtn) escolherPlanilhaBtn.addEventListener('click', ()=>{ const i = document.getElementById('planilha-input'); if(i) i.click(); });
+  const fecharPlanilhaBtn = app.querySelector('[data-action="fechar-planilha"]');
+  if(fecharPlanilhaBtn) fecharPlanilhaBtn.addEventListener('click', ()=> fecharPlanilhaImport(false));
+  const modeloPlanilhaBtn = app.querySelector('[data-action="baixar-modelo-planilha"]');
+  if(modeloPlanilhaBtn) modeloPlanilhaBtn.addEventListener('click', baixarPlanilhaModelo);
+  if(importPainelAbrindo) animarAberturaPainelImport();
   const planilhaInput = document.getElementById('planilha-input');
   if(planilhaInput) planilhaInput.addEventListener('change', (e)=>{
     const file = e.target.files && e.target.files[0];

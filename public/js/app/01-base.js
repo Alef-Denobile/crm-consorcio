@@ -18,6 +18,8 @@ if('serviceWorker' in navigator){
 // data de hoje no fuso do aparelho (AAAA-MM-DD); toISOString() usaria UTC e viraria o dia à noite
 // em equipe, só o gestor exclui leads (o servidor também confere)
 function podeExcluirLeads(){ return !(typeof equipe !== 'undefined' && equipe && !equipe.souSupervisor); }
+// versão administrativa (recrutamento), aberta em /adm: mesmo painel, com vocabulário e funil de contratação
+function perfilRH(){ try{ return !!(currentUser && currentUser.perfil === 'rh'); }catch(e){ return false; } }
 function hojeLocalISO(){
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -325,6 +327,8 @@ let possiveisLoteMsg = null;
 let importPlanilhaLinhas = [];
 let importPlanilhaColunas = [];
 let importPlanilhaNomeArquivo = '';
+let importPainelAbrindo = false; // true só no render em que o painel da planilha ainda está fechado, pra animar a descida
+let importPainelFechando = false;
 let importMapNome = '';
 let importMapTelefone = '';
 let importMapServico = '';

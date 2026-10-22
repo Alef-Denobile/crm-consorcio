@@ -1,4 +1,46 @@
 /* ---------- Importar/Exportar (planilha -> possíveis leads) ---------- */
+/* animação do painel da planilha: desce ao escolher o arquivo, sobe ao clicar no X */
+function animarAberturaPainelImport(){
+  const el = document.querySelector('.import-painel');
+  importPainelAbrindo = false;
+  if(!el) return;
+  void el.offsetHeight; // força o navegador a registrar o estado fechado antes de abrir
+  requestAnimationFrame(()=> el.classList.add('aberto'));
+}
+function limparPlanilhaImport(manterMsg){
+  importPlanilhaLinhas = [];
+  importPlanilhaColunas = [];
+  importPlanilhaNomeArquivo = '';
+  importMapNome = ''; importMapTelefone = ''; importMapServico = '';
+  if(!manterMsg) importPlanilhaMsg = null;
+  importPainelFechando = false;
+  renderApp();
+}
+function fecharPlanilhaImport(manterMsg){
+  if(importPainelFechando) return;
+  const el = document.querySelector('.import-painel');
+  if(!el){ limparPlanilhaImport(manterMsg); return; }
+  importPainelFechando = true;
+  el.classList.remove('aberto'); // sobe; ao terminar, a página volta ao estado original
+  setTimeout(()=> limparPlanilhaImport(manterMsg), 380);
+}
+function baixarPlanilhaModelo(){
+  const cab = ['Nome', 'Telefone', 'Serviço desejado'];
+  const exemplos = [['Maria Souza', '(15) 98805-3447', 'Consórcio de imóvel'], ['João Lima', '(15) 99999-0000', 'Consórcio de veículo']];
+  if(typeof XLSX === 'undefined'){
+    const csv = [cab, ...exemplos].map(l=>l.map(c=>`"${c}"`).join(';')).join('\r\n');
+    const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'planilha-modelo-leads.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    return;
+  }
+  const ws = XLSX.utils.aoa_to_sheet([cab, ...exemplos]);
+  ws['!cols'] = [{ wch:28 }, { wch:20 }, { wch:28 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+  XLSX.writeFile(wb, 'planilha-modelo-leads.xlsx');
+}
 function handlePlanilhaFileSelected(file){
   if(!file) return;
   importPlanilhaMsg = null;
@@ -24,6 +66,7 @@ function handlePlanilhaFileSelected(file){
       importMapTelefone = achar(['telefone','celular','fone','whats']);
       importMapServico = achar(['serviço','servico','produto','interesse','tipo']);
       importPlanilhaMsg = null;
+      importPainelAbrindo = true; // desenha o painel fechado e logo abaixo anima a descida
     }catch(err){
       importPlanilhaMsg = { tipo:'erro', texto:'Não foi possível ler esse arquivo. Confira se é um .csv ou .xlsx válido.' };
       importPlanilhaLinhas = [];
@@ -50,10 +93,10 @@ async function confirmarImportPlanilha(){
   try{
     const data = await apiRequest('POST', '/possiveis-leads/importar', { linhas, origemArquivo: importPlanilhaNomeArquivo });
     importPlanilhaMsg = { tipo:'ok', texto:`${data.total} possível lead(s) importado(s).` };
-    importPlanilhaLinhas = [];
-    importPlanilhaColunas = [];
-    importPlanilhaNomeArquivo = '';
+    importandoPlanilha = false;
     await loadPossiveisLeads();
+    fecharPlanilhaImport(true); // painel sobe e a mensagem de sucesso fica
+    return;
   }catch(e){
     importPlanilhaMsg = { tipo:'erro', texto: e.message || 'Não foi possível importar a planilha.' };
   }

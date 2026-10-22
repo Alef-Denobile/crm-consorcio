@@ -173,6 +173,10 @@ let openMoveMenuCardId = null;
 let dateMenuOpen = false;
 let leadsSearch = '';
 let leadsStatusFilter = '';
+let leadsOrdenarPor = 'padrao'; // 'padrao' | 'alfabetica' | 'recentes' | 'data-referencia'
+let pipelineOrdenarPor = 'padrao';
+let pipelineOrdenando = false;
+let comissoesOrdenarPor = 'padrao';
 let mostrarArquivados = false;
 let leadsSelecionados = new Set();
 let leadsBulkEtiquetaAberta = false;
@@ -191,6 +195,18 @@ let longPressTimer = null;
 let cardTouchDrag = null; // { cardId, cardEl, btn, arrastando, ultimoX, ultimoY, fantasmaEl } — arrastar card no Pipeline por toque, iniciado pela alcinha
 let autoScrollDoArrastoInterval = null;
 let arrastoRafPendente = false; // limita o trabalho pesado do arrastar a 1x por quadro de tela
+let assistenteBolhaX = null; // null = fica na posição padrão (canto inferior direito) até a pessoa arrastar
+let assistenteBolhaY = null;
+let assistenteAberto = false;
+let assistenteMensagens = [];
+let assistenteEnviando = false;
+let assistenteDrag = null; // { startX, startY, bolhaXInicial, bolhaYInicial, moveu, pointerId }
+try{
+  const posSalva = JSON.parse(localStorage.getItem('assistente-bolha-pos')||'null');
+  if(posSalva && typeof posSalva.x==='number' && typeof posSalva.y==='number'){
+    assistenteBolhaX = posSalva.x; assistenteBolhaY = posSalva.y;
+  }
+}catch(e){}
 let menuDiaAberto = null; // { diaISO, x, y } — dia com o menu de copiar/mover aberto, ou null
 let checklistDiaModal = null; // { diaISO, modo, marcados:Set } — telinha de escolher quais itens do dia entram na cópia/mover
 let longPressDisparou = false; // marca que o menu já abriu pelo toque, pra ignorar o "click" fantasma que o touch dispara em seguida
@@ -390,7 +406,7 @@ let eventoGoogleModalForm = null; // { eventId, titulo, data, hora } — edita o
 let confirmState = null;         // { message, onConfirm }
 
 /* ---------- comunicação com a API ---------- */
-async function apiRequest(method, path, body){
+async function apiRequest(method, path, body, timeoutMs){
   const opts = { method, headers: {} };
   const token = getToken();
   if(token) opts.headers['Authorization'] = 'Bearer ' + token;
@@ -399,7 +415,7 @@ async function apiRequest(method, path, body){
     opts.body = JSON.stringify(body);
   }
   const controller = new AbortController();
-  const timeoutId = setTimeout(()=> controller.abort(), 25000); // 25s — evita a tela travar pra sempre esperando o servidor
+  const timeoutId = setTimeout(()=> controller.abort(), timeoutMs || 25000); // 25s por padrão — evita a tela travar pra sempre esperando o servidor
   opts.signal = controller.signal;
   let res;
   try{
@@ -3163,6 +3179,10 @@ function calcComissaoPreviewPorTipo(creditoValor, tipoCarta){
     const valorParcela = Math.round((credito * 0.016 / 11) * 100) / 100;
     return { parcelas:11, parcelas1:11, value:valorParcela, value2:0 };
   }
+  if(tipoCarta === 'home_equity' || tipoCarta === 'car_equity'){
+    const valorParcela = Math.round(credito * 0.011 * 100) / 100;
+    return { parcelas:1, parcelas1:1, value:valorParcela, value2:0 };
+  }
   const { value1, value2 } = calcComissaoPreview(credito);
   return { parcelas:13, parcelas1:10, value:value1, value2 };
 }
@@ -3216,6 +3236,47 @@ function comissoesStats(){
 }
 
 /* ---------- derivações (Leads) ---------- */
+// Ordenação compartilhada entre Leads, Pipeline e Comissões. "data-referencia" usa o
+// campo que representa o mês de referência em cada tela (mes do lead, date do
+// contrato) — mesmo texto, campo diferente conforme onde é chamada.
+function ordenarPorCriterio(lista, criterio, campoNome, campoData){
+  if(criterio === 'alfabetica') return [...lista].sort((a,b)=> (a[campoNome]||'').localeCompare(b[campoNome]||'', 'pt-BR'));
+  if(criterio === 'recentes') return [...lista].sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0));
+  if(criterio === 'data-referencia') return [...lista].sort((a,b)=> String(a[campoData]||'').localeCompare(String(b[campoData]||'')));
+  return lista; // 'padrao' — não mexe na ordem
+}
+// Reordena de verdade (e salva) os cards de cada coluna do funil atual, conforme o
+// critério escolhido. Como isso sobrescreve a ordem manual que a pessoa possa ter
+// arrastado com cuidado, confirma antes — exceto ao voltar pra "padrao", que não
+// mexe em nada, só para de aplicar ordenação automática daqui pra frente.
+function aplicarOrdenacaoPipeline(criterio){
+  if(criterio === 'padrao'){ pipelineOrdenarPor = 'padrao'; renderApp(); return; }
+  showConfirm({
+    message: 'Isso vai reordenar automaticamente os clientes dentro de cada coluna. Se você tiver organizado numa ordem específica que funciona melhor pra você, ela será substituída. Continuar?',
+    onConfirm: async ()=>{
+      closeConfirm();
+      pipelineOrdenarPor = criterio;
+      pipelineOrdenando = true;
+      renderApp();
+      const colunasDoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
+      try{
+        for(const col of colunasDoFunil){
+          const cardsDaColuna = cardsOf(col.id);
+          const ordenados = ordenarPorCriterio(cardsDaColuna, criterio, 'cliente', 'mes');
+          await Promise.all(ordenados.map((card, i)=>{
+            const novaOrdem = (i+1)*1000;
+            card.ordem = novaOrdem; // otimista
+            return apiRequest('PUT', `/cards/${card.id}/move`, { columnId: col.id, ordem: novaOrdem });
+          }));
+        }
+      }catch(e){
+        errorMsg = 'Não foi possível reordenar todos os clientes. Tenta de novo em instantes.';
+      }
+      pipelineOrdenando = false;
+      renderApp();
+    },
+  });
+}
 function filteredLeads(){
   let list = board.cards;
   list = list.filter(c=> mostrarArquivados ? c.arquivado : !c.arquivado);
@@ -3224,6 +3285,7 @@ function filteredLeads(){
     const q = leadsSearch.trim().toLowerCase();
     list = list.filter(c=> (c.cliente||'').toLowerCase().includes(q) || (c.telefone||'').toLowerCase().includes(q));
   }
+  list = ordenarPorCriterio(list, leadsOrdenarPor, 'cliente', 'mes');
   return list;
 }
 
@@ -3237,6 +3299,24 @@ function goToPage(page){
   addingCol = false;
   editingColId = null;
   sidebarOpen = false;
+  // fecha qualquer modal que tenha ficado aberto na página anterior — vários modais
+  // diferentes (dia da agenda, editar lead, tarefa, contrato, proposta, etc.) usam o
+  // mesmo #modal-root; sem isso, um modal esquecido aberto ficava por cima da nova
+  // página, escondido mas ainda funcionando, respondendo a cliques que pareciam ser
+  // da página nova.
+  modalForm = null;
+  extrasTela = null;
+  agendaDiaSelecionado = null;
+  taskModalForm = null;
+  propostaModalForm = null;
+  completarLeadModalForm = null;
+  agendamentoModalForm = null;
+  templateModalForm = null;
+  eventoGoogleModalForm = null;
+  contratoModalForm = null;
+  automacaoModalForm = null;
+  fluxoModalForm = null;
+  document.getElementById('modal-root').innerHTML = '';
   renderApp();
   if(page === 'tarefas'){
     if(!agendaLoaded) loadAgendaMes(agendaMesAtual); // só busca do zero — depois disso, a tela se mantém atualizada sozinha com as próprias ações, e o Google só é consultado de novo no botão "Sincronizar Agenda"
@@ -4210,6 +4290,127 @@ function renderAppPreservandoScroll(){
     if(scrollsColunas[el.dataset.colId]!==undefined) el.scrollTop = scrollsColunas[el.dataset.colId];
   });
 }
+/* ---------- Assistente flutuante (bolinha de ajuda) ---------- */
+function renderAssistente(){
+  const root = document.getElementById('assistente-root');
+  if(!root) return;
+  if(!getToken()){ root.innerHTML=''; return; } // só aparece logado
+
+  const posBolha = assistenteBolhaX!=null ? `left:${assistenteBolhaX}px; top:${assistenteBolhaY}px; right:auto; bottom:auto;` : '';
+
+  root.innerHTML = `
+    <button id="assistente-bolha" class="assistente-bolha" style="${posBolha}" title="Assistente do CRM">${assistenteAberto ? '✕' : '💬'}</button>
+    ${assistenteAberto ? `
+      <div class="assistente-painel" id="assistente-painel">
+        <div class="assistente-painel-head">
+          <span>✨ Assistente do CRM</span>
+          <button id="assistente-fechar" title="Fechar">✕</button>
+        </div>
+        <div class="assistente-mensagens" id="assistente-mensagens-lista">
+          ${!assistenteMensagens.length ? `<div class="assistente-msg assistente-msg-assistant">Oi! Pode perguntar qualquer coisa sobre como usar o CRM — Pipeline, Agenda, GEROT, Comissões, Fluxos, o que precisar.</div>` : ''}
+          ${assistenteMensagens.map(m=>`<div class="assistente-msg assistente-msg-${m.role}">${esc(m.content)}</div>`).join('')}
+          ${assistenteEnviando ? `<div class="assistente-msg assistente-msg-assistant assistente-digitando">Digitando…</div>` : ''}
+        </div>
+        <div class="assistente-input-row">
+          <input type="text" id="assistente-input" placeholder="Pergunte algo…" ${assistenteEnviando?'disabled':''} />
+          <button id="assistente-enviar" ${assistenteEnviando?'disabled':''} title="Enviar">➤</button>
+        </div>
+      </div>
+    ` : ''}
+  `;
+  if(assistenteAberto) posicionarPainelAssistente();
+  ligarBindingsAssistente();
+  const lista = document.getElementById('assistente-mensagens-lista');
+  if(lista) lista.scrollTop = lista.scrollHeight;
+}
+// Posiciona o painel de conversa perto de onde a bolinha estiver no momento (ela pode
+// ter sido arrastada pra qualquer canto), sempre mantendo ele inteiro dentro da tela.
+function posicionarPainelAssistente(){
+  const bolha = document.getElementById('assistente-bolha');
+  const painel = document.getElementById('assistente-painel');
+  if(!bolha || !painel) return;
+  const rectBolha = bolha.getBoundingClientRect();
+  const largura = 336, altura = 460;
+  let left = rectBolha.right - largura;
+  let top = rectBolha.top - altura - 12;
+  if(top < 12) top = rectBolha.bottom + 12; // não cabe em cima, abre embaixo da bolinha
+  left = Math.min(Math.max(12, left), window.innerWidth - largura - 12);
+  top = Math.min(Math.max(12, top), window.innerHeight - altura - 12);
+  painel.style.left = left+'px';
+  painel.style.top = top+'px';
+}
+async function enviarMensagemAssistente(){
+  const input = document.getElementById('assistente-input');
+  if(!input) return;
+  const texto = input.value.trim();
+  if(!texto || assistenteEnviando) return;
+  assistenteMensagens.push({ role:'user', content: texto });
+  input.value = '';
+  assistenteEnviando = true;
+  renderAssistente();
+  try{
+    const data = await apiRequest('POST', '/ai/assistente', { mensagens: assistenteMensagens }, 45000);
+    assistenteMensagens.push({ role:'assistant', content: data.resposta || '(sem resposta)' });
+  }catch(e){
+    assistenteMensagens.push({ role:'assistant', content: 'Não consegui responder agora — ' + (e.message||'tenta de novo em instantes.') });
+  }
+  assistenteEnviando = false;
+  renderAssistente();
+}
+function ligarBindingsAssistente(){
+  const bolha = document.getElementById('assistente-bolha');
+  if(bolha){
+    bolha.addEventListener('pointerdown', (e)=>{
+      assistenteDrag = {
+        startX:e.clientX, startY:e.clientY,
+        bolhaXInicial: bolha.getBoundingClientRect().left, bolhaYInicial: bolha.getBoundingClientRect().top,
+        moveu:false, pointerId:e.pointerId,
+      };
+      try{ bolha.setPointerCapture(e.pointerId); }catch(err){}
+    });
+    bolha.addEventListener('pointermove', (e)=>{
+      if(!assistenteDrag || assistenteDrag.pointerId!==e.pointerId) return;
+      const dx = e.clientX - assistenteDrag.startX;
+      const dy = e.clientY - assistenteDrag.startY;
+      if(!assistenteDrag.moveu && Math.sqrt(dx*dx+dy*dy) < 5) return; // tremedeira do dedo/mão, não é arrastar de verdade ainda
+      assistenteDrag.moveu = true;
+      let novoX = assistenteDrag.bolhaXInicial + dx;
+      let novoY = assistenteDrag.bolhaYInicial + dy;
+      novoX = Math.min(Math.max(4, novoX), window.innerWidth - bolha.offsetWidth - 4);
+      novoY = Math.min(Math.max(4, novoY), window.innerHeight - bolha.offsetHeight - 4);
+      bolha.style.left = novoX+'px';
+      bolha.style.top = novoY+'px';
+      bolha.style.right = 'auto';
+      bolha.style.bottom = 'auto';
+      const painel = document.getElementById('assistente-painel');
+      if(painel) posicionarPainelAssistente();
+    });
+    const soltar = (e)=>{
+      if(!assistenteDrag || assistenteDrag.pointerId!==e.pointerId) return;
+      if(assistenteDrag.moveu){
+        assistenteBolhaX = parseFloat(bolha.style.left);
+        assistenteBolhaY = parseFloat(bolha.style.top);
+        try{ localStorage.setItem('assistente-bolha-pos', JSON.stringify({x:assistenteBolhaX, y:assistenteBolhaY})); }catch(err){}
+      } else {
+        assistenteAberto = !assistenteAberto;
+        renderAssistente();
+      }
+      assistenteDrag = null;
+    };
+    bolha.addEventListener('pointerup', soltar);
+    bolha.addEventListener('pointercancel', ()=>{ assistenteDrag = null; });
+  }
+  const fecharBtn = document.getElementById('assistente-fechar');
+  if(fecharBtn) fecharBtn.addEventListener('click', ()=>{ assistenteAberto = false; renderAssistente(); });
+  const enviarBtn = document.getElementById('assistente-enviar');
+  if(enviarBtn) enviarBtn.addEventListener('click', enviarMensagemAssistente);
+  const input = document.getElementById('assistente-input');
+  if(input){
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter') enviarMensagemAssistente(); });
+  }
+}
+window.addEventListener('resize', ()=>{ if(assistenteAberto) posicionarPainelAssistente(); });
+
 function renderApp(){
   const app = document.getElementById('app');
   if(!loaded){ app.innerHTML = '<div class="loading">Carregando painel…</div>'; return; }
@@ -4424,11 +4625,58 @@ function renderCabecalhoPainelDashboard(id, titulo, extraHtml){
   return `
     <div class="dash-panel-title dash-panel-title-recolhivel" style="${aberto?'':'margin-bottom:0;'}">
       <button type="button" class="dash-panel-toggle" data-action="toggle-painel-dashboard" data-painel-id="${id}">
-        <span class="dash-panel-seta ${aberto?'aberta':''}">▾</span> ${titulo}
+        <span class="dash-panel-seta ${aberto?'':'fechada'}">▾</span> ${titulo}
       </button>
       ${extraHtml||''}
     </div>
   `;
+}
+// Envolve o conteúdo de um painel numa estrutura que anima o recolher/abrir suavemente
+// (usa grid-template-rows 1fr↔0fr, que consegue animar até uma altura "automática"
+// sem precisar saber o tamanho do conteúdo de antemão — ao contrário de max-height,
+// que precisa de um valor fixo chutado). O conteúdo fica sempre no DOM; é só a altura
+// visível que encolhe a zero quando fechado.
+function envolverConteudoPainel(id, conteudoHtml){
+  const aberto = painelDashboardAberto(id);
+  return `
+    <div class="dash-panel-collapse" id="dash-collapse-${id}" style="max-height:${aberto ? 'none' : '0px'};">
+      <div class="dash-panel-collapse-inner">${conteudoHtml}</div>
+    </div>
+  `;
+}
+// Abre/fecha um painel específico do Dashboard sem redesenhar a página inteira — se
+// redesenhasse tudo (como o resto do app costuma fazer), o elemento nasceria de novo
+// já no estado final, sem um "antes" pra animação partir. Mede a altura real do
+// conteúdo em pixels (em vez de usar grid-template-rows com fr, que tem suporte menos
+// confiável entre navegadores) e anima o max-height até lá.
+function alternarPainelDashboard(id, btn){
+  const vaiAbrir = !painelDashboardAberto(id);
+  try{ localStorage.setItem('dash-painel-'+id, vaiAbrir ? '1' : '0'); }catch(e){}
+
+  const seta = btn.querySelector('.dash-panel-seta');
+  if(seta) seta.classList.toggle('fechada', !vaiAbrir);
+  const tituloEl = btn.closest('.dash-panel-title-recolhivel');
+  if(tituloEl) tituloEl.style.marginBottom = vaiAbrir ? '' : '0';
+
+  const colapseEl = document.getElementById('dash-collapse-'+id);
+  if(!colapseEl) return;
+  const innerEl = colapseEl.querySelector('.dash-panel-collapse-inner');
+
+  if(vaiAbrir){
+    const alturaFinal = innerEl.scrollHeight;
+    colapseEl.style.maxHeight = alturaFinal + 'px';
+    colapseEl.addEventListener('transitionend', function liberar(e){
+      if(e.propertyName !== 'max-height') return;
+      if(painelDashboardAberto(id)) colapseEl.style.maxHeight = 'none'; // libera de vez, pro conteúdo poder crescer depois sem ficar cortado
+      colapseEl.removeEventListener('transitionend', liberar);
+    });
+  } else {
+    colapseEl.style.maxHeight = colapseEl.scrollHeight + 'px'; // trava num valor explícito — estava em "none", que não é animável
+    colapseEl.offsetHeight; // força o navegador a registrar esse valor antes da próxima mudança
+    requestAnimationFrame(()=>{
+      colapseEl.style.maxHeight = '0px';
+    });
+  }
 }
 function renderDashboardPage(){
   const m = dashMetrics();
@@ -4478,7 +4726,7 @@ function renderDashboardPage(){
     <div class="dash-grid" style="margin-bottom:20px;">
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('meta-individual', 'Meta de vendas do mês', !editandoMetaVendas ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : '')}
-        ${painelDashboardAberto('meta-individual') ? (!metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
+        ${envolverConteudoPainel('meta-individual', !metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
           <div class="field-row" style="align-items:flex-end;">
             <div class="field"><label>Meta do mês (R$)</label><input type="number" id="meta-vendas-input" value="${metaVendasValor||0}" min="0" step="0.01" /></div>
             <button class="btn-primary" id="meta-vendas-salvar" style="margin-bottom:14px;">Salvar</button>
@@ -4486,12 +4734,12 @@ function renderDashboardPage(){
         ` : (metaVendasValor > 0 ? `
           <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${Math.min(100, (vendidoNoMesAtual()/metaVendasValor*100))}%"></div></div>
           <p class="settings-page-note">${fmtBRL(vendidoNoMesAtual())} de ${fmtBRL(metaVendasValor)} — ${Math.round(Math.min(999,vendidoNoMesAtual()/metaVendasValor*100))}%</p>
-        ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`))) : ''}
+        ` : `<p class="dash-empty">Nenhuma meta definida pra este mês.</p>`)))}
       </div>
       ${equipe ? `
         <div class="dash-panel">
           ${renderCabecalhoPainelDashboard('meta-equipe', 'Meta de vendas da equipe', (equipe.souSupervisor && !editandoMetaVendasEquipe) ? `<button class="icon-btn" data-action="editar-meta-vendas-equipe" title="Editar meta">${ICON_EDIT}</button>` : '')}
-          ${painelDashboardAberto('meta-equipe') ? (!metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
+          ${envolverConteudoPainel('meta-equipe', !metaVendasEquipeCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendasEquipe ? `
             <div class="field-row" style="align-items:flex-end;">
               <div class="field"><label>Meta da equipe no mês (R$)</label><input type="number" id="meta-vendas-equipe-input" value="${metaVendasEquipeValor||0}" min="0" step="0.01" /></div>
               <button class="btn-primary" id="meta-vendas-equipe-salvar" style="margin-bottom:14px;">Salvar</button>
@@ -4499,7 +4747,7 @@ function renderDashboardPage(){
           ` : `
             <div class="meta-vendas-track"><div class="meta-vendas-fill" style="width:${metaVendasEquipeValor ? Math.min(100, (metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%"></div></div>
             <p class="settings-page-note">${fmtBRL(metaVendasEquipeVendido)} de ${fmtBRL(metaVendasEquipeValor)} — ${metaVendasEquipeValor ? Math.round(Math.min(999,metaVendasEquipeVendido/metaVendasEquipeValor*100)) : 0}%</p>
-          `)) : ''}
+          `))}
         </div>
       ` : ''}
     </div>
@@ -4507,11 +4755,11 @@ function renderDashboardPage(){
     <div class="dash-grid">
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('leads-captados', 'Leads captados')}
-        ${painelDashboardAberto('leads-captados') ? renderLeadsChart() : ''}
+        ${envolverConteudoPainel('leads-captados', renderLeadsChart())}
       </div>
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('pipeline-etapa', 'Pipeline por etapa')}
-        ${painelDashboardAberto('pipeline-etapa') ? `
+        ${envolverConteudoPainel('pipeline-etapa', `
         <div class="stage-list">
           ${stages.length ? stages.map(s=>`
             <div class="stage-row">
@@ -4520,20 +4768,20 @@ function renderDashboardPage(){
             </div>
           `).join('') : '<p class="dash-empty">Nenhuma coluna criada ainda.</p>'}
         </div>
-        ` : ''}
+        `)}
       </div>
     </div>
 
     <div class="dash-grid">
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('ultimos-leads', 'Últimos leads')}
-        ${painelDashboardAberto('ultimos-leads') ? (recentes.length ? `<div class="recent-list">${recentes.map(c=>`
+        ${envolverConteudoPainel('ultimos-leads', recentes.length ? `<div class="recent-list">${recentes.map(c=>`
           <div class="recent-item"><span class="recent-name">${esc(c.cliente) || 'Sem nome'}</span><span class="recent-value">${fmtBRL(c.valor)}</span></div>
-        `).join('')}</div>` : '<p class="dash-empty">Nenhum lead neste período.</p>') : ''}
+        `).join('')}</div>` : '<p class="dash-empty">Nenhum lead neste período.</p>')}
       </div>
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('tarefas-abertas', 'Tarefas abertas')}
-        ${painelDashboardAberto('tarefas-abertas') ? (abertas.length ? `<div class="recent-list">${abertas.map(t=>`
+        ${envolverConteudoPainel('tarefas-abertas', abertas.length ? `<div class="recent-list">${abertas.map(t=>`
           <div class="task-mini-item">
             ${t.tipo==='evento'
               ? `<span class="check-circle" data-action="toggle-evento" data-evento-id="${t.id}"></span>`
@@ -4542,7 +4790,7 @@ function renderDashboardPage(){
             <span class="task-mini-title">${esc(t.titulo)}</span>
             ${t.data ? `<span class="metric-sub">${formatDate(t.data)}</span>` : ''}
           </div>
-        `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>') : ''}
+        `).join('')}</div>` : '<p class="dash-empty">Tudo em dia por aqui.</p>')}
       </div>
     </div>
   `;
@@ -4634,6 +4882,17 @@ function renderPipelinePage(){
           }
         </div>
       ` : ''}
+    </div>
+
+    <div class="pipeline-ordenar-row">
+      <label for="pipeline-ordenar">Ordenar cards:</label>
+      <select class="leads-filter" id="pipeline-ordenar" ${pipelineOrdenando?'disabled':''}>
+        <option value="padrao" ${pipelineOrdenarPor==='padrao'?'selected':''}>Ordem manual (arrastar)</option>
+        <option value="alfabetica" ${pipelineOrdenarPor==='alfabetica'?'selected':''}>Ordem alfabética</option>
+        <option value="recentes" ${pipelineOrdenarPor==='recentes'?'selected':''}>Adicionados recentemente</option>
+        <option value="data-referencia" ${pipelineOrdenarPor==='data-referencia'?'selected':''}>Data de referência</option>
+      </select>
+      ${pipelineOrdenando ? `<span class="settings-page-note">Reordenando…</span>` : ''}
     </div>
 
     <main class="pipeline-main">
@@ -4880,6 +5139,12 @@ function renderLeadsPage(){
       <select class="leads-filter" id="leads-status-filter">
         <option value="">Todos os status</option>
         ${board.columns.map(c=>`<option value="${c.id}" ${leadsStatusFilter===c.id?'selected':''}>${esc(c.nome)}</option>`).join('')}
+      </select>
+      <select class="leads-filter" id="leads-ordenar">
+        <option value="padrao" ${leadsOrdenarPor==='padrao'?'selected':''}>Ordem padrão</option>
+        <option value="alfabetica" ${leadsOrdenarPor==='alfabetica'?'selected':''}>Ordem alfabética</option>
+        <option value="recentes" ${leadsOrdenarPor==='recentes'?'selected':''}>Adicionados recentemente</option>
+        <option value="data-referencia" ${leadsOrdenarPor==='data-referencia'?'selected':''}>Data de referência</option>
       </select>
       <button class="btn-outline" data-action="exportar-leads">Exportar</button>
       <button class="btn-outline ${mostrarArquivados?'active':''}" data-action="toggle-mostrar-arquivados">${mostrarArquivados?'Voltar aos ativos':'📦 Ver arquivados'}</button>
@@ -5321,6 +5586,12 @@ function renderComissoesPage(){
           <span>${monthLabel(comissoesMonth, true)}</span>
           <button class="icon-btn" data-action="comissoes-mes" data-delta="1" title="Próximo mês">›</button>
         </div>
+        <select class="leads-filter" id="comissoes-ordenar">
+          <option value="padrao" ${comissoesOrdenarPor==='padrao'?'selected':''}>Ordem padrão</option>
+          <option value="alfabetica" ${comissoesOrdenarPor==='alfabetica'?'selected':''}>Ordem alfabética</option>
+          <option value="recentes" ${comissoesOrdenarPor==='recentes'?'selected':''}>Adicionados recentemente</option>
+          <option value="data-referencia" ${comissoesOrdenarPor==='data-referencia'?'selected':''}>Data de referência</option>
+        </select>
         <button class="btn-primary" data-action="open-new-contrato">+ Novo contrato</button>
       </div>
     </div>
@@ -5342,7 +5613,7 @@ function renderComissoesPage(){
 
     ${contratos.length ? `
       <div class="contratos-list">
-        ${contratos.map(c=>renderContratoCard(c)).join('')}
+        ${ordenarPorCriterio(contratos, comissoesOrdenarPor, 'desc', 'date').map(c=>renderContratoCard(c)).join('')}
       </div>
     ` : `<div class="tasks-empty">Nenhum contrato de comissão cadastrado ainda.</div>`}
   `;
@@ -5980,12 +6251,7 @@ function bindAppEvents(){
   const salvarMetaEquipeBtn = document.getElementById('meta-vendas-equipe-salvar');
   if(salvarMetaEquipeBtn) salvarMetaEquipeBtn.addEventListener('click', salvarMetaVendasEquipe);
   app.querySelectorAll('[data-action="toggle-painel-dashboard"]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const id = btn.dataset.painelId;
-      const aberto = painelDashboardAberto(id);
-      try{ localStorage.setItem('dash-painel-'+id, aberto ? '0' : '1'); }catch(e){}
-      renderApp();
-    });
+    btn.addEventListener('click', ()=> alternarPainelDashboard(btn.dataset.painelId, btn));
   });
 
   /* -- tarefas (usado no Dashboard e na página Tarefas) -- */
@@ -6322,6 +6588,8 @@ function bindAppEvents(){
   app.querySelectorAll('[data-action="comissoes-mes"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ comissoesMonth = addMonthsKey(comissoesMonth, parseInt(btn.dataset.delta,10)); renderApp(); });
   });
+  const comissoesOrdenarSelect = document.getElementById('comissoes-ordenar');
+  if(comissoesOrdenarSelect) comissoesOrdenarSelect.addEventListener('change', (e)=>{ comissoesOrdenarPor = e.target.value; renderApp(); });
   const openNewContratoBtn = app.querySelector('[data-action="open-new-contrato"]');
   if(openNewContratoBtn) openNewContratoBtn.addEventListener('click', openNewContrato);
   app.querySelectorAll('[data-action="open-edit-contrato"]').forEach(btn=>{
@@ -6552,8 +6820,12 @@ function bindAppEvents(){
   });
   const leadsFilterSelect = document.getElementById('leads-status-filter');
   if(leadsFilterSelect) leadsFilterSelect.addEventListener('change', (e)=>{ leadsStatusFilter = e.target.value; renderApp(); });
+  const leadsOrdenarSelect = document.getElementById('leads-ordenar');
+  if(leadsOrdenarSelect) leadsOrdenarSelect.addEventListener('change', (e)=>{ leadsOrdenarPor = e.target.value; renderApp(); });
 
   /* -- Pipeline: funis -- */
+  const pipelineOrdenarSelect = document.getElementById('pipeline-ordenar');
+  if(pipelineOrdenarSelect) pipelineOrdenarSelect.addEventListener('change', (e)=> aplicarOrdenacaoPipeline(e.target.value));
   app.querySelectorAll('[data-action="set-funil"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       funilAtualId = btn.dataset.funilId;
@@ -7080,6 +7352,7 @@ function openEditCard(id){
   historicoContatoTexto = '';
   tarefaRapidaTitulo = '';
   tarefaRapidaData = '';
+  tarefaRapidaCriando = false;
   renderModal();
   loadAnexosDoCard(id);
   loadHistoricoContato(id);
@@ -7089,11 +7362,12 @@ async function criarTarefaRapidaDoCard(){
   if(!titulo || !modalForm || modalForm.__isNew) return;
   const dataEscolhida = tarefaRapidaData || new Date().toISOString().slice(0,10);
   tarefaRapidaCriando = true;
-  renderApp();
+  renderModal();
   try{
     const nova = await apiRequest('POST', '/tasks', { titulo, vencimento: dataEscolhida, prioridade:'media', leadId: modalForm.id, descricao:'' });
     tasks.push(nova);
     atualizarTarefaNaAgendaLocal(nova);
+    tarefaRapidaCriando = false;
     closeModal();
     agendaMesAtual = dataEscolhida.slice(0,7);
     goToPage('tarefas');
@@ -7104,7 +7378,7 @@ async function criarTarefaRapidaDoCard(){
   }catch(e){
     errorMsg = 'Não foi possível criar a tarefa.';
     tarefaRapidaCriando = false;
-    renderApp();
+    renderModal();
   }
 }
 function closeModal(){ modalForm = null; document.getElementById('modal-root').innerHTML=''; }
@@ -7416,6 +7690,8 @@ function renderModal(){
               <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
               <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
               <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
+              <option value="home_equity" ${f.tipoCarta==='home_equity'?'selected':''}>Home Equity</option>
+              <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
             </select>
           </div>
           <div class="field">
@@ -8753,6 +9029,12 @@ function previewComissaoHtml(prev){
       Total: 11x parcelas · Total líquido da comissão: <b>${fmtBRL(prev.value * 11)}</b>
     `;
   }
+  if(prev.parcelas === 1 && prev.value2 === 0){
+    return `
+      🔹 Parcela única: <b>${fmtBRL(prev.value)}</b><br/>
+      Total líquido da comissão: <b>${fmtBRL(prev.value)}</b>
+    `;
+  }
   const total = prev.value*10 + prev.value2*3;
   return `
     🔹 10 primeiras parcelas: <b>${fmtBRL(prev.value)}</b> cada<br/>
@@ -8792,6 +9074,8 @@ function renderContratoModal(){
               <option value="veiculo" ${f.tipoCarta==='veiculo'?'selected':''}>Veículo</option>
               <option value="investimento" ${f.tipoCarta==='investimento'?'selected':''}>Investimento</option>
               <option value="servicos" ${f.tipoCarta==='servicos'?'selected':''}>Serviços</option>
+              <option value="home_equity" ${f.tipoCarta==='home_equity'?'selected':''}>Home Equity</option>
+              <option value="car_equity" ${f.tipoCarta==='car_equity'?'selected':''}>Car Equity</option>
             </select>
           </div>
           <div class="field">
@@ -8804,6 +9088,10 @@ function renderContratoModal(){
           <div class="field">
             <label>Mês da 1ª parcela</label>
             <input type="month" id="c-mes" value="${(f.date||'').slice(0,7)}" />
+            <p class="settings-page-note" id="c-mes-nota">${(f.tipoCarta==='home_equity'||f.tipoCarta==='car_equity')
+              ? 'Home Equity e Car Equity podem demorar até 2 meses pra pagar — mudar o mês aqui não altera o mês do lead.'
+              : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — só Home Equity e Car Equity ficam independentes.'
+            }</p>
           </div>
           <div class="calc-preview" id="c-preview">
             ${previewComissaoHtml(preview)}
@@ -8842,6 +9130,11 @@ function renderContratoModal(){
     const prev = calcComissaoPreviewPorTipo(contratoModalForm.creditoValor, contratoModalForm.tipoCarta);
     const previewEl = document.getElementById('c-preview');
     if(previewEl) previewEl.innerHTML = previewComissaoHtml(prev);
+    const ehEquity = contratoModalForm.tipoCarta==='home_equity' || contratoModalForm.tipoCarta==='car_equity';
+    const notaMes = document.getElementById('c-mes-nota');
+    if(notaMes) notaMes.textContent = ehEquity
+      ? 'Home Equity e Car Equity podem demorar até 2 meses pra pagar — mudar o mês aqui não altera o mês do lead.'
+      : 'Mudar o mês aqui também atualiza o mês do lead (e vice-versa) — só Home Equity e Car Equity ficam independentes.';
   });
 
   const creditoInput = document.getElementById('c-credito');
@@ -9352,6 +9645,7 @@ function closeConfirm(){ confirmState = null; document.getElementById('confirm-r
 
 /* ---------- start ---------- */
 if(getToken()){
+  renderAssistente();
   tratarRetornoDoGoogle();
   loadBoard();
   loadFunis();

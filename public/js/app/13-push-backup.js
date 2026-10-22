@@ -105,6 +105,54 @@ function renderConfigNotificacoes(){
   `;
 }
 
+/* ---------- Resumo diário por e-mail ---------- */
+let resumoDiario = { carregado:false, disponivel:false, ativo:false, email:'', ocupado:false, msg:null };
+async function carregarResumoDiario(){
+  resumoDiario.carregado = true;
+  try{
+    const d = await apiRequest('GET', '/resumo-diario');
+    resumoDiario = { ...resumoDiario, ativo: !!d.ativo, disponivel: !!d.emailDisponivel, email: d.email || '' };
+  }catch(e){ resumoDiario.disponivel = false; }
+  renderApp();
+}
+async function alternarResumoDiario(){
+  if(resumoDiario.ocupado) return;
+  resumoDiario.ocupado = true; resumoDiario.msg = null; renderApp();
+  try{
+    const d = await apiRequest('PUT', '/resumo-diario', { ativo: !resumoDiario.ativo });
+    resumoDiario.ativo = !!d.ativo;
+    resumoDiario.msg = { tipo:'ok', texto: resumoDiario.ativo ? 'Pronto: você vai receber o resumo todo dia útil de manhã.' : 'Resumo diário desativado.' };
+  }catch(e){
+    resumoDiario.msg = { tipo:'erro', texto: e.message || 'Não foi possível alterar.' };
+  }
+  resumoDiario.ocupado = false; renderApp();
+}
+async function enviarResumoDiarioAgora(){
+  if(resumoDiario.ocupado) return;
+  resumoDiario.ocupado = true; resumoDiario.msg = null; renderApp();
+  try{
+    await apiRequest('POST', '/resumo-diario/enviar-agora', undefined, 60000);
+    resumoDiario.msg = { tipo:'ok', texto:'Resumo enviado para ' + (resumoDiario.email || 'o seu e-mail') + '.' };
+  }catch(e){
+    resumoDiario.msg = { tipo:'erro', texto: e.message || 'Não foi possível enviar agora.' };
+  }
+  resumoDiario.ocupado = false; renderApp();
+}
+function renderBlocoResumoDiario(){
+  if(!resumoDiario.carregado){ carregarResumoDiario(); return ''; }
+  if(!resumoDiario.disponivel) return '';
+  return `
+    <div class="settings-page-section">
+      <h3>Resumo diário por e-mail</h3>
+      <p class="settings-page-note">Todo dia útil, a partir das 8h, enviamos para <strong>${esc(resumoDiario.email)}</strong> um resumo: tarefas de hoje e atrasadas, leads parados há mais de 7 dias, novos leads das últimas 24h e a meta do mês.${equipe && equipe.souSupervisor ? ' Como gestor, você também recebe um quadro com a situação de cada pessoa da equipe.' : ''}</p>
+      <p class="settings-page-note">Status: <strong>${resumoDiario.ativo?'ativado':'desativado'}</strong></p>
+      ${resumoDiario.msg ? `<p class="settings-page-msg ${resumoDiario.msg.tipo}">${esc(resumoDiario.msg.texto)}</p>` : ''}
+      <button class="btn-outline" data-action="resumo-diario-alternar" ${resumoDiario.ocupado?'disabled':''}>${resumoDiario.ativo?'Desativar resumo diário':'Ativar resumo diário'}</button>
+      <button class="btn-outline" data-action="resumo-diario-agora" ${resumoDiario.ocupado?'disabled':''}>${resumoDiario.ocupado?'Aguarde…':'Enviar agora (teste)'}</button>
+    </div>
+  `;
+}
+
 /* ---------- Tarefas por e-mail ---------- */
 let emailTarefas = { carregado:false, disponivel:false, ativo:false, email:'', ocupado:false, msg:null };
 async function carregarEmailTarefas(){
@@ -190,6 +238,30 @@ function renderBlocoBackupAuto(){
   `;
 }
 
+// Aba "E-mail" (Integrações): tudo que o painel manda por e-mail e como ligar/desligar.
+// (Trocar o e-mail da conta fica em "Seu perfil".)
+function renderConfigEmail(){
+  // os blocos carregam o estado sozinhos; enquanto não chegam, mostramos "Carregando"
+  const blocos = [renderBlocoResumoDiario(), renderBlocoEmailTarefas(), renderBlocoBackupAuto()];
+  const carregando = !resumoDiario.carregado || !emailTarefas.carregado;
+  const indisponivel = resumoDiario.carregado && !resumoDiario.disponivel;
+  return `
+    <div class="settings-page-section">
+      <h3>E-mails do painel</h3>
+      <p class="settings-page-note">Aqui você escolhe o que o painel envia para <strong>${esc((currentUser && currentUser.email) || 'o seu e-mail')}</strong>. Para trocar o e-mail da conta, vá em Seu perfil.</p>
+      ${carregando ? `<p class="settings-page-note">Carregando…</p>` : (indisponivel
+        ? `<p class="settings-page-msg erro">O envio de e-mail ainda não está ligado neste servidor. Quem administra o sistema precisa configurar <code>RESEND_API_KEY</code>, <code>EMAIL_FROM</code> e <code>APP_URL</code> no Render.</p>`
+        : `<p class="settings-page-note">O envio de e-mail está ligado neste servidor.</p>`)}
+    </div>
+    ${blocos.join('')}
+    ${(!carregando && !indisponivel) ? `
+    <div class="settings-page-section">
+      <h3>E-mails automáticos</h3>
+      <p class="settings-page-note">Estes saem sozinhos, sem configuração: recuperação e alteração de senha, e o aviso de convite quando um gestor te chama para uma equipe.</p>
+    </div>` : ''}
+  `;
+}
+
 function renderConfigManutencao(){
   return `
     <div class="settings-page-section">
@@ -197,8 +269,6 @@ function renderConfigManutencao(){
       <p class="settings-page-note">Guarda ou restaura uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações.</p>
       <button class="btn-outline" data-action="abrir-backup-modal">📦 Backup</button>
     </div>
-    ${renderBlocoEmailTarefas()}
-    ${renderBlocoBackupAuto()}
     <div class="settings-page-section">
       <h3>Início de contato nos leads antigos</h3>
       <p class="settings-page-note">Preenche automaticamente o "mês de início de contato" dos seus leads que ainda não têm esse campo, usando o mês de venda que já estava cadastrado como ponto de partida. Não altera leads que você já preencheu manualmente, e pode ser usado quantas vezes quiser.</p>
@@ -223,6 +293,7 @@ function renderConfiguracoesPage(){
     'whatsapp': renderConfigWhatsapp,
     'google-agenda': renderConfigGoogleAgenda,
     'instagram': renderConfigInstagram,
+    'email': renderConfigEmail,
     'webhooks': renderConfigWebhooks,
     'agendamento': renderConfigAgendamento,
     'campos': renderConfigCampos,

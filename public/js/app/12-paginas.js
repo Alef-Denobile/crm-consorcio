@@ -104,12 +104,12 @@ function renderDashboardPage(){
       </div>
       <div class="metric-card">
         <div class="metric-card-top"><span>Em negociação</span><span class="metric-icon">${ICON_DOLLAR}</span></div>
-        <div class="metric-value">${fmtBRL(m.emNegociacaoValor)}</div>
+        <div class="metric-value">${perfilRH() ? m.emNegociacaoCount : fmtBRL(m.emNegociacaoValor)}</div>
         <div class="metric-sub">${m.emNegociacaoCount} ${m.emNegociacaoCount===1?'negócio':'negócios'}</div>
       </div>
       <div class="metric-card">
         <div class="metric-card-top"><span>Ganho</span><span class="metric-icon">${ICON_TROPHY}</span></div>
-        <div class="metric-value">${fmtBRL(m.ganhoValor)}</div>
+        <div class="metric-value">${perfilRH() ? m.ganhoCount : fmtBRL(m.ganhoValor)}</div>
         <div class="metric-sub">${m.ganhoCount} fechados</div>
       </div>
       <div class="metric-card">
@@ -119,7 +119,7 @@ function renderDashboardPage(){
       </div>
     </div>
 
-    <div class="dash-grid" style="margin-bottom:20px;">
+    <div class="dash-grid" style="margin-bottom:20px;${perfilRH()?'display:none;':''}">
       <div class="dash-panel">
         ${renderCabecalhoPainelDashboard('meta-individual', 'Meta de vendas do mês', (!editandoMetaVendas && !visualizandoDashboardDe) ? `<button class="icon-btn" data-action="editar-meta-vendas" title="Editar meta">${ICON_EDIT}</button>` : '')}
         ${envolverConteudoPainel('meta-individual', !metaVendasCarregada ? `<p class="settings-page-note">Carregando…</p>` : (editandoMetaVendas ? `
@@ -1066,6 +1066,7 @@ const CONFIG_CATEGORIAS = [
     ['whatsapp', 'WhatsApp Business'],
     ['google-agenda', 'Google Agenda'],
     ['instagram', 'Instagram'],
+    ['email', 'E-mail'],
     ['webhooks', 'Webhooks'],
     ['agendamento', 'Link de agendamento'],
   ]},

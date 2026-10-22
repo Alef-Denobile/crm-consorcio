@@ -249,7 +249,7 @@ function renderApp(){
   bindAppEvents();
 }
 
-const NAV_PADRAO = [
+const NAV_COMPLETO = [
   ['dashboard', 'Dashboard', ICON_DASHBOARD],
   ['pipeline', 'Pipeline', ICON_PIPELINE],
   ['leads', 'Leads', ICON_LEADS],
@@ -261,6 +261,8 @@ const NAV_PADRAO = [
   ['equipe', 'Equipe', ICON_CHAT_INTERNO],
   ['tarefas', 'Agenda/Tarefas', ICON_TASKS],
 ];
+// na versão administrativa (recrutamento) não existe a aba Comissões
+function navPadrao(){ return perfilRH() ? NAV_COMPLETO.filter(i=>i[0]!=='comissoes') : NAV_COMPLETO; }
 function getOrdemNavSalva(){
   try{ return JSON.parse(localStorage.getItem('navOrdem') || 'null'); }catch(e){ return null; }
 }
@@ -268,10 +270,10 @@ function getOrdemNavSalva(){
 // item novo foi adicionado depois (ex: uma página nova), cai no padrão / vai pro fim.
 function getNavOrdenado(){
   const ordemSalva = getOrdemNavSalva();
-  if(!ordemSalva || !ordemSalva.length) return NAV_PADRAO;
-  const porChave = Object.fromEntries(NAV_PADRAO.map(item=>[item[0], item]));
+  if(!ordemSalva || !ordemSalva.length) return navPadrao();
+  const porChave = Object.fromEntries(navPadrao().map(item=>[item[0], item]));
   const resultado = ordemSalva.map(chave=>porChave[chave]).filter(Boolean);
-  NAV_PADRAO.forEach(item=>{ if(!ordemSalva.includes(item[0])) resultado.push(item); });
+  navPadrao().forEach(item=>{ if(!ordemSalva.includes(item[0])) resultado.push(item); });
   return resultado;
 }
 let reordenarNavAberto = false;
@@ -308,7 +310,7 @@ function restaurarOrdemNavPadrao(){
 function renderReordenarNavModal(){
   const root = document.getElementById('modal-root');
   if(!reordenarNavAberto){ root.innerHTML=''; return; }
-  const porChave = Object.fromEntries(NAV_PADRAO.map(item=>[item[0], item]));
+  const porChave = Object.fromEntries(navPadrao().map(item=>[item[0], item]));
   root.innerHTML = `
     <div class="overlay" id="reordenar-nav-overlay">
       <div class="modal reordenar-nav-modal">

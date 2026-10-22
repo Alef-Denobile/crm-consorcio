@@ -63,7 +63,7 @@ function respostas(cenario) {
   };
   const semEquipe = { equipe: null, convitesRecebidos: [{ id: 'cv9', equipeNome: 'Equipe X', convidadoPor: 'Chefe' }] };
   return {
-    'GET /api/auth/me': { id: 'u1', nome: 'Gestor Teste', email: 'g@x.com' },
+    'GET /api/auth/me': { user: { id: 'u1', nome: 'Gestor Teste', email: 'g@x.com', perfil: cenario === 'rh' ? 'rh' : 'consorcio' } },
     'GET /api/board': { columns: colunas, cards },
     'GET /api/funis': { funis: [] },
     'GET /api/tasks': { tasks: [] },
@@ -75,6 +75,9 @@ function respostas(cenario) {
     ] },
     'GET /api/equipe/membro/u2/leads': { total: 5 },
     'GET /api/possiveis-leads': { leads: [{ id: 'p1', nome: 'Pedro', telefone: '1511', tipoServico: 'auto' }, { id: 'p2', nome: 'Paula', telefone: '1522', tipoServico: '' }] },
+    'GET /api/resumo-diario': { ativo: false, emailDisponivel: true, email: 'g@x.com' },
+    'GET /api/tasks/config/email': { ativo: true, emailDisponivel: true, email: 'g@x.com' },
+    'GET /api/backup/automatico': { disponivel: true, ativo: false, ultimoEnvio: null, email: 'g@x.com' },
     'GET /api/whatsapp/status': { connected: false, provedor: 'meta' },
     'GET /api/metas/': { valorMeta: 0 },
     'GET /api/equipe/meta-vendas/': { valorMeta: 100000, vendidoNoMes: 80000, souGestor: true },
@@ -94,8 +97,11 @@ async function abrir(browser, url, cenario, extra = {}) {
   const erros = [];
   const chamadas = [];
   page.on('pageerror', (e) => erros.push(e.message + ' @ ' + String(e.stack || '').split('\n').slice(1, 3).join(' ').trim()));
-  await page.addInitScript(() => { if (sessionStorage.getItem('semeado')) return; sessionStorage.setItem('semeado', '1'); localStorage.setItem('token', 'tok'); localStorage.setItem('user', JSON.stringify({ nome: 'Gestor Teste', email: 'g@x.com' })); });
+  if (extra.perfil) await page.addInitScript((p) => { window.__perfilTeste = p; }, extra.perfil);
+  await page.addInitScript(() => { if (sessionStorage.getItem('semeado')) return; sessionStorage.setItem('semeado', '1'); localStorage.setItem('token', 'tok'); localStorage.setItem('user', JSON.stringify({ nome: 'Gestor Teste', email: 'g@x.com', perfil: window.__perfilTeste || 'consorcio' })); });
   const mapa = respostas(cenario);
+  // a biblioteca de planilhas vem de um CDN; no teste entra uma versão mínima
+  await page.route('**/xlsx.full.min.js', (route) => route.fulfill({ contentType: 'text/javascript', body: "window.XLSX={read:()=>({SheetNames:['A'],Sheets:{A:1}}),utils:{sheet_to_json:()=>[{Nome:'Ana',Telefone:'1511',Serviço:'imóvel'},{Nome:'Beto',Telefone:'1522',Serviço:'auto'}],aoa_to_sheet:()=>({}),book_new:()=>({}),book_append_sheet:()=>{}},writeFile:(wb,n)=>{window.__baixou=n;}};" }));
   await page.route('**/api/**', async (route) => {
     const req = route.request();
     const u = new URL(req.url());
@@ -182,6 +188,41 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.waitForTimeout(400);
     const lote = t.chamadas.find((c) => c.caminho === '/api/possiveis-leads/promover-lote');
     checar('envia ids selecionados e a pessoa escolhida', !!lote && JSON.parse(lote.corpo).ids.length === 1 && JSON.parse(lote.corpo).atribuirParaId === 'u2', lote && lote.corpo);
+    console.log('Configurações: aba E-mail em Integrações');
+    await t.page.click('[data-action="nav"][data-page="configuracoes"]');
+    await t.page.waitForTimeout(300);
+    await t.page.click('[data-action="set-config-categoria"][data-categoria="email"]');
+    await t.page.waitForTimeout(700);
+    checar('aba "E-mail" existe no grupo Integrações', (await t.page.locator('[data-action="set-config-categoria"][data-categoria="email"]').count()) === 1);
+    checar('aba E-mail traz resumo diário, tarefas e backup por e-mail', (await t.page.locator('[data-action="resumo-diario-alternar"]').count()) === 1 && (await t.page.locator('[data-action="email-tarefas-alternar"]').count()) === 1 && (await t.page.locator('[data-action="backup-auto-alternar"]').count()) === 1);
+    await t.page.click('[data-action="resumo-diario-alternar"]');
+    await t.page.waitForTimeout(300);
+    checar('ligar resumo diário chama a API', t.chamadas.some((c) => c.metodo === 'PUT' && c.caminho === '/api/resumo-diario'));
+    await t.page.click('[data-action="set-config-categoria"][data-categoria="manutencao"]');
+    await t.page.waitForTimeout(300);
+    checar('Manutenção não tem mais os blocos de e-mail', (await t.page.locator('[data-action="resumo-diario-alternar"]').count()) === 0 && (await t.page.locator('[data-action="backup-auto-alternar"]').count()) === 0);
+    await t.page.evaluate(() => { document.getElementById('modal-root').innerHTML = ''; });
+    await t.page.click('[data-action="nav"][data-page="import-export"]');
+    await t.page.waitForTimeout(400);
+    console.log('Importar planilha: painel desce, X faz subir e volta ao original');
+    checar('botão "Baixar planilha modelo" fica no canto direito', await t.page.evaluate(() => { const b = document.querySelector('.import-modelo').getBoundingClientRect(); const e = document.querySelector('[data-action="escolher-planilha"]').getBoundingClientRect(); return b.left > e.right + 200; }));
+    await t.page.click('[data-action="baixar-modelo-planilha"]');
+    checar('baixar modelo gera o arquivo .xlsx', (await t.page.evaluate(() => window.__baixou)) === 'planilha-modelo-leads.xlsx');
+    await t.page.setInputFiles('#planilha-input', { name: 'contatos.xlsx', mimeType: 'application/octet-stream', buffer: Buffer.from('x') });
+    await t.page.waitForSelector('.import-painel');
+    const altIni = await t.page.evaluate(() => document.querySelector('.import-painel').getBoundingClientRect().height);
+    await t.page.waitForTimeout(600);
+    const altFim = await t.page.evaluate(() => document.querySelector('.import-painel').getBoundingClientRect().height);
+    checar('painel da planilha desce (altura cresce com animação)', altFim > 150 && altIni < altFim, `${altIni} -> ${altFim}`);
+    checar('nome do arquivo e X aparecem', (await t.page.locator('.import-nome').innerText()) === 'contatos.xlsx' && (await t.page.locator('[data-action="fechar-planilha"]').count()) === 1);
+    checar('prévia mostra as linhas da planilha', (await t.page.locator('.import-previa tbody tr').count()) === 2);
+    await t.page.click('[data-action="fechar-planilha"]');
+    await t.page.waitForTimeout(120);
+    const altMeio = await t.page.evaluate(() => (document.querySelector('.import-painel') || { getBoundingClientRect: () => ({ height: 0 }) }).getBoundingClientRect().height);
+    checar('ao clicar no X o painel começa a subir', altMeio < altFim, `${altMeio} < ${altFim}`);
+    await t.page.waitForTimeout(600);
+    checar('página volta ao estado original', (await t.page.locator('.import-painel').count()) === 0 && (await t.page.locator('.import-arquivo').innerText()).includes('Nenhum arquivo escolhido'));
+    await t.page.screenshot({ path: '/tmp/import-final.png' });
     console.log('Leads: gestor passa em lote e exclui; membro não exclui');
     await t.page.click('[data-action="nav"][data-page="leads"]');
     await t.page.waitForTimeout(300);
@@ -197,6 +238,21 @@ async function abrir(browser, url, cenario, extra = {}) {
     checar('membro de equipe NÃO vê Excluir nem Passar para…', (await t.page.locator('[data-action="leads-bulk-excluir"]').count()) === 0 && (await t.page.locator('#leads-bulk-gestor-destino').count()) === 0);
     checar('membro ainda vê Arquivar', (await t.page.locator('[data-action="leads-bulk-arquivar"]').count()) === 1);
     checar('sem erro de JavaScript (membro)', t.erros.length === 0, t.erros[0]);
+    await t.ctx.close();
+
+    console.log('Versão administrativa (/adm): vocabulário de recrutamento');
+    t = await abrir(browser, url, 'rh', { perfil: 'rh' });
+    const nav = await t.page.locator('.sidebar-nav').innerText();
+    checar('menu fala "Candidatos" e "Processo seletivo"', /Candidatos/.test(nav) && /Processo seletivo/.test(nav), nav.replace(/\n/g, ' | '));
+    checar('menu não tem Comissões nem "Leads"', !/Comiss/.test(nav) && !/\bLeads\b/.test(nav), nav.replace(/\n/g, ' | '));
+    await t.page.click('[data-action="nav"][data-page="dashboard"]');
+    await t.page.waitForTimeout(400);
+    const dash = await t.page.locator('main, .main-area').first().innerText();
+    checar('dashboard sem meta de vendas e sem "leads"', !/Meta de vendas/.test(dash) && !/\bNovos leads\b/.test(dash), dash.slice(0, 200).replace(/\n/g, ' | '));
+    await t.page.click('[data-action="nav"][data-page="leads"]');
+    await t.page.waitForTimeout(400);
+    await t.page.click('[data-action="add-lead"], .btn-primary >> nth=0').catch(() => {});
+    checar('sem erro de JavaScript (rh)', t.erros.length === 0, t.erros[0]);
     await t.ctx.close();
 
     console.log('Sem equipe: convite recebido');

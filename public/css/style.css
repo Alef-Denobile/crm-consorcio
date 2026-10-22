@@ -899,3 +899,15 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .modo-gestor-btn{ flex:1; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--col-bg); color:var(--ink); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
 .modo-gestor-btn:hover{ border-color:var(--accent); }
 .modo-gestor-btn.ativo{ background:var(--accent); border-color:var(--accent); color:#fff; }
+
+/* Importar planilha: linha do botão, nome do arquivo com X, "Baixar planilha modelo" à direita e painel que desce/sobe */
+.import-linha{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.import-arquivo{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-soft); min-width:0; }
+.import-nome{ max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink); font-weight:600; }
+.import-x{ width:24px; height:24px; min-height:24px; padding:0; font-size:12px; line-height:1; }
+.import-modelo{ margin-left:auto; background:none; border:none; padding:4px 0; font-size:12px; font-weight:700; color:var(--ink); text-decoration:underline; cursor:pointer; }
+.import-painel{ display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows .35s ease, opacity .3s ease; }
+.import-painel.aberto{ grid-template-rows:1fr; opacity:1; }
+.import-painel-inner{ overflow:hidden; min-height:0; }
+.import-previa{ margin:4px 0 8px; max-height:220px; overflow:auto; }
+@media (prefers-reduced-motion: reduce){ .import-painel{ transition:none; } }

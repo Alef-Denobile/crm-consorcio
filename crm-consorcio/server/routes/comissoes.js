@@ -2,7 +2,11 @@ const express = require('express');
 const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const Contrato = require('../models/Contrato');
+const Card = require('../models/Card');
 const { calcComissaoPorTipo } = require('../utils/comissaoCalc');
+
+const TIPOS_CARTA_VALIDOS = ['imovel', 'veiculo', 'investimento', 'servicos', 'home_equity', 'car_equity'];
+const TIPOS_MES_INDEPENDENTE = ['home_equity', 'car_equity']; // únicos onde o mês pode divergir do lead
 
 const router = express.Router();
 router.use(auth); // todas as rotas de comissão exigem login
@@ -31,7 +35,7 @@ router.post('/', async (req, res) => {
     if (credito <= 0) {
       return res.status(400).json({ error: 'Valor da carta de crédito é obrigatório.' });
     }
-    const tipo = ['imovel', 'veiculo', 'investimento', 'servicos'].includes(tipoCarta) ? tipoCarta : 'imovel';
+    const tipo = TIPOS_CARTA_VALIDOS.includes(tipoCarta) ? tipoCarta : 'imovel';
 
     const { parcelas, parcelas1, value, value2 } = calcComissaoPorTipo(credito, tipo);
     const contrato = await Contrato.create({
@@ -71,7 +75,7 @@ router.put('/:id', async (req, res) => {
       if (!contratoAtual) return res.status(404).json({ error: 'Contrato não encontrado.' });
       const credito = creditoValor !== undefined ? (parseFloat(creditoValor) || 0) : contratoAtual.creditoValor;
       const tipo = tipoCarta !== undefined
-        ? (['imovel', 'veiculo', 'investimento', 'servicos'].includes(tipoCarta) ? tipoCarta : 'imovel')
+        ? (TIPOS_CARTA_VALIDOS.includes(tipoCarta) ? tipoCarta : 'imovel')
         : (contratoAtual.tipoCarta || 'imovel');
       const { parcelas, parcelas1, value, value2 } = calcComissaoPorTipo(credito, tipo);
       updates.creditoValor = credito;
@@ -88,6 +92,15 @@ router.put('/:id', async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!contrato) return res.status(404).json({ error: 'Contrato não encontrado.' });
+
+    // O mês do contrato e o mês do lead ficam sincronizados nos dois sentidos — exceto
+    // pra Home Equity e Car Equity, que ficam soltos de propósito (o pagamento deles
+    // pode demorar até 2 meses a mais que o mês em que o negócio foi fechado).
+    if (date && contrato.cardId && !TIPOS_MES_INDEPENDENTE.includes(contrato.tipoCarta)) {
+      const novoMes = contrato.date.toISOString().slice(0, 7);
+      await Card.findOneAndUpdate({ _id: contrato.cardId, userId: req.userId }, { mes: novoMes });
+    }
+
     res.json(contrato.toJSON());
   } catch (err) {
     res.status(500).json({ error: 'Erro ao atualizar contrato.' });

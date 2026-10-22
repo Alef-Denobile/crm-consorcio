@@ -14,6 +14,13 @@ const COMISSAO_FATOR_BLOCO2 = 1905.61 / 1000000;
 const COMISSAO_VEICULO_PARCELAS = 11;
 const COMISSAO_VEICULO_PERCENTUAL = 0.016;
 
+/* ---- Regra de comissão pra Home Equity e Car Equity (diferente das outras) ----
+   Comissão = 1,1% do valor da carta, paga numa parcela só — diferente das outras
+   modalidades porque o pagamento pode demorar até 2 meses pra acontecer de verdade,
+   então o mês fica editável na aba Comissões em vez de fixo no mês do lead. */
+const COMISSAO_EQUITY_PARCELAS = 1;
+const COMISSAO_EQUITY_PERCENTUAL = 0.011;
+
 function calcComissaoParcelas(creditoValor) {
   const credito = parseFloat(creditoValor) || 0;
   const value1 = Math.round(credito * COMISSAO_FATOR_BLOCO1 * 100) / 100;
@@ -28,13 +35,24 @@ function calcComissaoVeiculo(creditoValor) {
   return { valorParcela };
 }
 
+function calcComissaoEquity(creditoValor) {
+  const credito = parseFloat(creditoValor) || 0;
+  const valorParcela = Math.round(credito * COMISSAO_EQUITY_PERCENTUAL * 100) / 100;
+  return { valorParcela };
+}
+
 // Monta os 4 campos salvos no Contrato (parcelas/parcelas1/value/value2), já
 // escolhendo a fórmula certa conforme o tipo de carta de crédito. Veículo usa um
-// "bloco" só (11 parcelas iguais); os outros 3 tipos continuam com os dois blocos.
+// "bloco" só (11 parcelas iguais); Home Equity/Car Equity usam 1 parcela só; os
+// outros 3 tipos continuam com os dois blocos.
 function calcComissaoPorTipo(creditoValor, tipoCarta) {
   if (tipoCarta === 'veiculo') {
     const { valorParcela } = calcComissaoVeiculo(creditoValor);
     return { parcelas: COMISSAO_VEICULO_PARCELAS, parcelas1: COMISSAO_VEICULO_PARCELAS, value: valorParcela, value2: 0 };
+  }
+  if (tipoCarta === 'home_equity' || tipoCarta === 'car_equity') {
+    const { valorParcela } = calcComissaoEquity(creditoValor);
+    return { parcelas: COMISSAO_EQUITY_PARCELAS, parcelas1: COMISSAO_EQUITY_PARCELAS, value: valorParcela, value2: 0 };
   }
   const { value1, value2 } = calcComissaoParcelas(creditoValor);
   return { parcelas: COMISSAO_PARCELAS_BLOCO1 + COMISSAO_PARCELAS_BLOCO2, parcelas1: COMISSAO_PARCELAS_BLOCO1, value: value1, value2 };
@@ -45,7 +63,10 @@ module.exports = {
   COMISSAO_PARCELAS_BLOCO2,
   COMISSAO_VEICULO_PARCELAS,
   COMISSAO_VEICULO_PERCENTUAL,
+  COMISSAO_EQUITY_PARCELAS,
+  COMISSAO_EQUITY_PERCENTUAL,
   calcComissaoParcelas,
   calcComissaoVeiculo,
+  calcComissaoEquity,
   calcComissaoPorTipo,
 };

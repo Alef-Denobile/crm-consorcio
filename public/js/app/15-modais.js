@@ -492,7 +492,7 @@ function renderModal(){
               </select>
             </div>
           </div>
-          <div class="field">
+          <div class="field" ${perfilRH()?'style="display:none;"':''}>
             <label>Tipo de carta de crédito</label>
             <select id="f-tipo-carta">
               ${renderOpcoesTipoCarta(f.tipoCarta||'imovel')}
@@ -528,7 +528,7 @@ function renderModal(){
               ${!f.__isNew && integracoesConfig.assistenteIA ? `<button type="button" class="ai-btn" id="f-ai-mensagem">${ICON_SPARKLE} Sugerir mensagem</button>` : ''}
               ${!f.__isNew && whatsappConnected ? `<button type="button" class="ai-btn" id="f-ver-conversa">${WA_ICON} Ver conversa</button>` : ''}
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-ver-historico">🕘 Ver histórico</button>` : ''}
-              ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-gerar-proposta">📄 Gerar proposta</button>` : ''}
+              ${(!f.__isNew && !perfilRH()) ? `<button type="button" class="ai-btn" id="f-gerar-proposta">📄 Gerar proposta</button>` : ''}
               ${!f.__isNew ? `<button type="button" class="ai-btn" id="f-toggle-arquivar">${f.arquivado?'📦 Desarquivar':'📦 Arquivar'}</button>` : ''}
             </div>
             <div class="ai-result" id="f-ai-mensagem-result" style="display:none;"></div>

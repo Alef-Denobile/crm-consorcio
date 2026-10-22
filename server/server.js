@@ -32,6 +32,7 @@ const agendamentoPublicoRoutes = require('./routes/agendamentoPublico');
 const gerotRoutes = require('./routes/gerot');
 const historicoContatoRoutes = require('./routes/historicoContato');
 const pushRoutes = require('./routes/push');
+const resumoDiarioRoutes = require('./routes/resumoDiario');
 
 const app = express();
 // O Render (e a maioria dos serviços de hospedagem) fica atrás de um proxy: o HTTPS
@@ -109,6 +110,10 @@ app.use('/api/agendamento-publico', agendamentoPublicoRoutes);
 app.use('/api/gerot', gerotRoutes);
 app.use('/api/historico-contato', historicoContatoRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/resumo-diario', resumoDiarioRoutes);
+
+// versão administrativa (recrutamento): /adm e /administrativo abrem o login já no modo "rh"
+app.get(['/adm', '/adm/', '/administrativo', '/administrativo/'], (_req, res) => res.redirect('/login.html?perfil=rh'));
 
 // página pública de agendamento — /agendar/<userId> (sem login, o cliente acessa direto)
 app.get('/agendar/:userId', (req, res) => {
@@ -123,6 +128,7 @@ const { processarFluxos } = require('./utils/fluxoScheduler');
 const { processarAgendamentos } = require('./utils/agendamentoScheduler');
 const { enviarLembretesDeTarefas } = require('./utils/lembreteScheduler');
 const { enviarBackupsSemanais } = require('./utils/backupScheduler');
+const { enviarResumosDiarios } = require('./utils/resumoDiario');
 const UMA_HORA = 60 * 60 * 1000;
 const CINCO_MINUTOS = 5 * 60 * 1000;
 
@@ -143,6 +149,9 @@ async function start() {
     // lembretes de tarefa por notificação push (a cada 2 min) e backup semanal por e-mail (confere de 6 em 6 horas)
     setTimeout(enviarLembretesDeTarefas, 20 * 1000);
     setInterval(enviarLembretesDeTarefas, 2 * 60 * 1000);
+    // resumo diário por e-mail (confere a cada 10 min; envia 1x por dia a partir das 08:00 de Brasília)
+    setTimeout(enviarResumosDiarios, 60 * 1000);
+    setInterval(enviarResumosDiarios, 10 * 60 * 1000);
     setTimeout(enviarBackupsSemanais, 90 * 1000);
     setInterval(enviarBackupsSemanais, 6 * UMA_HORA);
   } catch (err) {

@@ -3,6 +3,13 @@
 ================================================================ */
 const API_BASE = '/api';
 let modo = 'login'; // ou 'register'
+// /adm abre este login já no modo "rh" (versão administrativa / recrutamento): contas criadas aqui nascem com o funil de contratação
+const PERFIL = new URLSearchParams(location.search).get('perfil') === 'rh' ? 'rh' : 'consorcio';
+if(PERFIL === 'rh'){
+  const t = document.getElementById('auth-title'); if(t) t.textContent = 'Painel Administrativo';
+  const st = document.querySelector('.auth-subtitle'); if(st) st.textContent = 'recrutamento e contratações';
+  document.title = 'Painel Administrativo';
+}
 
 // mesma cor de destaque escolhida no painel (guardada no navegador)
 document.documentElement.style.setProperty('--accent', localStorage.getItem('accentColor') || '#141414');
@@ -44,7 +51,7 @@ form.addEventListener('submit', async (e)=>{
   const nome = document.getElementById('a-nome').value.trim();
 
   const path = modo==='register' ? '/auth/register' : '/auth/login';
-  const body = modo==='register' ? { nome, email, senha } : { email, senha };
+  const body = modo==='register' ? { nome, email, senha, perfil: PERFIL } : { email, senha };
 
   try{
     const res = await fetch(API_BASE + path, {
@@ -145,7 +152,7 @@ async function handleGoogleCredential(response){
     const res = await fetch(API_BASE + '/auth/google', {
       method:'POST',
       headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify({ credential: response.credential }),
+      body: JSON.stringify({ credential: response.credential, perfil: PERFIL }),
     });
     const data = await res.json();
     if(!res.ok){ throw new Error(data.error || 'Não foi possível entrar com o Google.'); }

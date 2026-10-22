@@ -129,4 +129,5 @@ module.exports = {
   montarEmailConviteEquipe,
   montarEmailTarefa,
   escaparHtml,
+  moldeEmail,
 };
