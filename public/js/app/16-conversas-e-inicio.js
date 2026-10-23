@@ -442,6 +442,7 @@ function renderRankingSupervisao(membros){
               <span style="display:flex; align-items:center; gap:10px;">
                 ${fmtBRL(m.ganhoValor)}
                 <button type="button" class="btn-outline" style="padding:4px 10px; font-size:11px;" data-action="ver-dashboard-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}">Ver Dashboard</button>
+                <button type="button" class="btn-primary" style="padding:4px 10px; font-size:11px;" data-action="atuar-como-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}">Abrir funil</button>
               </span>
             </div>
             <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${(m.ganhoValor/maxGanho*100)}%"></div></div>

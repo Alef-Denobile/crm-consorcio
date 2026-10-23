@@ -400,6 +400,11 @@ let dmTexto = '';
 let dmEnviando = false;
 let supervisaoMembros = [];
 let supervisaoLoaded = false;
+// quando o gestor "atua como" um consultor: { userId, nome } — todos os pedidos de leads/tarefas/funis
+// passam a valer no funil dele (o servidor confere que ele é gestor da mesma equipe)
+let atuandoComo = null;
+let metaBackupAtuandoComo = null;
+const PAGINAS_ATUANDO_COMO = ['dashboard','pipeline','leads','conversas','equipe'];
 let visualizandoDashboardDe = null; // { userId, nome } | null — quando setado, o Dashboard mostra os dados desse membro, em modo leitura
 let boardBackupGestor = null;
 let tasksBackupGestor = null;

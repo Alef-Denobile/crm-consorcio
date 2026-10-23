@@ -890,10 +890,10 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 
 .dashboard-readonly-banner{
   display:flex; align-items:center; justify-content:space-between; gap:12px;
-  background:var(--accent); color:var(--paper); padding:12px 18px; border-radius:12px;
+  background:var(--ink); color:var(--bg); padding:12px 18px; border-radius:12px;
   margin-bottom:18px; font-size:13px; font-weight:600;
 }
-.dashboard-readonly-banner .btn-outline{ background:transparent; border-color:var(--paper); color:var(--paper); flex-shrink:0; }
+.dashboard-readonly-banner .btn-outline{ background:transparent; border-color:var(--bg); color:var(--bg); flex-shrink:0; }
 .wa-secret-pendente{ color:var(--danger); }
 .modo-gestor-toggle{ display:flex; gap:6px; }
 .modo-gestor-btn{ flex:1; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--col-bg); color:var(--ink); font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; }
@@ -911,3 +911,9 @@ tr.membro-supervisor-destaque td:last-child{ border-right:1px solid var(--gold);
 .import-painel-inner{ overflow:hidden; min-height:0; }
 .import-previa{ margin:4px 0 8px; max-height:220px; overflow:auto; }
 @media (prefers-reduced-motion: reduce){ .import-painel{ transition:none; } }
+.atuando-banner{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:12px;
+  margin:0 0 14px; font-size:13px; font-weight:600;
+}
+.atuando-banner .btn-outline{ background:transparent; border-color:var(--bg); color:var(--bg); flex-shrink:0; }

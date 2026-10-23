@@ -107,7 +107,7 @@ async function abrir(browser, url, cenario, extra = {}) {
     const req = route.request();
     const u = new URL(req.url());
     const chave = `${req.method()} ${u.pathname}`;
-    chamadas.push({ metodo: req.method(), caminho: u.pathname, corpo: req.postData() });
+    chamadas.push({ metodo: req.method(), caminho: u.pathname, corpo: req.postData(), atuarComo: req.headers()['x-atuar-como'] });
     if (extra.interceptar) { const r = extra.interceptar(req.method(), u.pathname); if (r) return route.fulfill(r); }
     let corpo = mapa[chave];
     if (corpo === undefined) { const k = Object.keys(mapa).find((x) => x.endsWith('/') && chave.startsWith(x)); if (k) corpo = mapa[k]; }
@@ -174,6 +174,27 @@ async function abrir(browser, url, cenario, extra = {}) {
       checar('janela de remover membro abre (manter / passar leads)', (await t.page.locator('#rm-destino').count()) >= 1 || (await t.page.locator('input[type=radio]').count()) >= 2);
     } else checar('botão Remover existe', false);
     checar('sem erro de JavaScript na página Equipe', t.erros.length === 0, t.erros[t.erros.length - 1]);
+
+    console.log('Gestor: atuar no funil de um consultor');
+    await t.page.evaluate(() => { document.getElementById('modal-root').innerHTML = ''; });
+    const abrirFunil = t.page.locator('[data-action="atuar-como-membro"]').first();
+    checar('ranking tem o botão "Abrir funil"', (await abrirFunil.count()) === 1);
+    if (await abrirFunil.count()) {
+      const antes = t.chamadas.length;
+      await abrirFunil.click();
+      await t.page.waitForTimeout(600);
+      checar('faixa avisa que está no funil da Ana', (await t.page.locator('.atuando-banner', { hasText: 'Ana Vendas' }).count()) === 1);
+      const novas = t.chamadas.slice(antes);
+      checar('pedidos de board/funis/tarefas levam X-Atuar-Como', ['/api/board', '/api/funis', '/api/tasks'].every((c) => novas.some((n) => n.caminho === c && n.atuarComo === 'u2')), JSON.stringify(novas.map((n) => [n.caminho, n.atuarComo])));
+      checar('pedidos de /auth e /equipe NÃO levam o header', novas.filter((n) => /^\/api\/(auth|equipe)/.test(n.caminho)).every((n) => !n.atuarComo));
+      checar('menu só mostra páginas liberadas', (await t.page.locator('[data-action="nav"][data-page="comissoes"]').count()) === 0 && (await t.page.locator('[data-action="nav"][data-page="pipeline"]').count()) === 1);
+      const marca = t.chamadas.length;
+      await t.page.click('[data-action="sair-funil-de"]');
+      await t.page.waitForTimeout(600);
+      checar('sair do funil remove a faixa e volta à Equipe', (await t.page.locator('.atuando-banner').count()) === 0);
+      const depois = t.chamadas.slice(marca);
+      checar('depois de sair, os pedidos voltam sem o header', depois.some((n) => n.caminho === '/api/board') && depois.filter((n) => n.caminho === '/api/board').every((n) => !n.atuarComo));
+    }
 
     console.log('Importar/Exportar: possíveis leads em lote');
     await t.page.evaluate(() => { document.getElementById('modal-root').innerHTML = ''; });

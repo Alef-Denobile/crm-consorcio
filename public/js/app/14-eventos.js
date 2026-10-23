@@ -59,6 +59,11 @@ function bindAppEvents(){
   if(verificarAtualizacaoBtn) verificarAtualizacaoBtn.addEventListener('click', verificarAtualizacaoApp);
   const preencherMesInicioBtn = app.querySelector('[data-action="preencher-mes-inicio-contato"]');
   if(preencherMesInicioBtn) preencherMesInicioBtn.addEventListener('click', preencherMesInicioContatoAntigos);
+  app.querySelectorAll('[data-action="atuar-como-membro"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> entrarNoFunilDe(btn.dataset.userId, btn.dataset.nome));
+  });
+  const sairFunilBtn = app.querySelector('[data-action="sair-funil-de"]');
+  if(sairFunilBtn) sairFunilBtn.addEventListener('click', sairDoFunilDe);
   app.querySelectorAll('[data-action="ver-dashboard-membro"]').forEach(btn=>{
     btn.addEventListener('click', ()=> abrirDashboardDeMembro(btn.dataset.userId, btn.dataset.nome));
   });

@@ -28,6 +28,7 @@ async function apiRequestUmaVez(method, path, body, timeoutMs){
   const opts = { method, headers: {} };
   const token = getToken();
   if(token) opts.headers['Authorization'] = 'Bearer ' + token;
+  if(atuandoComo && /^\/(board|columns|cards|tasks|funis|historico-contato|campos-personalizados|whatsapp)(\/|\?|$)/.test(path)) opts.headers['X-Atuar-Como'] = atuandoComo.userId;
   if(body !== undefined){
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);

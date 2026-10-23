@@ -106,7 +106,7 @@ router.post('/', async (req, res) => {
     const atribuirParaId = req.body.atribuirParaId;
     if (atribuirParaId && String(atribuirParaId) !== String(req.userId)) {
       let alvoInfo;
-      try { alvoInfo = await validarAtribuicao(req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
+      try { alvoInfo = await validarAtribuicao(req.realUserId || req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
       const colunaAlvo = await colunaEquivalente(dados.columnId, alvoInfo.alvo._id);
       if (!colunaAlvo) return res.status(400).json({ error: 'A pessoa escolhida não tem uma coluna "em aberto" pra receber o lead.' });
       const cardAtribuido = await Card.create({
@@ -155,11 +155,11 @@ router.put('/:id', async (req, res) => {
     const atribuirParaId = req.body.atribuirParaId;
     if (atribuirParaId && String(atribuirParaId) !== String(req.userId)) {
       let alvoInfo;
-      try { alvoInfo = await validarAtribuicao(req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
+      try { alvoInfo = await validarAtribuicao(req.realUserId || req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
       const doGestor = await Card.findOneAndUpdate({ _id: req.params.id, userId: req.userId }, dados, { new: true, runValidators: true });
       if (!doGestor) return res.status(404).json({ error: 'Cliente não encontrado.' });
       let transferido;
-      try { transferido = await transferirCard(doGestor, alvoInfo.alvo, req.userId); } catch (e) { return res.status(e.status || 500).json({ error: e.mensagem || e.message }); }
+      try { transferido = await transferirCard(doGestor, alvoInfo.alvo, req.realUserId || req.userId); } catch (e) { return res.status(e.status || 500).json({ error: e.mensagem || e.message }); }
       res.json({ ...transferido.toJSON(), transferido: true, atribuidoParaNome: alvoInfo.alvo.nome || alvoInfo.alvo.email });
       enviarPush(alvoInfo.alvo._id, { titulo: 'Lead passado pra você', corpo: `${alvoInfo.gestor.nome || 'O gestor'} passou o lead "${transferido.cliente}" pra você.`, tag: `lead-${transferido._id}`, url: '/index.html', tipo: 'lead' });
       return;
@@ -330,13 +330,13 @@ router.post('/transferir-lote', async (req, res) => {
     const { ids, atribuirParaId } = req.body || {};
     if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Selecione pelo menos um lead.' });
     let alvoInfo;
-    try { alvoInfo = await validarAtribuicao(req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
+    try { alvoInfo = await validarAtribuicao(req.realUserId || req.userId, atribuirParaId); } catch (e) { return res.status(e.status || 400).json({ error: e.mensagem || e.message }); }
     if (String(alvoInfo.alvo._id) === String(req.userId)) return res.status(400).json({ error: 'Escolha outra pessoa da equipe.' });
     const validos = ids.filter((i) => mongoose.isValidObjectId(i)).slice(0, 500);
     const cards = await Card.find({ _id: { $in: validos }, userId: req.userId });
     let transferidos = 0;
     for (const card of cards) {
-      try { await transferirCard(card, alvoInfo.alvo, req.userId); transferidos++; } catch (e) { if (e.status === 400) return res.status(400).json({ error: e.mensagem || e.message, transferidos }); throw e; }
+      try { await transferirCard(card, alvoInfo.alvo, req.realUserId || req.userId); transferidos++; } catch (e) { if (e.status === 400) return res.status(400).json({ error: e.mensagem || e.message, transferidos }); throw e; }
     }
     if (transferidos) {
       registrarAuditoria(req.userId, 'leads_transferidos', `Passou ${transferidos} lead(s) para ${alvoInfo.alvo.nome || alvoInfo.alvo.email}`);
@@ -355,7 +355,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(400).json({ error: 'ID inválido.' });
     }
     // em equipe, só o gestor exclui leads (o membro pode mover pra "Perdido" ou arquivar)
-    const quem = await User.findById(req.userId).select('equipeId papelEquipe');
+    const quem = await User.findById(req.realUserId || req.userId).select('equipeId papelEquipe');
     if (quem && quem.equipeId && quem.papelEquipe !== 'supervisor') {
       return res.status(403).json({ error: 'Em equipe, só o gestor pode excluir leads. Você pode movê-lo para "Perdido" ou arquivá-lo.' });
     }

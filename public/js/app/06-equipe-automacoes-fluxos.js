@@ -86,6 +86,36 @@ async function abrirDashboardDeMembro(userId, nome){
     renderApp();
   }
 }
+// "Atuar como": o gestor passa a trabalhar no funil de um consultor — vê, cria, edita, exclui e
+// transfere leads dele. Só gestor da mesma equipe; o servidor confere e registra tudo na auditoria.
+async function entrarNoFunilDe(userId, nome){
+  try{
+    let meta = 0;
+    try{ meta = (await apiRequest('GET', `/equipe/supervisao/${userId}/dashboard`)).metaVendasValor || 0; }catch(e){}
+    if(!atuandoComo) metaBackupAtuandoComo = metaVendasValor;
+    atuandoComo = { userId, nome };
+    metaVendasValor = meta;
+    funilAtualId = null; funis = []; board = { columns: [], cards: [] }; tasks = [];
+    conversas = []; conversasLoaded = false; conversaSelecionadaCardId = null;
+    pararPollingConversa();
+    await Promise.all([loadBoard(), loadFunis(), loadTasks()]);
+    if(currentPage === 'pipeline') renderApp(); else goToPage('pipeline');
+  }catch(e){
+    errorMsg = 'Não foi possível abrir o funil desse consultor.';
+    renderApp();
+  }
+}
+async function sairDoFunilDe(){
+  atuandoComo = null;
+  if(metaBackupAtuandoComo !== null) metaVendasValor = metaBackupAtuandoComo;
+  metaBackupAtuandoComo = null;
+  funilAtualId = null; funis = []; board = { columns: [], cards: [] }; tasks = [];
+  conversas = []; conversasLoaded = false; conversaSelecionadaCardId = null;
+  pararPollingConversa();
+  await Promise.all([loadBoard(), loadFunis(), loadTasks()]);
+  equipeSubTab = 'supervisao';
+  if(currentPage === 'equipe') renderApp(); else goToPage('equipe');
+}
 function sairDashboardDeMembro(){
   goToPage('equipe'); // a própria goToPage já restaura board/tasks/meta ao sair do dashboard
   equipeSubTab = 'supervisao';

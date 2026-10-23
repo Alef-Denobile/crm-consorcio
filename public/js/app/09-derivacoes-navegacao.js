@@ -447,6 +447,11 @@ function filteredLeads(){
 /* ---------- navegação entre páginas ---------- */
 function goToPage(page){
   if(currentPage === page) return;
+  if(atuandoComo && !PAGINAS_ATUANDO_COMO.includes(page)){
+    errorMsg = 'Essa página não está disponível enquanto você atua no funil de ' + atuandoComo.nome + '. Clique em "Sair do funil" para voltar ao seu.';
+    renderApp();
+    return;
+  }
   // se o gestor estiver vendo o dashboard de outro membro e navegar pra qualquer
   // outra página (não só clicando em "Voltar"), restaura os próprios dados antes —
   // sem isso, ele acabaria vendo os leads/tarefas de outra pessoa numa tela como o
@@ -495,6 +500,7 @@ function goToPage(page){
   if(page === 'tarefas'){
     if(!agendaLoaded) loadAgendaMes(agendaMesAtual); // só busca do zero — depois disso, a tela se mantém atualizada sozinha com as próprias ações, e o Google só é consultado de novo no botão "Sincronizar Agenda"
   }
+  if(page === 'conversas' && atuandoComo && !conversasLoaded) loadConversas();
   if(page === 'configuracoes'){
     senhaMsg = null; senhaAtualVal = ''; senhaNovaVal = '';
     nomeMsg = null; nomeNovoVal = (currentUser && currentUser.nome) || '';

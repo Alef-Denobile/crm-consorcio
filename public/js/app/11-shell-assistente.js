@@ -241,6 +241,11 @@ function renderApp(){
           </div>
         </div>
         ${erroParaMostrar() ? `<div class="error-banner" data-action="dismiss-error" title="Clique para fechar">⚠ ${esc(errorMsg)}</div>` : ''}
+        ${atuandoComo ? `
+          <div class="atuando-banner">
+            <span>🛠 Você está no funil de <b>${esc(atuandoComo.nome)}</b> — tudo que você criar, editar, excluir ou transferir aqui vale para o funil dele e fica registrado. As conversas ficam só para leitura.</span>
+            <button type="button" class="btn-outline" data-action="sair-funil-de">Sair do funil</button>
+          </div>` : ''}
         ${pageHtml}
       </div>
     </div>
@@ -368,7 +373,7 @@ function renderSidebar(){
         <span class="sidebar-greeting">Olá, <span class="sidebar-brand-name">${esc((currentUser && currentUser.nome) || 'visitante')}</span></span>
       </div>
       <nav class="sidebar-nav">
-        ${NAV.map(([key,label,icon])=>`
+        ${NAV.filter(([key])=>!atuandoComo || PAGINAS_ATUANDO_COMO.includes(key)).map(([key,label,icon])=>`
           <button class="nav-item ${currentPage===key?'active':''}" data-action="nav" data-page="${key}">${icon}<span>${label}</span></button>
         `).join('')}
       </nav>
