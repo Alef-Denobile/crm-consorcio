@@ -41,7 +41,7 @@ function chamar(rota, router, metodo, caminho, quem, corpo) {
 function preparar() {
   const criados = [], removidosPossiveis = [], excluidos = [];
   User.findById = (id) => { const u = usuarios[id] || null; const p = Promise.resolve(u); p.select = async () => u; return p; };
-  User.findOne = async (q) => Object.values(usuarios).find((u) => String(u._id) === String(q._id) && String(u.equipeId) === String(q.equipeId)) || null;
+  User.findOne = async (q) => Object.values(usuarios).find((u) => String(u._id) === String(q._id) && String(u.equipeId) === String((q.equipeId || (q.$or && q.$or[0].equipeId)))) || null;
   PossivelLead.find = () => ({ sort: () => ({ limit: async () => [{ _id: 'p1', nome: 'Maria', telefone: '1599', tipoServico: 'imóvel' }, { _id: 'p2', nome: '', telefone: '1598', tipoServico: '' }] }) });
   PossivelLead.deleteMany = async (f) => { removidosPossiveis.push(...f._id.$in); };
   Column.findOne = (q) => Object.assign(Promise.resolve({ _id: 'col-' + q.userId, userId: q.userId, tipo: 'aberto' }), { sort: async () => ({ _id: 'col-' + q.userId, userId: q.userId, tipo: 'aberto' }) });

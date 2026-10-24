@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
+const { filtroMembros } = require('./equipesDoUsuario');
 const Column = require('../models/Column');
 
 // Rodízio de leads novos: o gestor escolhe quem entra no rodízio e, a cada lead novo que chega no canal
@@ -17,7 +18,7 @@ async function escolherPorRodizio(canalUser) {
   if (!idsConfig.length) return null;
 
   // só quem ainda é da equipe e tem uma coluna "em aberto" pra receber o lead
-  const doTime = await User.find({ _id: { $in: idsConfig.filter((i) => mongoose.isValidObjectId(i)) }, equipeId: canalUser.equipeId });
+  const doTime = await User.find({ _id: { $in: idsConfig.filter((i) => mongoose.isValidObjectId(i)) }, ...filtroMembros(canalUser.equipeId) });
   const elegiveis = [];
   for (const id of idsConfig) {
     const u = doTime.find((x) => String(x._id) === id);

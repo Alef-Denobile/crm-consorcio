@@ -2,8 +2,9 @@
 function bindAppEvents(){
   const app = document.getElementById('app');
 
-  const hamburgerBtn = app.querySelector('[data-action="toggle-sidebar"]');
-  if(hamburgerBtn) hamburgerBtn.addEventListener('click', ()=>{ sidebarOpen = !sidebarOpen; renderApp(); });
+  app.querySelectorAll('[data-action="toggle-sidebar"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ sidebarOpen = !sidebarOpen; renderApp(); });
+  });
   const closeSidebarEl = app.querySelector('[data-action="close-sidebar"]');
   if(closeSidebarEl) closeSidebarEl.addEventListener('click', ()=>{ sidebarOpen = false; renderApp(); });
   const buscaGlobalBtn = app.querySelector('[data-action="abrir-busca-global"]');
@@ -24,6 +25,14 @@ function bindAppEvents(){
     btn.addEventListener('click', ()=> goToPage(btn.dataset.page));
   });
 
+  app.querySelectorAll('[data-action="a11y-tamanho"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ setAcessibilidade({ tamanho: btn.dataset.tamanho }); renderApp(); });
+  });
+  app.querySelectorAll('[data-action="a11y-toggle"]').forEach(sw=>{
+    const alternar = ()=>{ setAcessibilidade({ [sw.dataset.chave]: !getAcessibilidade()[sw.dataset.chave] }); renderApp(); };
+    sw.addEventListener('click', (e)=>{ e.preventDefault(); alternar(); });
+    sw.addEventListener('keydown', (e)=>{ if(e.key===' ' || e.key==='Enter'){ e.preventDefault(); alternar(); } });
+  });
   const darkModeSwitch = app.querySelector('[data-action="toggle-dark-mode"]');
   if(darkModeSwitch) darkModeSwitch.addEventListener('click', ()=>{
     setDarkMode(!getDarkMode());
@@ -495,6 +504,20 @@ function bindAppEvents(){
       onConfirm: ()=>{ sairDaEquipe(); closeConfirm(); },
     });
   });
+  app.querySelectorAll('[data-action="abrir-equipe-lista"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirEquipeDaLista(btn.dataset.equipeId));
+  });
+  const irChatBtn = app.querySelector('[data-action="equipe-ir-chat"]');
+  if(irChatBtn) irChatBtn.addEventListener('click', ()=>{ equipeSubTab = 'chat'; if(!chatLoaded) loadChat(); renderApp(); });
+  app.querySelectorAll('[data-action="sair-equipe-lista"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      showConfirm({
+        message: `Sair da equipe "${btn.dataset.nome}"? Você perde o chat e a supervisão dela — seu funil continua intocado.`,
+        confirmLabel: 'Sair da equipe',
+        onConfirm: ()=>{ closeConfirm(); sairDaEquipe(btn.dataset.equipeId); },
+      });
+    });
+  });
   const conviteEmailInput = document.getElementById('convite-email-novo');
   if(conviteEmailInput){
     conviteEmailInput.addEventListener('input', (e)=> conviteEmailNovo = e.target.value);
@@ -596,10 +619,14 @@ function bindAppEvents(){
   });
 
   /* -- Configurações -- */
+  const configVoltarBtn = app.querySelector('[data-action="config-voltar-lista"]');
+  if(configVoltarBtn) configVoltarBtn.addEventListener('click', ()=>{ configMobileConteudo = false; renderApp(); window.scrollTo(0,0); });
   app.querySelectorAll('[data-action="set-config-categoria"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       configCategoriaAtiva = btn.dataset.categoria;
+      configMobileConteudo = true;
       renderApp();
+      if(ehCelular()) window.scrollTo(0,0);
     });
   });
   const avatarInput = document.getElementById('avatar-input');
@@ -841,6 +868,15 @@ function bindAppEvents(){
     const novoInput = document.getElementById('leads-search-input');
     if(novoInput){ novoInput.focus(); novoInput.setSelectionRange(cursorPos, cursorPos); }
   });
+  app.querySelectorAll('[data-action="leads-chip-status"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ leadsStatusFilter = btn.dataset.colId; renderApp(); });
+  });
+  app.querySelectorAll('.lead-card-mobile').forEach(el=>{
+    el.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); openEditCard(el.dataset.cardId); } });
+  });
+  app.querySelectorAll('[data-action="set-etapa-mobile"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> trocarEtapaMobile(btn.dataset.colId, false));
+  });
   const leadsFilterSelect = document.getElementById('leads-status-filter');
   if(leadsFilterSelect) leadsFilterSelect.addEventListener('change', (e)=>{ leadsStatusFilter = e.target.value; renderApp(); });
 
@@ -1025,7 +1061,7 @@ function bindAppEvents(){
       cardTouchDrag = {
         cardId: cardEl.dataset.cardId, cardEl, arrastando:false, modoRolagem:false,
         startX:e.clientX, startY:e.clientY, ultimoX:e.clientX, ultimoY:e.clientY,
-        pointerId:e.pointerId, cardsContainer, scrollInicial: cardsContainer ? cardsContainer.scrollTop : 0,
+        pointerId:e.pointerId, cardsContainer, scrollInicial: cardsContainer ? cardsContainer.scrollTop : 0, scrollInicialPagina: window.scrollY,
       };
       cardTouchLongPressTimer = setTimeout(()=>{
         if(!cardTouchDrag || cardTouchDrag.modoRolagem) return; // já virou rolagem, não inicia arrastar
@@ -1053,7 +1089,9 @@ function bindAppEvents(){
 
       if(cardTouchDrag.modoRolagem){
         e.preventDefault();
-        if(cardTouchDrag.cardsContainer) cardTouchDrag.cardsContainer.scrollTop = cardTouchDrag.scrollInicial - dyTotal;
+        const lista = cardTouchDrag.cardsContainer;
+        if(lista && lista.scrollHeight > lista.clientHeight + 2 && !ehCelular()) lista.scrollTop = cardTouchDrag.scrollInicial - dyTotal;
+        else window.scrollTo(0, cardTouchDrag.scrollInicialPagina - dyTotal); // celular: a página inteira rola, não a coluna
         return;
       }
 
@@ -1172,6 +1210,7 @@ function atualizarArrastoDeCard(x, y){
     arrastoRafPendente = false;
     if(!cardTouchDrag) return;
     const xAtual = cardTouchDrag.ultimoXCalculo, yAtual = cardTouchDrag.ultimoYCalculo;
+    verificarChipDeEtapaSobDedo(xAtual, yAtual);
     const colAlvo = encontrarColunaMaisProxima(xAtual);
     document.querySelectorAll('.column.coluna-drag-alvo').forEach(c=> c.classList.remove('coluna-drag-alvo'));
     if(colAlvo){
@@ -1186,8 +1225,9 @@ function atualizarArrastoDeCard(x, y){
 // pela posição horizontal, em vez de simplesmente desistir. É bem mais tolerante que
 // depender de acertar o pixel exato num aparelho de toque.
 function encontrarColunaMaisProxima(x){
-  const colunas = [...document.querySelectorAll('.column')];
+  const colunas = [...document.querySelectorAll('.column')].filter(c=> c.offsetParent !== null); // no celular só a etapa aberta está visível
   if(!colunas.length) return null;
+  if(ehCelular() && colunas.length === 1) return colunas[0];
   const dentro = colunas.find(c=>{
     const r = c.getBoundingClientRect();
     return x >= r.left && x <= r.right;
@@ -1218,8 +1258,50 @@ function permitirDropForaDasColunas(e){
   e.preventDefault();
   atualizarAutoScrollDoArrasto(e.clientX, e.clientY, null);
 }
+// Celular: segurando o cliente sobre o nome de outra etapa (~0,4 s), a etapa abre sozinha,
+// com o cliente ainda na mão — dá pra escolher em que posição da lista soltar.
+let chipHoverTimer = null;
+function verificarChipDeEtapaSobDedo(x, y){
+  if(!cardTouchDrag || !ehCelular()) return;
+  const sob = document.elementFromPoint(x, y);
+  const chip = sob && sob.closest ? sob.closest('#etapas-chips-mobile .etapa-chip-mobile') : null;
+  document.querySelectorAll('.etapa-chip-mobile.etapa-chip-alvo').forEach(c=>{ if(c!==chip) c.classList.remove('etapa-chip-alvo'); });
+  const id = chip ? chip.dataset.colId : null;
+  if(id === cardTouchDrag.chipHover) return;
+  clearTimeout(chipHoverTimer);
+  cardTouchDrag.chipHover = id;
+  if(!chip) return;
+  chip.classList.add('etapa-chip-alvo');
+  chipHoverTimer = setTimeout(()=>{
+    if(cardTouchDrag && cardTouchDrag.chipHover === id){
+      trocarEtapaMobile(id, true);
+      if(navigator.vibrate) navigator.vibrate(10);
+    }
+  }, 400);
+}
+// Troca a etapa aberta no celular. Durante o arrasto, só mexe nas classes (sem redesenhar a
+// tela), pra não perder o cliente que está na mão.
+function trocarEtapaMobile(colId, durante){
+  pipelineEtapaMobileId = colId;
+  if(!durante){ renderApp(); return; }
+  document.querySelectorAll('.column').forEach(c=> c.classList.toggle('col-ativa-mobile', c.dataset.colId === colId));
+  document.querySelectorAll('.etapa-chip-mobile').forEach(c=>{
+    const ativo = c.dataset.colId === colId;
+    c.classList.toggle('active', ativo);
+    c.setAttribute('aria-selected', ativo ? 'true' : 'false');
+    if(ativo && c.scrollIntoView) c.scrollIntoView({ inline:'center', block:'nearest' });
+  });
+}
 function atualizarAutoScrollDoArrasto(x, y, colAlvo){
   clearInterval(autoScrollDoArrastoInterval);
+  if(ehCelular() && cardTouchDrag){
+    // celular: a página inteira rola (a lista da etapa não tem rolagem própria)
+    let dy = 0;
+    if(!cardTouchDrag.chipHover && y < 130) dy = -12;
+    else if(y > window.innerHeight - 150) dy = 12;
+    if(dy) autoScrollDoArrastoInterval = setInterval(()=> window.scrollBy(0, dy), 16);
+    return;
+  }
   const margemHorizontal = 260; // cobre a largura da barra lateral — passar por cima dela já conta como "quero rolar pra lá"
   const margemVertical = 110;
   const mainEl = document.querySelector('main.pipeline-main');
@@ -1255,6 +1337,8 @@ function cancelarArrastoDeCard(){
 }
 function limparVisualDoArrasto(){
   if(!cardTouchDrag) return;
+  clearTimeout(chipHoverTimer);
+  document.querySelectorAll('.etapa-chip-mobile.etapa-chip-alvo').forEach(c=> c.classList.remove('etapa-chip-alvo'));
   clearInterval(autoScrollDoArrastoInterval);
   cardTouchDrag.cardEl.classList.remove('card-touch-arrastando');
   if(cardTouchDrag.fantasmaEl) cardTouchDrag.fantasmaEl.remove();

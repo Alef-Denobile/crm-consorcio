@@ -62,6 +62,20 @@ const userSchema = new mongoose.Schema(
     menuTriagem: { type: menuTriagemSchema, default: () => ({ opcoes: [] }) },
     equipeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipe', default: null },
     papelEquipe: { type: String, enum: ['supervisor', 'membro'], default: 'membro' },
+    // outras equipes da pessoa (a que está aberta fica nos campos acima): ver utils/equipesDoUsuario.js
+    outrasEquipes: {
+      type: [new mongoose.Schema({
+        equipeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipe', required: true },
+        papel: { type: String, enum: ['supervisor', 'membro'], default: 'membro' },
+        supervisorDeDados: { type: Boolean, default: false },
+        rodizio: {
+          ativo: { type: Boolean, default: false },
+          membros: { type: [mongoose.Schema.Types.ObjectId], default: [] },
+          contador: { type: Number, default: 0 },
+        },
+      }, { _id: false })],
+      default: [],
+    },
     // rodízio de leads novos (só faz sentido pra gestor): ver utils/rodizio.js
     rodizio: {
       ativo: { type: Boolean, default: false },
@@ -115,6 +129,7 @@ const userSchema = new mongoose.Schema(
         ret.icsAtivo = !!ret.icsToken;
         delete ret.icsToken; // o token só é devolvido pela rota dedicada (GET /api/calendar/ics-status), nunca aqui
         ret.equipeId = ret.equipeId ? ret.equipeId.toString() : null;
+        delete ret.outrasEquipes;
         if (ret.menuTriagem && Array.isArray(ret.menuTriagem.opcoes)) {
           ret.menuTriagem.opcoes.forEach((op) => {
             if (op.colunaDestinoId) op.colunaDestinoId = op.colunaDestinoId.toString();

@@ -502,6 +502,7 @@ function goToPage(page){
   }
   if(page === 'conversas' && atuandoComo && !conversasLoaded) loadConversas();
   if(page === 'configuracoes'){
+    configMobileConteudo = false;
     senhaMsg = null; senhaAtualVal = ''; senhaNovaVal = '';
     nomeMsg = null; nomeNovoVal = (currentUser && currentUser.nome) || '';
     logoutAllMsg = null;

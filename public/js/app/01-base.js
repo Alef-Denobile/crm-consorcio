@@ -139,6 +139,28 @@ function setDarkMode(ligado){
 }
 setDarkMode(getDarkMode());
 
+/* ---------- acessibilidade (vale para este aparelho; mesmas chaves do login) ---------- */
+const A11Y_TAMANHOS = { normal: 1, grande: 1.15, muito: 1.3 };
+function getAcessibilidade(){
+  try{
+    const a = JSON.parse(localStorage.getItem('acessibilidade') || '{}') || {};
+    return { tamanho: A11Y_TAMANHOS[a.tamanho] ? a.tamanho : 'normal', contraste: !!a.contraste, semAnimacao: !!a.semAnimacao, destaque: !!a.destaque };
+  }catch(e){ return { tamanho:'normal', contraste:false, semAnimacao:false, destaque:false }; }
+}
+function aplicarAcessibilidade(a){
+  const el = document.documentElement;
+  el.style.setProperty('--fs', String(A11Y_TAMANHOS[a.tamanho] || 1));
+  el.classList.toggle('a11y-contraste', !!a.contraste);
+  el.classList.toggle('a11y-sem-animacao', !!a.semAnimacao);
+  el.classList.toggle('a11y-destaque', !!a.destaque);
+}
+function setAcessibilidade(mudanca){
+  const a = { ...getAcessibilidade(), ...mudanca };
+  try{ localStorage.setItem('acessibilidade', JSON.stringify(a)); }catch(e){}
+  aplicarAcessibilidade(a);
+}
+aplicarAcessibilidade(getAcessibilidade());
+
 /* ---------- nome do site (fixo) ---------- */
 document.title = 'Painel CRM';
 
@@ -379,7 +401,8 @@ let conviteEmailNovo = '';
 let equipeNomeNovo = '';
 let equipeCodigoEntrar = '';
 let equipeMsg = null;
-let equipeSubTab = 'chat';
+let equipeSubTab = 'equipes'; // 'equipes' (lista das minhas equipes) | 'chat' | 'supervisao' | 'monitoramento'
+let minhasEquipes = []; // [{id, nome, papel, ativa, membros}] — todas as equipes de que a pessoa faz parte
 let agendaSubTab = 'calendario';
 let gerotSemanaAtual = inicioDaSemana(new Date());
 let gerotBlocos = [];
@@ -402,6 +425,10 @@ let supervisaoMembros = [];
 let supervisaoLoaded = false;
 // quando o gestor "atua como" um consultor: { userId, nome } — todos os pedidos de leads/tarefas/funis
 // passam a valer no funil dele (o servidor confere que ele é gestor da mesma equipe)
+// celular: Pipeline mostra uma etapa por vez; Configurações abre em lista
+let pipelineEtapaMobileId = null;
+let configMobileConteudo = false;
+function ehCelular(){ return window.matchMedia && window.matchMedia('(max-width: 768px)').matches; }
 let atuandoComo = null;
 let metaBackupAtuandoComo = null;
 const PAGINAS_ATUANDO_COMO = ['dashboard','pipeline','leads','conversas','equipe'];

@@ -183,6 +183,28 @@ function ligarBindingsAssistente(){
 }
 window.addEventListener('resize', ()=>{ if(assistenteAberto) posicionarPainelAssistente(); });
 
+// Barra fixa embaixo no celular: as 4 telas mais usadas + "Mais" (abre o menu completo)
+function renderBarraInferior(){
+  const ICO = {
+    dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+    pipeline: '<rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="11" rx="1"/><rect x="17" y="3" width="4" height="14" rx="1"/>',
+    leads: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M18 14.5c2.2.6 3.5 2.4 3.5 5.5"/>',
+    conversas: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20.5l1.5-4.6A8 8 0 1 1 21 12z"/>',
+  };
+  const itens = [['dashboard','Início'],['pipeline','Pipeline'],['leads','Leads'],['conversas','Conversas']];
+  return `
+    <nav class="bottom-nav" aria-label="Navegação principal">
+      ${itens.map(([k,l])=>`
+        <button type="button" class="bottom-nav-item ${currentPage===k?'active':''}" data-action="nav" data-page="${k}" ${currentPage===k?'aria-current="page"':''}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[k]}</svg>
+          <span>${l}</span>
+        </button>`).join('')}
+      <button type="button" class="bottom-nav-item ${sidebarOpen?'active':''}" data-action="toggle-sidebar" aria-label="Mais opções">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+        <span>Mais</span>
+      </button>
+    </nav>`;
+}
 function renderApp(){
   const app = document.getElementById('app');
   if(!loaded){ app.innerHTML = '<div class="loading">Carregando painel…</div>'; return; }
@@ -248,6 +270,7 @@ function renderApp(){
           </div>` : ''}
         ${pageHtml}
       </div>
+      ${renderBarraInferior()}
     </div>
   `;
 

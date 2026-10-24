@@ -16,6 +16,15 @@ document.documentElement.style.setProperty('--accent', localStorage.getItem('acc
 // mesmo modo noturno escolhido no painel
 document.documentElement.setAttribute('data-theme', localStorage.getItem('darkMode') === '1' ? 'dark' : 'light');
 
+// mesma acessibilidade escolhida no painel (tamanho da letra, contraste, menos animação, destaque)
+try{
+  const a11y = JSON.parse(localStorage.getItem('acessibilidade') || '{}') || {};
+  document.documentElement.style.setProperty('--fs', String({ normal:1, grande:1.15, muito:1.3 }[a11y.tamanho] || 1));
+  document.documentElement.classList.toggle('a11y-contraste', !!a11y.contraste);
+  document.documentElement.classList.toggle('a11y-sem-animacao', !!a11y.semAnimacao);
+  document.documentElement.classList.toggle('a11y-destaque', !!a11y.destaque);
+}catch(e){}
+
 const form = document.getElementById('auth-form');
 const errorBox = document.getElementById('auth-error');
 const submitBtn = document.getElementById('auth-submit');

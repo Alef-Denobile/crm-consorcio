@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { filtroMembros } = require('./equipesDoUsuario');
 const Column = require('../models/Column');
 const Card = require('../models/Card');
 const Message = require('../models/Message');
@@ -18,7 +19,7 @@ async function validarAtribuicao(gestorId, alvoId) {
     throw erro(403, 'Só o gestor da equipe pode atribuir leads para outra pessoa.');
   }
   if (!alvoId || !/^[a-f\d]{24}$/i.test(String(alvoId))) throw erro(400, 'Escolha para quem vai o lead.');
-  const alvo = await User.findOne({ _id: alvoId, equipeId: gestor.equipeId });
+  const alvo = await User.findOne({ _id: alvoId, ...filtroMembros(gestor.equipeId) });
   if (!alvo) throw erro(404, 'Essa pessoa não faz parte da sua equipe.');
   return { gestor, alvo };
 }

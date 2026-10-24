@@ -13,7 +13,7 @@ function rodar({ headers = {}, method = 'GET', url = '/api/cards', usuarios }) {
     const orig = { f: User.findById, o: User.findOne, c: AuditLog.create };
     const logs = [];
     User.findById = () => ({ select: async () => usuarios[G] });
-    User.findOne = (q) => ({ select: async () => usuarios[String(q._id)] && usuarios[String(q._id)].equipeId === q.equipeId ? usuarios[String(q._id)] : null });
+    User.findOne = (q) => ({ select: async () => usuarios[String(q._id)] && usuarios[String(q._id)].equipeId === (q.equipeId || (q.$or && q.$or[0].equipeId)) ? usuarios[String(q._id)] : null });
     AuditLog.create = async (l) => { logs.push(l); return l; };
     const req = { headers: { authorization: 'Bearer ' + token, ...headers }, method, originalUrl: url };
     const fim = (r) => { User.findById = orig.f; User.findOne = orig.o; AuditLog.create = orig.c; resolve({ ...r, req, logs }); };

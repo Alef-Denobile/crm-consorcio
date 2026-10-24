@@ -200,6 +200,7 @@ function renderPipelinePage(){
   const months = monthsList();
   const funilAtual = funis.find(f=>f.id===funilAtualId);
   const columnsDoFunil = board.columns.filter(c=>c.funilId===funilAtualId);
+  const etapaAtiva = etapaAtivaMobile(columnsDoFunil);
   return `
     <div class="page-head">
       <div>
@@ -285,9 +286,15 @@ function renderPipelinePage(){
       ${pipelineOrdenando ? `<span class="settings-page-note">Reordenando…</span>` : ''}
     </div>
 
+    ${columnsDoFunil.length ? `
+    <div class="etapas-chips-mobile" id="etapas-chips-mobile" role="tablist" aria-label="Etapas do funil">
+      ${columnsDoFunil.map(col=>`<button type="button" role="tab" class="etapa-chip-mobile ${col.id===etapaAtiva?'active':''}" data-action="set-etapa-mobile" data-col-id="${col.id}" aria-selected="${col.id===etapaAtiva?'true':'false'}">${esc(col.nome)}<span class="etapa-chip-qtd">${cardsOf(col.id).length}</span></button>`).join('')}
+    </div>
+    <p class="etapas-dica-mobile">Segure um cliente e arraste: solte sobre outra etapa para trocar e escolha o lugar dele na lista.</p>` : ''}
+
     <main class="pipeline-main">
       <div class="board">
-        ${columnsDoFunil.map(col => renderColumn(col)).join('')}
+        ${columnsDoFunil.map(col => renderColumn(col, col.id===etapaAtiva)).join('')}
         <div class="add-col-wrap">
           ${addingCol ? `
             <div class="add-col-form">
@@ -309,7 +316,12 @@ function renderPipelinePage(){
   `;
 }
 
-function renderColumn(col){
+// etapa visível no celular (uma por vez): a escolhida, ou a primeira do funil
+function etapaAtivaMobile(columnsDoFunil){
+  if(pipelineEtapaMobileId && columnsDoFunil.some(c=>c.id===pipelineEtapaMobileId)) return pipelineEtapaMobileId;
+  return columnsDoFunil.length ? columnsDoFunil[0].id : null;
+}
+function renderColumn(col, ativaMobile){
   const cards = cardsOf(col.id);
   const tipo = TIPOS[col.tipo] || TIPOS.aberto;
   const total = cards.reduce((s,c)=> s + (Number(c.valor)||0), 0);
@@ -317,7 +329,7 @@ function renderColumn(col){
   const menuOpen = openMenuColId === col.id;
 
   return `
-    <div class="column" data-col-id="${col.id}">
+    <div class="column ${ativaMobile?'col-ativa-mobile':''}" data-col-id="${col.id}">
       <div class="col-head">
         <div class="col-head-top">
           <span class="grip" draggable="true" data-action="drag-col-handle" data-col-id="${col.id}" title="Arraste para reordenar">⠿</span>
@@ -556,6 +568,33 @@ function renderLeadsPage(){
         <button class="icon-btn" data-action="leads-bulk-limpar" title="Cancelar seleção" style="margin-left:auto;">✕</button>
       </div>
     ` : ''}
+
+    <div class="leads-chips-mobile" role="tablist" aria-label="Filtrar por etapa">
+      <button type="button" class="etapa-chip-mobile ${!leadsStatusFilter?'active':''}" data-action="leads-chip-status" data-col-id="">Todos</button>
+      ${board.columns.filter(c=>c.funilId===funilAtualId).map(c=>`<button type="button" class="etapa-chip-mobile ${leadsStatusFilter===c.id?'active':''}" data-action="leads-chip-status" data-col-id="${c.id}">${esc(c.nome)}</button>`).join('')}
+    </div>
+    <div class="leads-cards-mobile">
+      ${leads.length ? leads.map(c=>{
+        const col = board.columns.find(k=>k.id===c.columnId);
+        const tipo = col ? (TIPOS[col.tipo] || TIPOS.aberto) : TIPOS.aberto;
+        return `
+          <div class="lead-card-mobile" data-action="open-edit-card" data-card-id="${c.id}" role="button" tabindex="0">
+            <span class="lead-card-avatar">${esc(iniciaisDoNome(c.cliente||'?'))}</span>
+            <span class="lead-card-info">
+              <span class="lead-card-top">
+                <span class="lead-card-nome">${c.tipoPessoa==='juridica' ? '🏢 ' : ''}${esc(c.cliente) || 'Sem nome'}</span>
+                <span class="badge" style="color:${tipo.color};background:${tipo.bg};${tipo.strike?'text-decoration:line-through;':''}">${col ? esc(col.nome) : '—'}</span>
+              </span>
+              <span class="lead-card-bot">
+                <span class="lead-card-tel">${c.telefone ? esc(c.telefone) : 'Sem telefone'}</span>
+                <span class="lead-card-valor">${fmtBRL(c.valor)}</span>
+              </span>
+            </span>
+            ${c.telefone ? `<button type="button" class="lead-card-wa" data-action="open-whatsapp" data-phone="${esc(c.telefone)}" aria-label="Chamar no WhatsApp">${WA_ICON}</button>` : ''}
+          </div>`;
+      }).join('') : `<p class="dash-empty">Nenhum lead encontrado.</p>`}
+    </div>
+    <button type="button" class="fab-novo-lead" data-action="open-new-lead" aria-label="Novo lead"><span aria-hidden="true">＋</span> Novo lead</button>
 
     <div class="leads-table-wrap">
       <table class="leads-table">
@@ -1060,6 +1099,7 @@ const CONFIG_CATEGORIAS = [
     ['perfil', 'Seu perfil'],
     ['seguranca', 'Login e segurança'],
     ['aparencia', 'Aparência'],
+    ['acessibilidade', 'Acessibilidade'],
     ['notificacoes', 'Notificações'],
   ]},
   { grupo: 'Integrações', itens: [
@@ -1149,6 +1189,33 @@ function renderConfigSeguranca(){
   `;
 }
 
+function renderConfigAcessibilidade(){
+  const a = getAcessibilidade();
+  const interruptor = (chave, titulo, desc)=>`
+    <div class="a11y-linha">
+      <div>
+        <div class="a11y-titulo">${titulo}</div>
+        <div class="a11y-desc">${desc}</div>
+      </div>
+      <span class="switch ${a[chave]?'on':''}" role="switch" aria-checked="${a[chave]?'true':'false'}" tabindex="0" aria-label="${titulo}" data-action="a11y-toggle" data-chave="${chave}"><span class="switch-knob"></span></span>
+    </div>`;
+  return `
+    <div class="settings-page-section">
+      <h3>Acessibilidade</h3>
+      <div class="a11y-titulo" style="margin-bottom:10px;">Tamanho da letra</div>
+      <div class="a11y-tamanhos">
+        ${[['normal','Normal','a11y-aa-1'],['grande','Grande','a11y-aa-2'],['muito','Muito grande','a11y-aa-3']].map(([k,nome,cls])=>`
+          <button type="button" class="a11y-tamanho ${a.tamanho===k?'active':''}" data-action="a11y-tamanho" data-tamanho="${k}" aria-pressed="${a.tamanho===k?'true':'false'}">
+            <span class="a11y-aa ${cls}">Aa</span><span>${nome}</span>
+          </button>`).join('')}
+      </div>
+      ${interruptor('contraste','Alto contraste','Textos e bordas mais fortes, mais fáceis de ler.')}
+      ${interruptor('semAnimacao','Menos animação','Desliga os efeitos de movimento e transição.')}
+      ${interruptor('destaque','Destacar links e botões','Sublinha os links e mostra um contorno forte em quem está selecionado pelo teclado.')}
+      <p class="settings-page-note">Vale para este aparelho (e para a tela de login).</p>
+    </div>
+  `;
+}
 function renderConfigAparencia(){
   return `
     <div class="settings-page-section">
@@ -1192,7 +1259,7 @@ function renderConfigWhatsapp(){
         <div class="settings-page-row">
           <span>Secret do webhook</span>
           <span style="display:flex;align-items:center;gap:10px;">
-            <span class="${whatsappYcloudSecretOk?'':'wa-secret-pendente'}" style="font-size:12px;">${whatsappYcloudSecretOk ? '✓ Secret adicionado' : '⚠️ Secret ainda não adicionado'}</span>
+            <span class="${whatsappYcloudSecretOk?'':'wa-secret-pendente'}" style="font-size:calc(12px * var(--fs,1));">${whatsappYcloudSecretOk ? '✓ Secret adicionado' : '⚠️ Secret ainda não adicionado'}</span>
             <button class="btn-outline" data-action="abrir-ycloud-secret">${whatsappYcloudSecretOk ? 'Trocar secret' : 'Adicionar secret'}</button>
           </span>
         </div>

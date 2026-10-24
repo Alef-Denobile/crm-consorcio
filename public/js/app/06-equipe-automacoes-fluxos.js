@@ -3,9 +3,11 @@ async function loadEquipe(){
   try{
     const data = await apiRequest('GET', '/equipe');
     equipe = data.equipe;
+    minhasEquipes = data.minhasEquipes || [];
     convitesRecebidos = data.convitesRecebidos || [];
   }catch(e){
     equipe = null;
+    minhasEquipes = [];
     convitesRecebidos = [];
   }
   equipeLoaded = true;
@@ -14,6 +16,22 @@ async function loadEquipe(){
     if(equipeSubTab==='chat' && !chatLoaded) loadChat();
     if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
     if(equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
+  }
+}
+// Troca a equipe aberta (a pessoa continua em todas). Chat, gestão e monitoramento passam a ser os da nova.
+async function abrirEquipeDaLista(equipeId){
+  if(atuandoComo){ errorMsg = 'Saia do funil de ' + atuandoComo.nome + ' antes de trocar de equipe.'; renderApp(); return; }
+  try{
+    await apiRequest('POST', '/equipe/abrir', { equipeId });
+    chatMensagens = []; chatLoaded = false;
+    supervisaoMembros = []; supervisaoLoaded = false;
+    monitoramentoLoaded = false;
+    equipeMsg = null;
+    equipeSubTab = 'chat';
+    await loadEquipe();
+  }catch(e){
+    errorMsg = e.message || 'Não foi possível abrir a equipe.';
+    renderApp();
   }
 }
 async function loadChat(){

@@ -21,7 +21,7 @@ function stubUsuarios() {
   User.findById = async (id) => usuarios[id] || null;
   User.findOne = async (q) => {
     const u = usuarios[q._id];
-    return u && String(u.equipeId) === String(q.equipeId) ? u : null;
+    return u && String(u.equipeId) === String((q.equipeId || (q.$or && q.$or[0].equipeId))) ? u : null;
   };
 }
 

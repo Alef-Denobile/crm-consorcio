@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
+const { filtroMembros } = require('../utils/equipesDoUsuario');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'troque-este-segredo-no-env';
 
@@ -59,7 +60,7 @@ module.exports = async function auth(req, res, next) {
       if (!user.equipeId || user.papelEquipe !== 'supervisor') {
         return res.status(403).json({ error: 'Só o gestor da equipe pode atuar no funil de outra pessoa.' });
       }
-      const alvo = await User.findOne({ _id: alvoId, equipeId: user.equipeId }).select('nome email');
+      const alvo = await User.findOne({ _id: alvoId, ...filtroMembros(user.equipeId) }).select('nome email');
       if (!alvo) return res.status(404).json({ error: 'Esse consultor não está na sua equipe.' });
       if (!areaPermitidaParaAtuarComo(req)) {
         return res.status(403).json({ error: 'Essa ação não está disponível enquanto você atua no funil de outra pessoa.' });

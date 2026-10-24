@@ -486,15 +486,16 @@ async function responderConviteEquipe(id, aceitar){
     renderApp();
   }
 }
-async function sairDaEquipe(){
+async function sairDaEquipe(equipeId){
   try{
-    await apiRequest('POST', '/equipe/sair');
-    equipe = null;
+    await apiRequest('POST', '/equipe/sair', equipeId ? { equipeId } : {});
     chatMensagens = [];
     chatLoaded = false;
     supervisaoMembros = [];
     supervisaoLoaded = false;
-    renderApp();
+    monitoramentoLoaded = false;
+    equipeSubTab = 'equipes';
+    await loadEquipe();
   }catch(e){
     errorMsg = 'Não foi possível sair da equipe.';
     renderApp();

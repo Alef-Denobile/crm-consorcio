@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { filtroMembros } = require('./equipesDoUsuario');
 const Card = require('../models/Card');
 const Column = require('../models/Column');
 const Task = require('../models/Task');
@@ -94,7 +95,7 @@ function montarEmailResumo({ nome, perfil, resumo, equipe, hoje }) {
 }
 
 async function resumoDaEquipe(gestor, hoje) {
-  const membros = await User.find({ equipeId: gestor.equipeId });
+  const membros = await User.find({ ...filtroMembros(gestor.equipeId) });
   const lista = [];
   for (const m of membros) {
     if (String(m._id) === String(gestor._id)) continue;

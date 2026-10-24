@@ -302,6 +302,12 @@ function renderEquipeSetup(tituloPagina, subtitulo){
         <p>${subtitulo}</p>
       </div>
     </div>
+    ${renderConvitesEBlocosEquipe()}
+  `;
+}
+// convites recebidos + "Criar uma equipe" + "Entrar com código" (usado sem equipe e na lista "Minhas equipes")
+function renderConvitesEBlocosEquipe(){
+  return `
     ${convitesRecebidos.length ? `
     <div class="settings-page-section" style="margin-bottom:20px;">
       <h3>Convites para você</h3>
@@ -334,6 +340,24 @@ function renderEquipeSetup(tituloPagina, subtitulo){
       </div>
     </div>
     ${equipeMsg ? `<p class="settings-page-msg ${equipeMsg.tipo}" style="margin-top:14px;">${esc(equipeMsg.texto)}</p>` : ''}
+  `;
+}
+// lista das equipes de que a pessoa faz parte — cada uma abre com um clique
+function renderMinhasEquipes(){
+  return `
+    <div class="settings-page-section" style="margin-bottom:20px;">
+      <h3>Minhas equipes</h3>
+      <p class="settings-page-note">Você pode fazer parte de várias equipes. Seu funil de leads é um só e continua seu; o que muda é o chat, a gestão e o monitoramento da equipe aberta.</p>
+      ${minhasEquipes.map(e=>`
+        <div class="settings-page-row">
+          <span><b>${esc(e.nome)}</b> — ${e.papel==='supervisor'?'⭐ Gestor':'Membro'} · ${e.membros} pessoa${e.membros===1?'':'s'}${e.ativa?' · <span class="badge">Aberta</span>':''}</span>
+          <span class="settings-btn-row">
+            ${e.ativa ? `<button class="btn-outline" data-action="equipe-ir-chat">Ver chat</button>` : `<button class="btn-primary" data-action="abrir-equipe-lista" data-equipe-id="${e.id}">Abrir</button>`}
+            <button class="btn-outline" data-action="sair-equipe-lista" data-equipe-id="${e.id}" data-nome="${esc(e.nome)}">Sair</button>
+          </span>
+        </div>`).join('')}
+    </div>
+    ${renderConvitesEBlocosEquipe()}
   `;
 }
 
@@ -386,14 +410,14 @@ function renderEquipePage(){
   if(!equipe){
     return renderEquipeSetup('Equipe', 'Você ainda não faz parte de uma equipe');
   }
-  const abas = [['chat','Chat']];
+  const abas = [['equipes','Minhas equipes'],['chat','Chat']];
   if(equipe.souSupervisor) abas.push(['supervisao','Gestão']);
   if(equipe.souSupervisorDeDados) abas.push(['monitoramento','Monitoramento']);
   return `
     <div class="page-head">
       <div>
         <h1>Equipe</h1>
-        <p>${esc(equipe.nome)} · ${equipe.membros.length} membro${equipe.membros.length===1?'':'s'}</p>
+        <p>${esc(equipe.nome)} (aberta) · ${equipe.membros.length} membro${equipe.membros.length===1?'':'s'}${minhasEquipes.length>1?` · você está em ${minhasEquipes.length} equipes`:''}</p>
       </div>
     </div>
     ${abas.length > 1 ? `
@@ -401,6 +425,7 @@ function renderEquipePage(){
         ${abas.map(([key,label])=>`<button class="tab-btn ${equipeSubTab===key?'active':''}" data-action="set-equipe-subtab" data-subtab="${key}">${label}</button>`).join('')}
       </div>
     ` : ''}
+    ${equipeSubTab==='equipes' ? renderMinhasEquipes() : ''}
     ${equipeSubTab==='chat' ? renderChatInternoConteudo() : ''}
     ${equipeSubTab==='supervisao' && equipe.souSupervisor ? renderSupervisaoConteudo() : ''}
     ${equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados ? renderMonitoramentoConteudo() : ''}
@@ -441,8 +466,8 @@ function renderRankingSupervisao(membros){
               <span>${idx+1}º — ${esc(m.nome)}</span>
               <span style="display:flex; align-items:center; gap:10px;">
                 ${fmtBRL(m.ganhoValor)}
-                <button type="button" class="btn-outline" style="padding:4px 10px; font-size:11px;" data-action="ver-dashboard-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}">Ver Dashboard</button>
-                <button type="button" class="btn-primary" style="padding:4px 10px; font-size:11px;" data-action="atuar-como-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}">Abrir funil</button>
+                <button type="button" class="btn-outline" style="padding:4px 10px; font-size:calc(11px * var(--fs,1));" data-action="ver-dashboard-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}">Ver Dashboard</button>
+                <button type="button" class="btn-primary" style="padding:4px 10px; font-size:calc(11px * var(--fs,1));" data-action="atuar-como-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}">Abrir funil</button>
               </span>
             </div>
             <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${(m.ganhoValor/maxGanho*100)}%"></div></div>
@@ -532,7 +557,7 @@ function renderSupervisaoConteudo(){
                   <td>
                     ${m.metaMes>0 ? `<div class="meta-vendas-track" style="margin:0 0 4px;"><div class="meta-vendas-fill" style="width:${Math.min(100,(m.vendidoNoMes||0)/m.metaMes*100)}%"></div></div>
                     <span class="settings-page-note">${fmtBRL(m.vendidoNoMes||0)} de ${fmtBRL(m.metaMes)} (${Math.round(Math.min(999,(m.vendidoNoMes||0)/m.metaMes*100))}%)</span>` : `<span class="settings-page-note">Sem meta</span>`}
-                    <button type="button" class="btn-outline" style="padding:3px 8px; font-size:11px; margin-left:6px;" data-action="definir-meta-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}" data-meta="${m.metaMes||0}">${m.metaMes>0?'Editar':'Definir'}</button>
+                    <button type="button" class="btn-outline" style="padding:3px 8px; font-size:calc(11px * var(--fs,1)); margin-left:6px;" data-action="definir-meta-membro" data-user-id="${m.userId}" data-nome="${esc(m.nome)}" data-meta="${m.metaMes||0}">${m.metaMes>0?'Editar':'Definir'}</button>
                   </td>
                 </tr>
               `).join('')}

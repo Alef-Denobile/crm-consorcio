@@ -78,6 +78,7 @@ const { escolherPorRodizio } = require('../utils/rodizio');
 const { provedorDe, enviarTexto: enviarMensagemGraph, enviarTemplate: enviarTemplateGraph } = require('../utils/whatsappEnvio');
 const { motivoAssinaturaYcloud, normalizarEventoYcloud } = require('../utils/whatsappYcloud');
 const crypto = require('crypto');
+const { equipeEmComum } = require('../utils/equipesDoUsuario');
 
 // Gera a resposta do agente a partir do histórico recente da conversa.
 async function gerarRespostaAgente(card, mensagensRecentes, novaMensagem) {
@@ -776,7 +777,7 @@ router.post('/enviar', auth, async (req, res) => {
     let remetente = user;
     if ((!user || !user.whatsappBusiness || !user.whatsappBusiness.accessToken) && card.atribuidoPorId) {
       const gestor = await User.findById(card.atribuidoPorId);
-      if (gestor && gestor.equipeId && user && String(gestor.equipeId) === String(user.equipeId) && gestor.whatsappBusiness && gestor.whatsappBusiness.accessToken) remetente = gestor;
+      if (gestor && user && equipeEmComum(gestor, user) && gestor.whatsappBusiness && gestor.whatsappBusiness.accessToken) remetente = gestor;
     }
     if (!remetente || !remetente.whatsappBusiness || !remetente.whatsappBusiness.accessToken) {
       return res.status(400).json({ error: 'WhatsApp Business não está conectado.' });

@@ -64,11 +64,13 @@ function respostas(cenario) {
   const semEquipe = { equipe: null, convitesRecebidos: [{ id: 'cv9', equipeNome: 'Equipe X', convidadoPor: 'Chefe' }] };
   return {
     'GET /api/auth/me': { user: { id: 'u1', nome: 'Gestor Teste', email: 'g@x.com', perfil: cenario === 'rh' ? 'rh' : 'consorcio' } },
-    'GET /api/board': { columns: colunas, cards },
-    'GET /api/funis': { funis: [] },
+    'GET /api/board': cenario === 'mobile'
+      ? { columns: colunas.map((c) => ({ ...c, funilId: 'f1' })), cards: [...cards, { id: 'k3', columnId: 'c1', cliente: 'Pedro Lima', telefone: '15922223333', valor: 60000, temperatura: 'frio', mes: '', mesInicioContato: mes, ordem: 1000 }] }
+      : { columns: colunas, cards },
+    'GET /api/funis': cenario === 'mobile' ? { funis: [{ id: 'f1', nome: 'Funil Principal' }] } : { funis: [] },
     'GET /api/tasks': { tasks: [] },
     'GET /api/calendar/status': { connected: false },
-    'GET /api/equipe': cenario === 'semEquipe' ? semEquipe : { equipe: cenario === 'membro' ? { ...equipeGestor, souSupervisor: false, rodizio: null, convitesPendentes: [], codigoConvite: null } : equipeGestor, convitesRecebidos: [] },
+    'GET /api/equipe': cenario === 'semEquipe' ? semEquipe : { equipe: cenario === 'membro' ? { ...equipeGestor, souSupervisor: false, rodizio: null, convitesPendentes: [], codigoConvite: null } : equipeGestor, minhasEquipes: [{ id: 'e1', nome: 'Equipe Teste', papel: cenario === 'membro' ? 'membro' : 'supervisor', ativa: true, membros: 2 }, { id: 'e2', nome: 'Equipe do Norte', papel: 'membro', ativa: false, membros: 4 }], convitesRecebidos: [] },
     'GET /api/equipe/supervisao': { mes, membros: [
       { userId: 'u1', nome: 'Gestor Teste', papel: 'supervisor', totalLeads: 2, ganhoValor: 80000, perdidoValor: 0, abertoValor: 50000, vendidoNoMes: 80000, metaMes: 0 },
       { userId: 'u2', nome: 'Ana Vendas', papel: 'membro', totalLeads: 5, ganhoValor: 30000, perdidoValor: 1000, abertoValor: 9000, vendidoNoMes: 30000, metaMes: 60000 },
@@ -93,7 +95,7 @@ function checar(nome, cond, detalhe) {
 }
 
 async function abrir(browser, url, cenario, extra = {}) {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const ctx = await browser.newContext(extra.mobile ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } : { viewport: { width: 1280, height: 900 } });
   const page = await ctx.newPage();
   const erros = [];
   const chamadas = [];
@@ -139,6 +141,18 @@ async function abrir(browser, url, cenario, extra = {}) {
       await t.page.waitForTimeout(250);
       checar(`página "${pg}" abre sem erro`, t.erros.length === 0, t.erros[t.erros.length - 1]);
     }
+
+    console.log('Equipe: lista de equipes (várias equipes)');
+    await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
+    await t.page.waitForTimeout(400);
+    checar('Equipe abre na lista "Minhas equipes"', (await t.page.locator('h3', { hasText: 'Minhas equipes' }).count()) === 1);
+    checar('lista mostra as duas equipes', (await t.page.locator('.settings-page-row', { hasText: 'Equipe do Norte' }).count()) === 1 && (await t.page.locator('.settings-page-row', { hasText: 'Equipe Teste' }).count()) === 1);
+    checar('equipe aberta tem selo "Aberta" e a outra tem botão Abrir', (await t.page.locator('.badge', { hasText: 'Aberta' }).count()) === 1 && (await t.page.locator('[data-action="abrir-equipe-lista"]').count()) === 1);
+    checar('continua oferecendo criar e entrar em outra equipe', (await t.page.locator('[data-action="criar-equipe"]').count()) === 1 && (await t.page.locator('[data-action="entrar-equipe"]').count()) === 1);
+    await t.page.click('[data-action="abrir-equipe-lista"]');
+    await t.page.waitForTimeout(400);
+    const abrirEq = t.chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/api/equipe/abrir');
+    checar('Abrir envia a equipe escolhida', !!abrirEq && JSON.parse(abrirEq.corpo).equipeId === 'e2', abrirEq && abrirEq.corpo);
 
     console.log('Gestor: rodízio, metas e remoção de membro');
     await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
@@ -187,7 +201,7 @@ async function abrir(browser, url, cenario, extra = {}) {
       const novas = t.chamadas.slice(antes);
       checar('pedidos de board/funis/tarefas levam X-Atuar-Como', ['/api/board', '/api/funis', '/api/tasks'].every((c) => novas.some((n) => n.caminho === c && n.atuarComo === 'u2')), JSON.stringify(novas.map((n) => [n.caminho, n.atuarComo])));
       checar('pedidos de /auth e /equipe NÃO levam o header', novas.filter((n) => /^\/api\/(auth|equipe)/.test(n.caminho)).every((n) => !n.atuarComo));
-      checar('menu só mostra páginas liberadas', (await t.page.locator('[data-action="nav"][data-page="comissoes"]').count()) === 0 && (await t.page.locator('[data-action="nav"][data-page="pipeline"]').count()) === 1);
+      checar('menu só mostra páginas liberadas', (await t.page.locator('[data-action="nav"][data-page="comissoes"]').count()) === 0 && (await t.page.locator('.sidebar [data-action="nav"][data-page="pipeline"]').count()) === 1);
       const marca = t.chamadas.length;
       await t.page.click('[data-action="sair-funil-de"]');
       await t.page.waitForTimeout(600);
@@ -220,6 +234,21 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.click('[data-action="resumo-diario-alternar"]');
     await t.page.waitForTimeout(300);
     checar('ligar resumo diário chama a API', t.chamadas.some((c) => c.metodo === 'PUT' && c.caminho === '/api/resumo-diario'));
+    console.log('Configurações: aba Acessibilidade');
+    await t.page.click('[data-action="set-config-categoria"][data-categoria="acessibilidade"]');
+    await t.page.waitForTimeout(300);
+    checar('aba Acessibilidade tem 3 tamanhos e 3 opções', (await t.page.locator('[data-action="a11y-tamanho"]').count()) === 3 && (await t.page.locator('[data-action="a11y-toggle"]').count()) === 3);
+    await t.page.click('[data-action="a11y-tamanho"][data-tamanho="muito"]');
+    checar('"Muito grande" aumenta a letra (--fs) e guarda a escolha', (await t.page.evaluate(() => document.documentElement.style.getPropertyValue('--fs'))) === '1.3' && (await t.page.evaluate(() => JSON.parse(localStorage.getItem('acessibilidade')).tamanho)) === 'muito');
+    await t.page.click('[data-action="a11y-toggle"][data-chave="contraste"]');
+    await t.page.click('[data-action="a11y-toggle"][data-chave="semAnimacao"]');
+    await t.page.click('[data-action="a11y-toggle"][data-chave="destaque"]');
+    checar('alto contraste, menos animação e destaque ligam as classes', await t.page.evaluate(() => ['a11y-contraste', 'a11y-sem-animacao', 'a11y-destaque'].every((c) => document.documentElement.classList.contains(c))));
+    checar('o texto de fato fica maior com "Muito grande"', (await t.page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.a11y-desc')).fontSize))) > 15);
+    await t.page.screenshot({ path: '/tmp/a11y-tela.png' });
+    await t.page.click('[data-action="a11y-tamanho"][data-tamanho="normal"]');
+    for (const c of ['contraste', 'semAnimacao', 'destaque']) await t.page.click(`[data-action="a11y-toggle"][data-chave="${c}"]`);
+    checar('voltar ao normal desliga tudo', await t.page.evaluate(() => document.documentElement.style.getPropertyValue('--fs') === '1' && !document.documentElement.className.includes('a11y-')));
     await t.page.click('[data-action="set-config-categoria"][data-categoria="manutencao"]');
     await t.page.waitForTimeout(300);
     await t.page.click('[data-action="duplicados-procurar"]');
@@ -255,6 +284,74 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.waitForTimeout(150);
     checar('gestor tem "Passar para…" e Excluir na barra', (await t.page.locator('#leads-bulk-gestor-destino').count()) === 1 && (await t.page.locator('[data-action="leads-bulk-excluir"]').count()) === 1);
     await t.ctx.close();
+    console.log('Celular: barra inferior, Pipeline por etapa, Leads em cartões, Configurações em lista');
+    t = await abrir(browser, url, 'mobile', { mobile: true });
+    await t.page.waitForTimeout(700);
+    checar('celular: barra inferior aparece com 5 botões', (await t.page.locator('.bottom-nav .bottom-nav-item').count()) === 5 && await t.page.locator('.bottom-nav').isVisible());
+    checar('celular: o menu lateral fechado não deixa sombra nem aparece', await t.page.evaluate(() => { const e = document.querySelector('.sidebar'); const c = getComputedStyle(e); return c.visibility === 'hidden' && c.boxShadow === 'none'; }));
+    await t.page.click('.bottom-nav [data-page="pipeline"]');
+    await t.page.waitForTimeout(400);
+    if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/cel-pipeline.png' });
+    checar('celular: Pipeline tem uma aba por etapa', (await t.page.locator('#etapas-chips-mobile .etapa-chip-mobile').count()) === 3);
+    checar('celular: só a etapa aberta aparece', (await t.page.locator('.column:visible').count()) === 1 && (await t.page.locator('.column.col-ativa-mobile .card').count()) === 2);
+    await t.page.click('.etapa-chip-mobile[data-col-id="c2"]');
+    await t.page.waitForTimeout(300);
+    checar('celular: tocar na aba troca a etapa', (await t.page.locator('.column.col-ativa-mobile .card-name', { hasText: 'João Ganho' }).count()) === 1);
+    await t.page.click('.etapa-chip-mobile[data-col-id="c1"]');
+    await t.page.waitForTimeout(300);
+
+    // arrastar por toque: segura o cliente, passa sobre a aba "Ganho" (abre sozinha) e solta acima do outro cliente
+    const cdp = await t.page.context().newCDPSession(t.page);
+    const centro = async (sel) => { const b = await t.page.locator(sel).first().boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+    const toque = (tipo, x, y) => cdp.send('Input.dispatchTouchEvent', { type: tipo, touchPoints: tipo === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+    const orig = await centro('.card[data-card-id="k1"] .card-name');
+    await toque('touchStart', orig.x, orig.y);
+    await t.page.waitForTimeout(450);
+    const chip = await centro('.etapa-chip-mobile[data-col-id="c2"]');
+    for (let i = 1; i <= 8; i++) { await toque('touchMove', orig.x + (chip.x - orig.x) * i / 8, orig.y + (chip.y - orig.y) * i / 8); await t.page.waitForTimeout(30); }
+    await t.page.waitForTimeout(700);
+    checar('celular: segurar sobre a aba abre a etapa com o cliente ainda na mão', (await t.page.locator('.column.col-ativa-mobile .card-name', { hasText: 'João Ganho' }).count()) === 1 && (await t.page.locator('#card-touch-fantasma').count()) === 1);
+    const alvo = await t.page.locator('.column.col-ativa-mobile .card[data-card-id="k2"]').boundingBox();
+    for (let i = 1; i <= 6; i++) { await toque('touchMove', chip.x, chip.y + (alvo.y + 6 - chip.y) * i / 6); await t.page.waitForTimeout(30); }
+    await t.page.waitForTimeout(150);
+    checar('celular: mostra onde o cliente vai entrar na lista', (await t.page.locator('.card-indicador-antes').count()) === 1);
+    await toque('touchEnd');
+    await t.page.waitForTimeout(600);
+    const mover = t.chamadas.find((c) => c.metodo === 'PUT' && c.caminho === '/api/cards/k1/move');
+    const dadosMover = mover && JSON.parse(mover.corpo);
+    checar('celular: soltar acima do outro cliente manda a etapa nova e a ordem antes dele', !!dadosMover && dadosMover.columnId === 'c2' && dadosMover.ordem < 0, mover && mover.corpo);
+
+    await t.page.click('.bottom-nav [data-page="leads"]');
+    await t.page.waitForTimeout(400);
+    if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/cel-leads.png' });
+    checar('celular: Leads vira lista de cartões (sem tabela)', (await t.page.locator('.lead-card-mobile').count()) === 3 && !(await t.page.locator('.leads-table-wrap').isVisible()));
+    checar('celular: botão "Novo lead" fica à mão', await t.page.locator('.fab-novo-lead').isVisible());
+    await t.page.click('.lead-card-mobile >> nth=0');
+    await t.page.waitForTimeout(300);
+    checar('celular: a janela do lead ocupa a tela toda', await t.page.evaluate(() => { const m = document.querySelector('#modal-root .modal'); return !!m && Math.round(m.getBoundingClientRect().width) === window.innerWidth; }));
+    await t.page.evaluate(() => { document.getElementById('modal-root').innerHTML = ''; });
+
+    await t.page.click('.bottom-nav [data-action="toggle-sidebar"]');
+    await t.page.waitForTimeout(400);
+    await t.page.click('.sidebar [data-page="configuracoes"]');
+    await t.page.waitForTimeout(400);
+    if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/cel-config.png' });
+    checar('celular: Configurações abre em lista', (await t.page.locator('.config-layout.mostrando-lista').count()) === 1 && !(await t.page.locator('.config-content').isVisible()) && await t.page.locator('.config-sidebar').isVisible());
+    await t.page.click('.config-sidebar-item[data-categoria="acessibilidade"]');
+    await t.page.waitForTimeout(300);
+    checar('celular: tocar numa linha abre a tela, com botão de voltar', (await t.page.locator('.a11y-tamanho').count()) === 3 && await t.page.locator('.config-voltar-mobile').isVisible() && !(await t.page.locator('.config-sidebar').isVisible()));
+    await t.page.click('.config-voltar-mobile');
+    await t.page.waitForTimeout(250);
+    checar('celular: voltar mostra a lista de novo', await t.page.locator('.config-sidebar').isVisible());
+    for (const pg of ['dashboard', 'pipeline', 'leads', 'conversas']) {
+      await t.page.click(`.bottom-nav [data-page="${pg}"]`);
+      await t.page.waitForTimeout(300);
+      const l = await t.page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+      checar(`celular: "${pg}" não estoura a largura da tela`, l.sw <= l.cw + 1, JSON.stringify(l));
+    }
+    checar('celular: sem erro de JavaScript', t.erros.length === 0, t.erros[t.erros.length - 1]);
+    await t.ctx.close();
+
     t = await abrir(browser, url, 'membro');
     await t.page.click('[data-action="nav"][data-page="leads"]');
     await t.page.waitForTimeout(400);

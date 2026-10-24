@@ -337,6 +337,7 @@ function renderConfiguracoesPage(){
     'perfil': renderConfigPerfil,
     'seguranca': renderConfigSeguranca,
     'aparencia': renderConfigAparencia,
+    'acessibilidade': renderConfigAcessibilidade,
     'notificacoes': renderConfigNotificacoes,
     'whatsapp': renderConfigWhatsapp,
     'google-agenda': renderConfigGoogleAgenda,
@@ -357,7 +358,7 @@ function renderConfiguracoesPage(){
       </div>
     </div>
 
-    <div class="config-layout">
+    <div class="config-layout ${configMobileConteudo?'mostrando-conteudo':'mostrando-lista'}">
       <div class="config-sidebar">
         ${CONFIG_CATEGORIAS.map(g=>`
           <div class="config-sidebar-grupo">${g.grupo}</div>
@@ -365,6 +366,7 @@ function renderConfiguracoesPage(){
         `).join('')}
       </div>
       <div class="config-content">
+        <button type="button" class="config-voltar-mobile" data-action="config-voltar-lista">‹ Configurações</button>
         ${renderFn()}
       </div>
     </div>

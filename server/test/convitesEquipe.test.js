@@ -31,7 +31,7 @@ function preparar() {
   };
   const convites = [];
   User.findById = (id) => { const u = usuarios[id] || null; const p = Promise.resolve(u); p.select = async () => u; return p; };
-  User.findOne = async (q) => Object.values(usuarios).find((u) => u.email === q.email && String(u.equipeId) === String(q.equipeId)) || null;
+  User.findOne = async (q) => Object.values(usuarios).find((u) => u.email === q.email && String(u.equipeId) === String((q.equipeId || (q.$or && q.$or[0].equipeId)))) || null;
   Equipe.findById = async (id) => (String(id) === EQUIPE ? { _id: EQUIPE, nome: 'Time A', donoId: GESTOR } : null);
   ConviteEquipe.countDocuments = async () => convites.length;
   ConviteEquipe.updateOne = async (f, u) => {
@@ -79,7 +79,7 @@ test('a pessoa convidada aceita e entra como membro; outra pessoa não consegue 
   const { usuarios, convites } = preparar();
   await chamar('POST', '/convites', GESTOR, { email: 'novo@x.com' });
   const id = convites[0]._id;
-  assert.equal((await chamar('POST', `/convites/${id}/aceitar`, MEMBRO)).status, 400); // já tem equipe
+  assert.equal((await chamar('POST', `/convites/${id}/aceitar`, MEMBRO)).status, 404); // o convite é de outro e-mail
   assert.equal((await chamar('POST', `/convites/${id}/aceitar`, NOVO)).status, 204);
   assert.equal(String(usuarios[NOVO].equipeId), EQUIPE);
   assert.equal(usuarios[NOVO].papelEquipe, 'membro');
@@ -103,7 +103,7 @@ test('meta por pessoa: só o gestor define, valor inválido é recusado, membro 
   MetaVendas.findOneAndUpdate = async (f, u) => { salvas.push({ f, u }); return { valorMeta: u.valorMeta }; };
   const usuarios = { [MEMBRO]: { _id: MEMBRO, email: 'membro@x.com', nome: 'Membro' } };
   const origFindOne = User.findOne;
-  User.findOne = async (q) => (String(q._id) === MEMBRO && String(q.equipeId) === EQUIPE ? usuarios[MEMBRO] : null);
+  User.findOne = async (q) => (String(q._id) === MEMBRO && String((q.equipeId || (q.$or && q.$or[0].equipeId))) === EQUIPE ? usuarios[MEMBRO] : null);
   try {
     assert.equal((await chamar('PUT', `/membro/${MEMBRO}/meta-vendas`, MEMBRO, { valorMeta: 1000 })).status, 403);
     assert.equal((await chamar('PUT', `/membro/${MEMBRO}/meta-vendas`, GESTOR, { valorMeta: -5 })).status, 400);
