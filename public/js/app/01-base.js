@@ -144,8 +144,8 @@ const A11Y_TAMANHOS = { normal: 1, grande: 1.15, muito: 1.3 };
 function getAcessibilidade(){
   try{
     const a = JSON.parse(localStorage.getItem('acessibilidade') || '{}') || {};
-    return { tamanho: A11Y_TAMANHOS[a.tamanho] ? a.tamanho : 'normal', contraste: !!a.contraste, semAnimacao: !!a.semAnimacao, destaque: !!a.destaque };
-  }catch(e){ return { tamanho:'normal', contraste:false, semAnimacao:false, destaque:false }; }
+    return { tamanho: A11Y_TAMANHOS[a.tamanho] ? a.tamanho : 'normal', contraste: !!a.contraste, semAnimacao: !!a.semAnimacao, destaque: !!a.destaque, visaoComputador: !!a.visaoComputador };
+  }catch(e){ return { tamanho:'normal', contraste:false, semAnimacao:false, destaque:false, visaoComputador:false }; }
 }
 function aplicarAcessibilidade(a){
   const el = document.documentElement;
@@ -153,6 +153,10 @@ function aplicarAcessibilidade(a){
   el.classList.toggle('a11y-contraste', !!a.contraste);
   el.classList.toggle('a11y-sem-animacao', !!a.semAnimacao);
   el.classList.toggle('a11y-destaque', !!a.destaque);
+  // "Ver como no computador": o celular passa a desenhar a página com 1100px de largura,
+  // então o CSS e o JS de celular (<=768px) deixam de valer e aparece o layout de computador.
+  const vp = document.querySelector('meta[name="viewport"]');
+  if(vp) vp.setAttribute('content', a.visaoComputador ? 'width=1100' : 'width=device-width, initial-scale=1.0');
 }
 function setAcessibilidade(mudanca){
   const a = { ...getAcessibilidade(), ...mudanca };

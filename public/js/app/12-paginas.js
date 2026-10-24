@@ -1212,6 +1212,7 @@ function renderConfigAcessibilidade(){
       ${interruptor('contraste','Alto contraste','Textos e bordas mais fortes, mais fáceis de ler.')}
       ${interruptor('semAnimacao','Menos animação','Desliga os efeitos de movimento e transição.')}
       ${interruptor('destaque','Destacar links e botões','Sublinha os links e mostra um contorno forte em quem está selecionado pelo teclado.')}
+      ${(window.screen && Math.min(screen.width, screen.height) <= 900) ? interruptor('visaoComputador','Ver como no computador','Mostra a tela inteira como no computador, com botões menores. Use se você prefere um layout que já conhece; dá para aproximar com os dedos.') : ''}
       <p class="settings-page-note">Vale para este aparelho (e para a tela de login).</p>
     </div>
   `;

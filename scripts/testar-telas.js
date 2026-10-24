@@ -237,7 +237,13 @@ async function abrir(browser, url, cenario, extra = {}) {
     console.log('Configurações: aba Acessibilidade');
     await t.page.click('[data-action="set-config-categoria"][data-categoria="acessibilidade"]');
     await t.page.waitForTimeout(300);
-    checar('aba Acessibilidade tem 3 tamanhos e 3 opções', (await t.page.locator('[data-action="a11y-tamanho"]').count()) === 3 && (await t.page.locator('[data-action="a11y-toggle"]').count()) === 3);
+    checar('aba Acessibilidade tem 3 tamanhos e 3 opções', (await t.page.locator('[data-action="a11y-tamanho"]').count()) === 3 && (await t.page.locator('[data-action="a11y-toggle"]').count()) >= 3);
+    if (await t.page.locator('[data-action="a11y-toggle"][data-chave="visaoComputador"]').count()) {
+      await t.page.click('[data-action="a11y-toggle"][data-chave="visaoComputador"]');
+      checar('"Ver como no computador" muda o viewport para 1100px', (await t.page.evaluate(() => document.querySelector('meta[name=viewport]').content)) === 'width=1100');
+      await t.page.click('[data-action="a11y-toggle"][data-chave="visaoComputador"]');
+      checar('desligar volta ao viewport do celular', (await t.page.evaluate(() => document.querySelector('meta[name=viewport]').content)).includes('device-width'));
+    }
     await t.page.click('[data-action="a11y-tamanho"][data-tamanho="muito"]');
     checar('"Muito grande" aumenta a letra (--fs) e guarda a escolha', (await t.page.evaluate(() => document.documentElement.style.getPropertyValue('--fs'))) === '1.3' && (await t.page.evaluate(() => JSON.parse(localStorage.getItem('acessibilidade')).tamanho)) === 'muito');
     await t.page.click('[data-action="a11y-toggle"][data-chave="contraste"]');

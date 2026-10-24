@@ -23,6 +23,8 @@ try{
   document.documentElement.classList.toggle('a11y-contraste', !!a11y.contraste);
   document.documentElement.classList.toggle('a11y-sem-animacao', !!a11y.semAnimacao);
   document.documentElement.classList.toggle('a11y-destaque', !!a11y.destaque);
+  const vp = document.querySelector('meta[name="viewport"]');
+  if(vp) vp.setAttribute('content', a11y.visaoComputador ? 'width=1100' : 'width=device-width, initial-scale=1.0');
 }catch(e){}
 
 const form = document.getElementById('auth-form');
