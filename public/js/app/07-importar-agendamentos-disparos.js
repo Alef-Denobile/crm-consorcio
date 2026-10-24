@@ -494,7 +494,8 @@ async function sairDaEquipe(equipeId){
     supervisaoMembros = [];
     supervisaoLoaded = false;
     monitoramentoLoaded = false;
-    equipeSubTab = 'equipes';
+    equipeSubTab = 'chat';
+    equipeDentro = false;
     await loadEquipe();
   }catch(e){
     errorMsg = 'Não foi possível sair da equipe.';

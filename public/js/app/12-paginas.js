@@ -1116,6 +1116,7 @@ const CONFIG_CATEGORIAS = [
   ]},
   { grupo: 'Sistema', itens: [
     ['manutencao', 'Manutenção'],
+    ['monitoramento', 'Monitoramento de erros', ()=> !!(equipe && equipe.souSupervisorDeDados)],
   ]},
 ];
 

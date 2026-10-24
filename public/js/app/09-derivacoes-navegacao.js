@@ -516,10 +516,10 @@ function goToPage(page){
   }
   if(page === 'equipe'){
     equipeMsg = null;
-    if(equipe){
+    equipeDentro = false; equipeMostrarNovo = false;
+    if(equipe && equipeDentro){
       if(equipeSubTab==='chat' && !chatLoaded) loadChat();
       if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
-      if(equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
     }
   }
   if(page === 'comissoes'){

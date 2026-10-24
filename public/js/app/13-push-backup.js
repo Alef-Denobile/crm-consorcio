@@ -348,7 +348,9 @@ function renderConfiguracoesPage(){
     'campos': renderConfigCampos,
     'importar': renderConfigImportar,
     'manutencao': renderConfigManutencao,
+    'monitoramento': renderMonitoramentoConteudo,
   };
+  if(configCategoriaAtiva==='monitoramento' && !(equipe && equipe.souSupervisorDeDados)) configCategoriaAtiva = 'perfil';
   const renderFn = CONTEUDO_CATEGORIA[configCategoriaAtiva] || renderConfigPerfil;
   return `
     <div class="page-head">
@@ -362,7 +364,7 @@ function renderConfiguracoesPage(){
       <div class="config-sidebar">
         ${CONFIG_CATEGORIAS.map(g=>`
           <div class="config-sidebar-grupo">${g.grupo}</div>
-          ${g.itens.map(([key,label])=>`<button class="config-sidebar-item ${configCategoriaAtiva===key?'active':''}" data-action="set-config-categoria" data-categoria="${key}">${label}</button>`).join('')}
+          ${g.itens.filter(([,,visivel])=>!visivel || visivel()).map(([key,label])=>`<button class="config-sidebar-item ${configCategoriaAtiva===key?'active':''}" data-action="set-config-categoria" data-categoria="${key}">${label}</button>`).join('')}
         `).join('')}
       </div>
       <div class="config-content">

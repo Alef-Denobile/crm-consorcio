@@ -405,7 +405,9 @@ let conviteEmailNovo = '';
 let equipeNomeNovo = '';
 let equipeCodigoEntrar = '';
 let equipeMsg = null;
-let equipeSubTab = 'equipes'; // 'equipes' (lista das minhas equipes) | 'chat' | 'supervisao' | 'monitoramento'
+let equipeSubTab = 'chat'; // dentro de uma equipe: 'chat' | 'supervisao'
+let equipeDentro = false;  // false = lista de equipes; true = dentro da equipe aberta
+let equipeMostrarNovo = false; // botão "+": mostra criar equipe / entrar com código
 let minhasEquipes = []; // [{id, nome, papel, ativa, membros}] — todas as equipes de que a pessoa faz parte
 let agendaSubTab = 'calendario';
 let gerotSemanaAtual = inicioDaSemana(new Date());

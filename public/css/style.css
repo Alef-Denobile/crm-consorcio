@@ -1049,3 +1049,16 @@ html.a11y-destaque :is(button,.btn-outline,.btn-primary,.tab-btn,.nav-item){ bor
   .overlay:not(#confirm-overlay) .modal-body{ max-height:none; flex:1; min-height:0; }
   .overlay:not(#confirm-overlay) .modal-foot{ position:sticky; bottom:0; background:var(--paper); padding-bottom:calc(16px + env(safe-area-inset-bottom)); flex-shrink:0; }
 }
+
+/* ---------- tela "Equipes" (lista) ---------- */
+.equipes-lista{ display:flex; flex-direction:column; gap:12px; margin-bottom:24px; }
+.equipe-cartao{ display:flex; align-items:center; justify-content:space-between; gap:12px; padding:20px 22px; border:1px solid var(--line); border-radius:16px; background:var(--paper); cursor:pointer; min-height:72px; }
+.equipe-cartao:hover{ border-color:var(--ink); }
+.equipe-cartao:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
+.equipe-cartao-info{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+.equipe-cartao-nome{ font-family:'Fraunces',serif; font-size:calc(18px * var(--fs,1)); font-weight:600; overflow-wrap:anywhere; }
+.equipe-cartao-meta{ font-size:calc(12px * var(--fs,1)); color:var(--ink-soft); }
+.equipe-cartao-sair{ flex-shrink:0; }
+.equipe-mais{ width:44px; height:44px; padding:0; border-radius:12px; font-size:calc(24px * var(--fs,1)); line-height:1; display:flex; align-items:center; justify-content:center; }
+.equipe-voltar{ background:none; border:0; padding:0 0 6px; font:inherit; font-size:calc(13px * var(--fs,1)); font-weight:600; color:var(--ink-soft); cursor:pointer; }
+.equipe-voltar:hover{ color:var(--ink); }

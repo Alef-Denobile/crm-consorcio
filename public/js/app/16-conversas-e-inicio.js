@@ -321,6 +321,7 @@ function renderConvitesEBlocosEquipe(){
           </span>
         </div>`).join('')}
     </div>` : ''}
+    ${(equipeMostrarNovo || !minhasEquipes.length) ? `
     <div class="settings-page-grid">
       <div class="settings-page-section">
         <h3>Criar uma equipe</h3>
@@ -338,23 +339,28 @@ function renderConvitesEBlocosEquipe(){
         </div>
         <button class="btn-outline" data-action="entrar-equipe">Entrar</button>
       </div>
-    </div>
+    </div>` : ''}
     ${equipeMsg ? `<p class="settings-page-msg ${equipeMsg.tipo}" style="margin-top:14px;">${esc(equipeMsg.texto)}</p>` : ''}
   `;
 }
-// lista das equipes de que a pessoa faz parte — cada uma abre com um clique
-function renderMinhasEquipes(){
+// tela "Equipes": cada equipe é um botão grande; clicar entra nela, "Sair" fica no canto direito
+function renderListaEquipes(){
   return `
-    <div class="settings-page-section" style="margin-bottom:20px;">
-      <h3>Minhas equipes</h3>
-      <p class="settings-page-note">Você pode fazer parte de várias equipes. Seu funil de leads é um só e continua seu; o que muda é o chat, a gestão e o monitoramento da equipe aberta.</p>
+    <div class="page-head">
+      <div>
+        <h1>Equipes</h1>
+        <p>${minhasEquipes.length ? 'Escolha uma equipe para entrar' : 'Você ainda não faz parte de uma equipe'}</p>
+      </div>
+      <button type="button" class="btn-primary equipe-mais" data-action="toggle-equipe-novo" aria-label="Criar ou entrar em uma equipe" title="Criar ou entrar em uma equipe">${equipeMostrarNovo ? '×' : '+'}</button>
+    </div>
+    <div class="equipes-lista">
       ${minhasEquipes.map(e=>`
-        <div class="settings-page-row">
-          <span><b>${esc(e.nome)}</b> — ${e.papel==='supervisor'?'⭐ Gestor':'Membro'} · ${e.membros} pessoa${e.membros===1?'':'s'}${e.ativa?' · <span class="badge">Aberta</span>':''}</span>
-          <span class="settings-btn-row">
-            ${e.ativa ? `<button class="btn-outline" data-action="equipe-ir-chat">Ver chat</button>` : `<button class="btn-primary" data-action="abrir-equipe-lista" data-equipe-id="${e.id}">Abrir</button>`}
-            <button class="btn-outline" data-action="sair-equipe-lista" data-equipe-id="${e.id}" data-nome="${esc(e.nome)}">Sair</button>
-          </span>
+        <div class="equipe-cartao" role="button" tabindex="0" data-action="entrar-na-equipe" data-equipe-id="${e.id}">
+          <div class="equipe-cartao-info">
+            <span class="equipe-cartao-nome">${esc(e.nome)}</span>
+            <span class="equipe-cartao-meta">${e.papel==='supervisor'?'⭐ Gestor':'Membro'} · ${e.membros} pessoa${e.membros===1?'':'s'}</span>
+          </div>
+          <button type="button" class="btn-outline equipe-cartao-sair" data-action="sair-equipe-lista" data-equipe-id="${e.id}" data-nome="${esc(e.nome)}">Sair</button>
         </div>`).join('')}
     </div>
     ${renderConvitesEBlocosEquipe()}
@@ -405,19 +411,20 @@ function renderChatInternoConteudo(){
 }
 function renderEquipePage(){
   if(!equipeLoaded){
-    return `<div class="page-head"><div><h1>Equipe</h1><p>Carregando…</p></div></div>`;
+    return `<div class="page-head"><div><h1>Equipes</h1><p>Carregando…</p></div></div>`;
   }
-  if(!equipe){
-    return renderEquipeSetup('Equipe', 'Você ainda não faz parte de uma equipe');
+  if(!equipeDentro || !equipe){
+    return renderListaEquipes();
   }
-  const abas = [['equipes','Minhas equipes'],['chat','Chat']];
+  const abas = [['chat','Chat']];
   if(equipe.souSupervisor) abas.push(['supervisao','Gestão']);
-  if(equipe.souSupervisorDeDados) abas.push(['monitoramento','Monitoramento']);
+  if(!abas.some(([k])=>k===equipeSubTab)) equipeSubTab = 'chat';
   return `
     <div class="page-head">
       <div>
-        <h1>Equipe</h1>
-        <p>${esc(equipe.nome)} (aberta) · ${equipe.membros.length} membro${equipe.membros.length===1?'':'s'}${minhasEquipes.length>1?` · você está em ${minhasEquipes.length} equipes`:''}</p>
+        <button type="button" class="equipe-voltar" data-action="equipe-voltar-lista">‹ Equipes</button>
+        <h1>${esc(equipe.nome)}</h1>
+        <p>${equipe.membros.length} membro${equipe.membros.length===1?'':'s'}</p>
       </div>
     </div>
     ${abas.length > 1 ? `
@@ -425,10 +432,8 @@ function renderEquipePage(){
         ${abas.map(([key,label])=>`<button class="tab-btn ${equipeSubTab===key?'active':''}" data-action="set-equipe-subtab" data-subtab="${key}">${label}</button>`).join('')}
       </div>
     ` : ''}
-    ${equipeSubTab==='equipes' ? renderMinhasEquipes() : ''}
     ${equipeSubTab==='chat' ? renderChatInternoConteudo() : ''}
     ${equipeSubTab==='supervisao' && equipe.souSupervisor ? renderSupervisaoConteudo() : ''}
-    ${equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados ? renderMonitoramentoConteudo() : ''}
   `;
 }
 

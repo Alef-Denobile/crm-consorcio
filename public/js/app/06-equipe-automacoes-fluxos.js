@@ -11,11 +11,12 @@ async function loadEquipe(){
     convitesRecebidos = [];
   }
   equipeLoaded = true;
+  equipeMostrarNovo = false;
+  if(!equipe) equipeDentro = false;
   renderApp();
-  if(equipe && currentPage === 'equipe'){
+  if(equipe && equipeDentro && currentPage === 'equipe'){
     if(equipeSubTab==='chat' && !chatLoaded) loadChat();
     if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
-    if(equipeSubTab==='monitoramento' && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
   }
 }
 // Troca a equipe aberta (a pessoa continua em todas). Chat, gestão e monitoramento passam a ser os da nova.
@@ -28,6 +29,7 @@ async function abrirEquipeDaLista(equipeId){
     monitoramentoLoaded = false;
     equipeMsg = null;
     equipeSubTab = 'chat';
+    equipeDentro = true;
     await loadEquipe();
   }catch(e){
     errorMsg = e.message || 'Não foi possível abrir a equipe.';

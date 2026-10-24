@@ -145,12 +145,20 @@ async function abrir(browser, url, cenario, extra = {}) {
     console.log('Equipe: lista de equipes (várias equipes)');
     await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
     await t.page.waitForTimeout(400);
-    checar('Equipe abre na lista "Minhas equipes"', (await t.page.locator('h3', { hasText: 'Minhas equipes' }).count()) === 1);
-    checar('lista mostra as duas equipes', (await t.page.locator('.settings-page-row', { hasText: 'Equipe do Norte' }).count()) === 1 && (await t.page.locator('.settings-page-row', { hasText: 'Equipe Teste' }).count()) === 1);
-    checar('equipe aberta tem selo "Aberta" e a outra tem botão Abrir', (await t.page.locator('.badge', { hasText: 'Aberta' }).count()) === 1 && (await t.page.locator('[data-action="abrir-equipe-lista"]').count()) === 1);
-    checar('continua oferecendo criar e entrar em outra equipe', (await t.page.locator('[data-action="criar-equipe"]').count()) === 1 && (await t.page.locator('[data-action="entrar-equipe"]').count()) === 1);
-    await t.page.click('[data-action="abrir-equipe-lista"]');
+    checar('Equipe abre na tela "Equipes" com o botão +', (await t.page.locator('h1', { hasText: 'Equipes' }).count()) === 1 && (await t.page.locator('[data-action="toggle-equipe-novo"]').count()) === 1);
+    checar('lista mostra as duas equipes como botões grandes', (await t.page.locator('.equipe-cartao', { hasText: 'Equipe do Norte' }).count()) === 1 && (await t.page.locator('.equipe-cartao', { hasText: 'Equipe Teste' }).count()) === 1);
+    checar('cada equipe tem "Sair" no canto', (await t.page.locator('.equipe-cartao [data-action="sair-equipe-lista"]').count()) === 2);
+    checar('criar/entrar ficam escondidos até clicar no +', (await t.page.locator('[data-action="criar-equipe"]').count()) === 0);
+    await t.page.click('[data-action="toggle-equipe-novo"]');
+    checar('o + mostra criar equipe e entrar com código', (await t.page.locator('[data-action="criar-equipe"]').count()) === 1 && (await t.page.locator('[data-action="entrar-equipe"]').count()) === 1);
+    await t.page.click('[data-action="toggle-equipe-novo"]');
+    checar('Monitoramento não está mais na tela de Equipe', (await t.page.locator('text=Monitoramento').count()) === 0);
+    await t.page.click('.equipe-cartao >> text=Equipe Teste');
     await t.page.waitForTimeout(400);
+    checar('clicar numa equipe entra nela (voltar + abas)', (await t.page.locator('[data-action="equipe-voltar-lista"]').count()) === 1);
+    await t.page.click('[data-action="equipe-voltar-lista"]');
+    checar('"‹ Equipes" volta para a lista', (await t.page.locator('.equipe-cartao').count()) === 2);
+    await t.page.click('.equipe-cartao:not(:has-text("Equipe Teste")) >> text=Equipe do Norte');
     const abrirEq = t.chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/api/equipe/abrir');
     checar('Abrir envia a equipe escolhida', !!abrirEq && JSON.parse(abrirEq.corpo).equipeId === 'e2', abrirEq && abrirEq.corpo);
 

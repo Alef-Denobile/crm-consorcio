@@ -504,13 +504,23 @@ function bindAppEvents(){
       onConfirm: ()=>{ sairDaEquipe(); closeConfirm(); },
     });
   });
-  app.querySelectorAll('[data-action="abrir-equipe-lista"]').forEach(btn=>{
-    btn.addEventListener('click', ()=> abrirEquipeDaLista(btn.dataset.equipeId));
+  app.querySelectorAll('[data-action="entrar-na-equipe"]').forEach(card=>{
+    const entrar = ()=>{
+      const id = card.dataset.equipeId;
+      const ativa = minhasEquipes.find(e=>e.id===id && e.ativa);
+      if(ativa){ equipeSubTab = 'chat'; equipeDentro = true; if(!chatLoaded) loadChat(); renderApp(); }
+      else abrirEquipeDaLista(id);
+    };
+    card.addEventListener('click', entrar);
+    card.addEventListener('keydown', (e)=>{ if(e.target===card && (e.key==='Enter' || e.key===' ')){ e.preventDefault(); entrar(); } });
   });
-  const irChatBtn = app.querySelector('[data-action="equipe-ir-chat"]');
-  if(irChatBtn) irChatBtn.addEventListener('click', ()=>{ equipeSubTab = 'chat'; if(!chatLoaded) loadChat(); renderApp(); });
+  const maisEquipeBtn = app.querySelector('[data-action="toggle-equipe-novo"]');
+  if(maisEquipeBtn) maisEquipeBtn.addEventListener('click', ()=>{ equipeMostrarNovo = !equipeMostrarNovo; equipeMsg = null; renderApp(); });
+  const voltarEquipesBtn = app.querySelector('[data-action="equipe-voltar-lista"]');
+  if(voltarEquipesBtn) voltarEquipesBtn.addEventListener('click', ()=>{ equipeDentro = false; renderApp(); });
   app.querySelectorAll('[data-action="sair-equipe-lista"]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
+    btn.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
       showConfirm({
         message: `Sair da equipe "${btn.dataset.nome}"? Você perde o chat e a supervisão dela — seu funil continua intocado.`,
         confirmLabel: 'Sair da equipe',
@@ -565,7 +575,6 @@ function bindAppEvents(){
       equipeSubTab = btn.dataset.subtab;
       if(equipeSubTab==='chat' && !chatLoaded) loadChat();
       if(equipeSubTab==='supervisao' && equipe && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
-      if(equipeSubTab==='monitoramento' && equipe && equipe.souSupervisorDeDados && !monitoramentoLoaded) loadMonitoramento();
       renderApp();
     });
   });
@@ -625,6 +634,7 @@ function bindAppEvents(){
     btn.addEventListener('click', ()=>{
       configCategoriaAtiva = btn.dataset.categoria;
       configMobileConteudo = true;
+      if(configCategoriaAtiva==='monitoramento' && !monitoramentoLoaded) loadMonitoramento();
       renderApp();
       if(ehCelular()) window.scrollTo(0,0);
     });
