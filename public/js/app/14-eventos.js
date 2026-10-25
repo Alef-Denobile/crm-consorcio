@@ -515,7 +515,18 @@ function bindAppEvents(){
     card.addEventListener('keydown', (e)=>{ if(e.target===card && (e.key==='Enter' || e.key===' ')){ e.preventDefault(); entrar(); } });
   });
   const maisEquipeBtn = app.querySelector('[data-action="toggle-equipe-novo"]');
-  if(maisEquipeBtn) maisEquipeBtn.addEventListener('click', ()=>{ equipeMostrarNovo = !equipeMostrarNovo; equipeMsg = null; renderApp(); });
+  if(maisEquipeBtn) maisEquipeBtn.addEventListener('click', ()=>{
+    // sem renderApp: só troca classes, para o CSS animar (o + gira e vira ×, o bloco desliza)
+    equipeMostrarNovo = !equipeMostrarNovo;
+    const bloco = document.getElementById('equipe-novo');
+    maisEquipeBtn.classList.toggle('aberto', equipeMostrarNovo);
+    maisEquipeBtn.setAttribute('aria-expanded', equipeMostrarNovo ? 'true' : 'false');
+    if(bloco){
+      bloco.classList.toggle('aberto', equipeMostrarNovo);
+      if(equipeMostrarNovo){ bloco.removeAttribute('inert'); setTimeout(()=>{ const i = document.getElementById('equipe-nome-novo'); if(i) i.focus({ preventScroll:true }); }, 320); }
+      else bloco.setAttribute('inert','');
+    }
+  });
   const voltarEquipesBtn = app.querySelector('[data-action="equipe-voltar-lista"]');
   if(voltarEquipesBtn) voltarEquipesBtn.addEventListener('click', ()=>{ equipeDentro = false; renderApp(); });
   app.querySelectorAll('[data-action="sair-equipe-lista"]').forEach(btn=>{

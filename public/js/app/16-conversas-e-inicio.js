@@ -305,23 +305,12 @@ function renderEquipeSetup(tituloPagina, subtitulo){
     ${renderConvitesEBlocosEquipe()}
   `;
 }
-// convites recebidos + "Criar uma equipe" + "Entrar com código" (usado sem equipe e na lista "Minhas equipes")
-function renderConvitesEBlocosEquipe(){
+// bloco "Criar uma equipe" + "Entrar com código": desliza para baixo/cima ao clicar no +
+function renderBlocosCriarEntrar(){
+  const aberto = equipeMostrarNovo || !minhasEquipes.length;
   return `
-    ${convitesRecebidos.length ? `
-    <div class="settings-page-section" style="margin-bottom:20px;">
-      <h3>Convites para você</h3>
-      <p class="settings-page-note">Ao aceitar, o gestor passa a ver seu desempenho e você entra no chat da equipe. Seu funil continua só seu.</p>
-      ${convitesRecebidos.map(c=>`
-        <div class="settings-page-row">
-          <span>${esc(c.convidadoPor)} convidou você para a equipe <b>${esc(c.equipeNome)}</b></span>
-          <span class="settings-btn-row">
-            <button class="btn-primary" data-action="aceitar-convite-equipe" data-convite-id="${c.id}">Aceitar</button>
-            <button class="btn-outline" data-action="recusar-convite-equipe" data-convite-id="${c.id}">Recusar</button>
-          </span>
-        </div>`).join('')}
-    </div>` : ''}
-    ${(equipeMostrarNovo || !minhasEquipes.length) ? `
+    <div class="equipe-novo ${aberto?'aberto':''}" id="equipe-novo" ${aberto?'':'inert'}>
+      <div class="equipe-novo-conteudo">
     <div class="settings-page-grid">
       <div class="settings-page-section">
         <h3>Criar uma equipe</h3>
@@ -339,6 +328,25 @@ function renderConvitesEBlocosEquipe(){
         </div>
         <button class="btn-outline" data-action="entrar-equipe">Entrar</button>
       </div>
+    </div>      </div>
+    </div>
+  `;
+}
+// convites recebidos + "Criar uma equipe" + "Entrar com código" (usado sem equipe e na lista "Minhas equipes")
+function renderConvitesEBlocosEquipe(){
+  return `
+    ${convitesRecebidos.length ? `
+    <div class="settings-page-section" style="margin-bottom:20px;">
+      <h3>Convites para você</h3>
+      <p class="settings-page-note">Ao aceitar, o gestor passa a ver seu desempenho e você entra no chat da equipe. Seu funil continua só seu.</p>
+      ${convitesRecebidos.map(c=>`
+        <div class="settings-page-row">
+          <span>${esc(c.convidadoPor)} convidou você para a equipe <b>${esc(c.equipeNome)}</b></span>
+          <span class="settings-btn-row">
+            <button class="btn-primary" data-action="aceitar-convite-equipe" data-convite-id="${c.id}">Aceitar</button>
+            <button class="btn-outline" data-action="recusar-convite-equipe" data-convite-id="${c.id}">Recusar</button>
+          </span>
+        </div>`).join('')}
     </div>` : ''}
     ${equipeMsg ? `<p class="settings-page-msg ${equipeMsg.tipo}" style="margin-top:14px;">${esc(equipeMsg.texto)}</p>` : ''}
   `;
@@ -351,8 +359,9 @@ function renderListaEquipes(){
         <h1>Equipes</h1>
         <p>${minhasEquipes.length ? 'Escolha uma equipe para entrar' : 'Você ainda não faz parte de uma equipe'}</p>
       </div>
-      <button type="button" class="btn-primary equipe-mais" data-action="toggle-equipe-novo" aria-label="Criar ou entrar em uma equipe" title="Criar ou entrar em uma equipe">${equipeMostrarNovo ? '×' : '+'}</button>
+      <button type="button" class="btn-primary equipe-mais ${equipeMostrarNovo?'aberto':''}" data-action="toggle-equipe-novo" aria-label="Criar ou entrar em uma equipe" aria-expanded="${equipeMostrarNovo?'true':'false'}" title="Criar ou entrar em uma equipe"><span class="equipe-mais-icone" aria-hidden="true">+</span></button>
     </div>
+    ${renderBlocosCriarEntrar()}
     <div class="equipes-lista">
       ${minhasEquipes.map(e=>`
         <div class="equipe-cartao" role="button" tabindex="0" data-action="entrar-na-equipe" data-equipe-id="${e.id}">

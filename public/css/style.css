@@ -1062,3 +1062,11 @@ html.a11y-destaque :is(button,.btn-outline,.btn-primary,.tab-btn,.nav-item){ bor
 .equipe-mais{ width:44px; height:44px; padding:0; border-radius:12px; font-size:calc(24px * var(--fs,1)); line-height:1; display:flex; align-items:center; justify-content:center; }
 .equipe-voltar{ background:none; border:0; padding:0 0 6px; font:inherit; font-size:calc(13px * var(--fs,1)); font-weight:600; color:var(--ink-soft); cursor:pointer; }
 .equipe-voltar:hover{ color:var(--ink); }
+
+/* animações da tela Equipes: + gira e vira ×, bloco de criar/entrar desliza */
+.equipe-mais-icone{ display:inline-block; transition:transform .3s ease; }
+.equipe-mais.aberto .equipe-mais-icone{ transform:rotate(135deg); }
+.equipe-novo{ display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows .35s ease, opacity .25s ease, margin .35s ease; margin-bottom:0; }
+.equipe-novo.aberto{ grid-template-rows:1fr; opacity:1; margin-bottom:20px; }
+.equipe-novo-conteudo{ overflow:hidden; min-height:0; }
+.equipe-novo-conteudo .settings-page-grid{ padding:2px; }

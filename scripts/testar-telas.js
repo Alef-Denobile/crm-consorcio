@@ -148,10 +148,13 @@ async function abrir(browser, url, cenario, extra = {}) {
     checar('Equipe abre na tela "Equipes" com o botão +', (await t.page.locator('h1', { hasText: 'Equipes' }).count()) === 1 && (await t.page.locator('[data-action="toggle-equipe-novo"]').count()) === 1);
     checar('lista mostra as duas equipes como botões grandes', (await t.page.locator('.equipe-cartao', { hasText: 'Equipe do Norte' }).count()) === 1 && (await t.page.locator('.equipe-cartao', { hasText: 'Equipe Teste' }).count()) === 1);
     checar('cada equipe tem "Sair" no canto', (await t.page.locator('.equipe-cartao [data-action="sair-equipe-lista"]').count()) === 2);
-    checar('criar/entrar ficam escondidos até clicar no +', (await t.page.locator('[data-action="criar-equipe"]').count()) === 0);
+    checar('criar/entrar ficam recolhidos até clicar no +', (await t.page.locator('#equipe-novo.aberto').count()) === 0 && (await t.page.locator('#equipe-novo').evaluate((el) => el.getBoundingClientRect().height)) < 2);
     await t.page.click('[data-action="toggle-equipe-novo"]');
-    checar('o + mostra criar equipe e entrar com código', (await t.page.locator('[data-action="criar-equipe"]').count()) === 1 && (await t.page.locator('[data-action="entrar-equipe"]').count()) === 1);
+    await t.page.waitForTimeout(500);
+    checar('o + desliza o bloco para baixo e gira vira ×', (await t.page.locator('#equipe-novo.aberto [data-action="criar-equipe"]').count()) === 1 && (await t.page.locator('#equipe-novo').evaluate((el) => el.getBoundingClientRect().height)) > 80 && (await t.page.locator('.equipe-mais-icone').evaluate((el) => getComputedStyle(el).transform)) !== 'none');
     await t.page.click('[data-action="toggle-equipe-novo"]');
+    await t.page.waitForTimeout(500);
+    checar('clicar no × recolhe o bloco de novo', (await t.page.locator('#equipe-novo').evaluate((el) => el.getBoundingClientRect().height)) < 2);
     checar('Monitoramento não está mais na tela de Equipe', (await t.page.locator('text=Monitoramento').count()) === 0);
     await t.page.click('.equipe-cartao >> text=Equipe Teste');
     await t.page.waitForTimeout(400);
