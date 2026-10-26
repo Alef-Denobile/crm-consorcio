@@ -74,7 +74,7 @@ function renderDashboardPage(){
   const tarefasSemHora = tasksLoaded ? tasks.filter(t=>!t.concluida && !horaLocalDaTarefaOuNull(t.vencimento)).map(t=>({ tipo:'tarefa', id:t.id, titulo:t.titulo, data:t.vencimento })) : [];
   // eventos do Google são pessoais do próprio gestor — não fazem sentido (e vazariam
   // dados privados) quando ele está olhando o dashboard de outra pessoa
-  const eventosSemHoraDash = (agendaLoaded && !visualizandoDashboardDe) ? agendaEventosGoogle.filter(e=>e.diaInteiro && !e.concluida).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
+  const eventosSemHoraDash = (agendaLoaded && !visualizandoDashboardDe && !atuandoComo) ? agendaEventosGoogle.filter(e=>e.diaInteiro && !e.concluida).map(e=>({ tipo:'evento', id:e.id, titulo:e.titulo, data:e.inicio })) : [];
   const abertas = [...tarefasSemHora, ...eventosSemHoraDash].sort((a,b)=> new Date(a.data||'2999-01-01') - new Date(b.data||'2999-01-01')).slice(0,5);
 
   return `
@@ -827,7 +827,8 @@ function renderAgendaDiaModal(){
 }
 
 function renderTarefasPage(){
-  const abas = [['calendario','Calendário'],['gerot','GEROT']];
+  const abas = atuandoComo ? [['calendario','Calendário']] : [['calendario','Calendário'],['gerot','GEROT']];
+  if(atuandoComo && agendaSubTab!=='calendario') agendaSubTab = 'calendario';
   return `
     <div class="page-head">
       <div>
@@ -836,7 +837,7 @@ function renderTarefasPage(){
       </div>
       ${agendaSubTab==='calendario' ? `
         <div class="page-head-actions">
-          ${calendarConnected ? `<button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'📅 Sincronizar Agenda'}</button>` : ''}
+          ${calendarConnected && !atuandoComo ? `<button class="btn-outline" data-action="sync-calendar-now" ${calendarSyncing?'disabled':''}>${calendarSyncing?'Sincronizando…':'📅 Sincronizar Agenda'}</button>` : ''}
           <button class="btn-primary" data-action="open-new-task">+ Nova tarefa</button>
         </div>
       ` : ''}

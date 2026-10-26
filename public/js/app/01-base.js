@@ -17,7 +17,11 @@ if('serviceWorker' in navigator){
 /* ---------- helpers ---------- */
 // data de hoje no fuso do aparelho (AAAA-MM-DD); toISOString() usaria UTC e viraria o dia à noite
 // em equipe, só o gestor exclui leads (o servidor também confere)
-function podeExcluirLeads(){ return !(typeof equipe !== 'undefined' && equipe && !equipe.souSupervisor); }
+// em várias equipes vale a regra mais restrita: só exclui quem é gestor em TODAS
+function podeExcluirLeads(){
+  if(typeof minhasEquipes !== 'undefined' && minhasEquipes && minhasEquipes.length) return minhasEquipes.every(e=>e.papel==='supervisor');
+  return !(typeof equipe !== 'undefined' && equipe && !equipe.souSupervisor);
+}
 // versão administrativa (recrutamento), aberta em /adm: mesmo painel, com vocabulário e funil de contratação
 function perfilRH(){ try{ return !!(currentUser && currentUser.perfil === 'rh'); }catch(e){ return false; } }
 function hojeLocalISO(){
@@ -400,6 +404,7 @@ let editingFunilName = '';
 let relatorioFunilId = '';
 let equipe = null;
 let equipeLoaded = false;
+let metaVendasEquipeId = null; // de qual equipe é a meta carregada (recarrega ao trocar de equipe)
 let convitesRecebidos = []; // convites que chegaram pro e-mail de quem ainda não tem equipe
 let conviteEmailNovo = '';
 let equipeNomeNovo = '';
@@ -437,7 +442,7 @@ let configMobileConteudo = false;
 function ehCelular(){ return window.matchMedia && window.matchMedia('(max-width: 768px)').matches; }
 let atuandoComo = null;
 let metaBackupAtuandoComo = null;
-const PAGINAS_ATUANDO_COMO = ['dashboard','pipeline','leads','conversas','equipe'];
+const PAGINAS_ATUANDO_COMO = ['dashboard','pipeline','leads','conversas','equipe','tarefas'];
 let visualizandoDashboardDe = null; // { userId, nome } | null — quando setado, o Dashboard mostra os dados desse membro, em modo leitura
 let boardBackupGestor = null;
 let tasksBackupGestor = null;

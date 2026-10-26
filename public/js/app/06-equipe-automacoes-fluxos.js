@@ -11,6 +11,9 @@ async function loadEquipe(){
     convitesRecebidos = [];
   }
   equipeLoaded = true;
+  // a meta da equipe é da equipe aberta: recarrega quando ela muda e zera quando não há equipe
+  if(equipe && metaVendasEquipeId !== equipe.id){ metaVendasEquipeId = equipe.id; loadMetaVendasEquipe(); }
+  else if(!equipe && metaVendasEquipeId){ metaVendasEquipeId = null; metaVendasEquipeValor = 0; metaVendasEquipeVendido = 0; }
   equipeMostrarNovo = false;
   if(!equipe) equipeDentro = false;
   renderApp();
@@ -118,6 +121,7 @@ async function entrarNoFunilDe(userId, nome){
     funilAtualId = null; funis = []; board = { columns: [], cards: [] }; tasks = [];
     conversas = []; conversasLoaded = false; conversaSelecionadaCardId = null;
     pararPollingConversa();
+    agendaLoaded = false; agendaTarefas = []; agendaEventosGoogle = [];
     await Promise.all([loadBoard(), loadFunis(), loadTasks()]);
     if(currentPage === 'pipeline') renderApp(); else goToPage('pipeline');
   }catch(e){
@@ -132,6 +136,7 @@ async function sairDoFunilDe(){
   funilAtualId = null; funis = []; board = { columns: [], cards: [] }; tasks = [];
   conversas = []; conversasLoaded = false; conversaSelecionadaCardId = null;
   pararPollingConversa();
+  agendaLoaded = false; agendaTarefas = []; agendaEventosGoogle = [];
   await Promise.all([loadBoard(), loadFunis(), loadTasks()]);
   equipeSubTab = 'supervisao';
   if(currentPage === 'equipe') renderApp(); else goToPage('equipe');

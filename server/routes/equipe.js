@@ -561,7 +561,8 @@ router.get('/supervisao/:userId/dashboard', async (req, res) => {
 router.get('/meta-vendas/:mes', async (req, res) => {
   try {
     const user = await User.findById(req.userId);
-    if (!user.equipeId) return res.status(400).json({ error: 'Você não faz parte de nenhuma equipe.' });
+    // sem equipe aberta não é erro: só não há meta de equipe (a tela não precisa tratar como falha)
+    if (!user.equipeId) return res.json({ mes: req.params.mes, valorMeta: 0, vendidoNoMes: 0, souGestor: false, semEquipe: true });
 
     const mes = req.params.mes;
     const [meta, membros] = await Promise.all([

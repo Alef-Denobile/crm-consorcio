@@ -116,7 +116,9 @@ router.get('/agenda-mes', auth, async (req, res) => {
     }).select('titulo vencimento prioridade concluida leadId descricao').populate('leadId', 'cliente');
 
     let eventosGoogle = [];
-    const user = await User.findById(req.userId);
+    // gestor "atuando como" um consultor vê só as TAREFAS dele — o Google Agenda é pessoal e nunca é do consultor
+    const atuando = !!req.realUserId && String(req.realUserId) !== String(req.userId);
+    const user = atuando ? null : await User.findById(req.userId);
     if (user && user.googleCalendar && user.googleCalendar.refreshToken) {
       try {
         eventosGoogle = await listarEventosPrimario(user, inicioMes, fimMes);

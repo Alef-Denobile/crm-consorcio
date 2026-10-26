@@ -19,7 +19,7 @@ const { dispararWebhooks } = require('../utils/dispararWebhooks');
 const { validarAtribuicao, colunaEquivalente, proximaOrdem, transferirCard } = require('../utils/atribuirLead');
 const { enviarPush } = require('../utils/push');
 const { listarDuplicados, unificarDuplicados } = require('../utils/unificarDuplicados');
-const { emAlgumaEquipe, gestorEmAlguma } = require('../utils/equipesDoUsuario');
+const { emAlgumaEquipe, gestorEmTodas } = require('../utils/equipesDoUsuario');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de card exigem login
@@ -355,9 +355,9 @@ router.delete('/:id', async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ error: 'ID inválido.' });
     }
-    // em equipe, só o gestor exclui leads (o membro pode mover pra "Perdido" ou arquivar)
+    // em equipe, só o gestor exclui leads — e em várias equipes vale a regra mais restrita (o membro pode mover pra "Perdido" ou arquivar)
     const quem = await User.findById(req.realUserId || req.userId).select('equipeId papelEquipe outrasEquipes');
-    if (quem && emAlgumaEquipe(quem) && !gestorEmAlguma(quem)) {
+    if (quem && emAlgumaEquipe(quem) && !gestorEmTodas(quem)) {
       return res.status(403).json({ error: 'Em equipe, só o gestor pode excluir leads. Você pode movê-lo para "Perdido" ou arquivá-lo.' });
     }
     const card = await Card.findOneAndDelete({ _id: req.params.id, userId: req.userId });

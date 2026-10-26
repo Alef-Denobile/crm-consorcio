@@ -1,6 +1,7 @@
 const User = require('../models/User');
-const { filtroMembros } = require('./equipesDoUsuario');
+const { filtroMembros, gestorEmAlguma } = require('./equipesDoUsuario');
 const Card = require('../models/Card');
+const Equipe = require('../models/Equipe');
 const Column = require('../models/Column');
 const Task = require('../models/Task');
 const MetaVendas = require('../models/MetaVendas');
@@ -85,30 +86,45 @@ function montarEmailResumo({ nome, perfil, resumo, equipe, hoje }) {
   } else {
     corpo += titulo(p.vendido) + `<p style="margin:6px 0 0;">${brl(r.vendidoMes) === 'R$ 0,00' ? 'Nenhuma contratação registrada ainda.' : 'Veja o Dashboard.'}</p>`;
   }
-  if (equipe && equipe.length) {
-    corpo += titulo('Sua equipe') + `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;"><tr style="text-align:left;color:#666;"><th style="padding:4px 6px;">Pessoa</th><th>${p.leads} ${p.abertos}</th><th>Parados</th><th>Tarefas atrasadas</th>${perfil !== 'rh' ? '<th>Vendido / meta</th>' : ''}</tr>${equipe.map((m) => `<tr style="border-top:1px solid #e4e4e0;"><td style="padding:5px 6px;">${escaparHtml(m.nome)}</td><td>${m.resumo.totalAbertos}</td><td${m.resumo.parados.length ? ' style="color:#a00;"' : ''}>${m.resumo.parados.length}</td><td${m.resumo.tarefasAtrasadas.length ? ' style="color:#a00;"' : ''}>${m.resumo.tarefasAtrasadas.length}</td>${perfil !== 'rh' ? `<td>${brl(m.resumo.vendidoMes)}${m.resumo.metaMes ? ' / ' + brl(m.resumo.metaMes) : ''}</td>` : ''}</tr>`).join('')}</table>`;
-  }
+  // "equipe" aceita uma lista de pessoas (uma equipe) ou uma lista de grupos { nome, membros } (várias equipes)
+  const grupos = !equipe || !equipe.length ? [] : (equipe[0].membros ? equipe : [{ nome: null, membros: equipe }]);
+  grupos.filter((g) => g.membros.length).forEach((g) => {
+    const tituloEquipe = grupos.length > 1 && g.nome ? `Equipe ${escaparHtml(g.nome)}` : 'Sua equipe';
+    corpo += titulo(tituloEquipe) + `<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;"><tr style="text-align:left;color:#666;"><th style="padding:4px 6px;">Pessoa</th><th>${p.leads} ${p.abertos}</th><th>Parados</th><th>Tarefas atrasadas</th>${perfil !== 'rh' ? '<th>Vendido / meta</th>' : ''}</tr>${g.membros.map((m) => `<tr style="border-top:1px solid #e4e4e0;"><td style="padding:5px 6px;">${escaparHtml(m.nome)}</td><td>${m.resumo.totalAbertos}</td><td${m.resumo.parados.length ? ' style="color:#a00;"' : ''}>${m.resumo.parados.length}</td><td${m.resumo.tarefasAtrasadas.length ? ' style="color:#a00;"' : ''}>${m.resumo.tarefasAtrasadas.length}</td>${perfil !== 'rh' ? `<td>${brl(m.resumo.vendidoMes)}${m.resumo.metaMes ? ' / ' + brl(m.resumo.metaMes) : ''}</td>` : ''}</tr>`).join('')}</table>`;
+  });
   corpo += `<p style="margin:22px 0 0;"><a href="${escaparHtml(urlBaseDoApp())}/index.html" style="background:#141414;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;display:inline-block;">Abrir o CRM</a></p>
 <p style="font-size:12px;color:#888;margin-top:16px;">Para parar de receber, desative em Configurações → Integrações → E-mail.</p>`;
   const texto = `Resumo de ${dataBonita}: ${r.totalAbertos} ${p.leads} ${p.abertos}, ${r.novos24h} novos nas últimas 24h, ${r.parados.length} parados, ${r.tarefasHoje.length} tarefa(s) hoje, ${r.tarefasAtrasadas.length} atrasada(s).`;
   return { assunto: `Seu resumo de hoje: ${r.tarefasHoje.length} tarefa(s), ${r.parados.length} ${p.leads} parados`, html: moldeEmail('Resumo do dia', corpo), texto };
 }
 
+// Todas as equipes em que a pessoa é gestora (a aberta e as guardadas), cada uma com seus membros.
+// O resumo de cada pessoa é calculado uma vez só, mesmo que ela esteja em duas dessas equipes.
 async function resumoDaEquipe(gestor, hoje) {
-  const membros = await User.find({ ...filtroMembros(gestor.equipeId) });
-  const lista = [];
-  for (const m of membros) {
-    if (String(m._id) === String(gestor._id)) continue;
-    lista.push({ nome: m.nome || m.email, resumo: await resumoDoUsuario(m._id, hoje) });
+  const ids = [];
+  if (gestor.equipeId && gestor.papelEquipe === 'supervisor') ids.push(String(gestor.equipeId));
+  (gestor.outrasEquipes || []).forEach((e) => { if (e.papel === 'supervisor') ids.push(String(e.equipeId)); });
+  const cache = new Map();
+  const grupos = [];
+  for (const equipeId of ids) {
+    const [eq, membros] = await Promise.all([Equipe.findById(equipeId), User.find({ ...filtroMembros(equipeId) })]);
+    const lista = [];
+    for (const m of membros) {
+      if (String(m._id) === String(gestor._id)) continue;
+      const k = String(m._id);
+      if (!cache.has(k)) cache.set(k, await resumoDoUsuario(m._id, hoje));
+      lista.push({ nome: m.nome || m.email, resumo: cache.get(k) });
+    }
+    grupos.push({ nome: eq ? eq.nome : '', membros: lista });
   }
-  return lista;
+  return grupos;
 }
 
 // Envia o resumo de uma pessoa (usado pelo agendador e pelo botão "Enviar agora"). Lança erro se falhar.
 async function enviarResumoDe(user, hoje = hojeBR()) {
   if (!emailConfigurado()) throw new Error('O envio de e-mail não está configurado neste servidor.');
   const resumo = await resumoDoUsuario(user._id, hoje);
-  const equipe = user.equipeId && user.papelEquipe === 'supervisor' ? await resumoDaEquipe(user, hoje) : null;
+  const equipe = gestorEmAlguma(user) ? await resumoDaEquipe(user, hoje) : null;
   const msg = montarEmailResumo({ nome: user.nome, perfil: user.perfil, resumo, equipe, hoje });
   await enviarEmail({ para: user.email, assunto: msg.assunto, html: msg.html, texto: msg.texto });
 }

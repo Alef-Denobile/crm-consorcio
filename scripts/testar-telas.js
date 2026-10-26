@@ -70,7 +70,7 @@ function respostas(cenario) {
     'GET /api/funis': cenario === 'mobile' ? { funis: [{ id: 'f1', nome: 'Funil Principal' }] } : { funis: [] },
     'GET /api/tasks': { tasks: [] },
     'GET /api/calendar/status': { connected: false },
-    'GET /api/equipe': cenario === 'semEquipe' ? semEquipe : { equipe: cenario === 'membro' ? { ...equipeGestor, souSupervisor: false, rodizio: null, convitesPendentes: [], codigoConvite: null } : equipeGestor, minhasEquipes: [{ id: 'e1', nome: 'Equipe Teste', papel: cenario === 'membro' ? 'membro' : 'supervisor', ativa: true, membros: 2 }, { id: 'e2', nome: 'Equipe do Norte', papel: 'membro', ativa: false, membros: 4 }], convitesRecebidos: [] },
+    'GET /api/equipe': cenario === 'semEquipe' ? semEquipe : { equipe: cenario === 'membro' ? { ...equipeGestor, souSupervisor: false, rodizio: null, convitesPendentes: [], codigoConvite: null } : equipeGestor, minhasEquipes: [{ id: 'e1', nome: 'Equipe Teste', papel: cenario === 'membro' ? 'membro' : 'supervisor', ativa: true, membros: 2 }, { id: 'e2', nome: 'Equipe do Norte', papel: cenario === 'membro' ? 'membro' : 'supervisor', ativa: false, membros: 4 }], convitesRecebidos: [] },
     'GET /api/equipe/supervisao': { mes, membros: [
       { userId: 'u1', nome: 'Gestor Teste', papel: 'supervisor', totalLeads: 2, ganhoValor: 80000, perdidoValor: 0, abertoValor: 50000, vendidoNoMes: 80000, metaMes: 0 },
       { userId: 'u2', nome: 'Ana Vendas', papel: 'membro', totalLeads: 5, ganhoValor: 30000, perdidoValor: 1000, abertoValor: 9000, vendidoNoMes: 30000, metaMes: 60000 },
@@ -162,6 +162,7 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.click('[data-action="equipe-voltar-lista"]');
     checar('"‹ Equipes" volta para a lista', (await t.page.locator('.equipe-cartao').count()) === 2);
     await t.page.click('.equipe-cartao:not(:has-text("Equipe Teste")) >> text=Equipe do Norte');
+    await t.page.waitForTimeout(400);
     const abrirEq = t.chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/api/equipe/abrir');
     checar('Abrir envia a equipe escolhida', !!abrirEq && JSON.parse(abrirEq.corpo).equipeId === 'e2', abrirEq && abrirEq.corpo);
 

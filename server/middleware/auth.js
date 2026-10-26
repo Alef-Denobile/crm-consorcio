@@ -15,11 +15,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'troque-este-segredo-no-env';
 // consultor; só vale se quem pede é gestor e o consultor é da MESMA equipe. Só estas áreas
 // aceitam o modo (nada de configurações, senha, integrações, backup...), e as conversas
 // de WhatsApp ficam só para leitura. Toda alteração fica registrada na auditoria.
-const AREAS_ATUAR_COMO = ['/api/board', '/api/columns', '/api/cards', '/api/tasks', '/api/funis', '/api/historico-contato', '/api/campos-personalizados', '/api/whatsapp'];
+const AREAS_ATUAR_COMO = ['/api/board', '/api/columns', '/api/cards', '/api/tasks', '/api/funis', '/api/historico-contato', '/api/campos-personalizados', '/api/whatsapp', '/api/calendar/agenda-mes'];
 function areaPermitidaParaAtuarComo(req){
   const url = (req.originalUrl || '').split('?')[0];
   if (!AREAS_ATUAR_COMO.some(p => url === p || url.startsWith(p + '/'))) return false;
-  if (url.startsWith('/api/whatsapp') && req.method !== 'GET') return false;
+  if ((url.startsWith('/api/whatsapp') || url.startsWith('/api/calendar')) && req.method !== 'GET') return false;
   return true;
 }
 
@@ -58,10 +58,10 @@ module.exports = async function auth(req, res, next) {
     if (alvoId && String(alvoId) !== String(payload.sub)) {
       if (!mongoose.isValidObjectId(alvoId)) return res.status(400).json({ error: 'Consultor inválido.' });
       if (!user.equipeId || user.papelEquipe !== 'supervisor') {
-        return res.status(403).json({ error: 'Só o gestor da equipe pode atuar no funil de outra pessoa.' });
+        return res.status(403).json({ error: 'Só o gestor da equipe pode atuar no funil de outra pessoa.', codigo: 'atuar_como_negado' });
       }
       const alvo = await User.findOne({ _id: alvoId, ...filtroMembros(user.equipeId) }).select('nome email');
-      if (!alvo) return res.status(404).json({ error: 'Esse consultor não está na sua equipe.' });
+      if (!alvo) return res.status(404).json({ error: 'Esse consultor não está na sua equipe.', codigo: 'atuar_como_negado' });
       if (!areaPermitidaParaAtuarComo(req)) {
         return res.status(403).json({ error: 'Essa ação não está disponível enquanto você atua no funil de outra pessoa.' });
       }

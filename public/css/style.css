@@ -1070,3 +1070,9 @@ html.a11y-destaque :is(button,.btn-outline,.btn-primary,.tab-btn,.nav-item){ bor
 .equipe-novo.aberto{ grid-template-rows:1fr; opacity:1; margin-bottom:20px; }
 .equipe-novo-conteudo{ overflow:hidden; min-height:0; }
 .equipe-novo-conteudo .settings-page-grid{ padding:2px; }
+
+/* celular: janelas (modais) ficam por cima da barra de cima (140) e da de baixo (130) */
+@media (max-width: 768px){
+  .overlay{ z-index:190; }
+  .conversas-overlay-backdrop{ z-index:190; }
+}

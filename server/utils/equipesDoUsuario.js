@@ -59,6 +59,13 @@ function gestorEmAlguma(user) {
   if (user.equipeId && user.papelEquipe === 'supervisor') return true;
   return (user.outrasEquipes || []).some((e) => e.papel === 'supervisor');
 }
+// é gestor em TODAS as equipes dele? (regra "a mais restrita vale": quem é só membro em uma equipe
+// não ganha permissão de gestor criando ou abrindo outra)
+function gestorEmTodas(user) {
+  const ids = idsDasEquipes(user);
+  if (!ids.length) return false;
+  return ids.every((eid) => papelEm(user, eid) === 'supervisor');
+}
 function emAlgumaEquipe(user) { return idsDasEquipes(user).length > 0; }
 
 // duas pessoas têm alguma equipe em comum?
@@ -125,4 +132,4 @@ function sairEquipe(user, equipeId) {
   return true;
 }
 
-module.exports = { filtroMembros, idsDasEquipes, membroDe, papelEm, supervisorDeDadosEm, definirPapel, definirSupervisorDeDados, gestorEmAlguma, emAlgumaEquipe, equipeEmComum, abrirEquipe, entrarEquipe, sairEquipe };
+module.exports = { filtroMembros, idsDasEquipes, membroDe, papelEm, supervisorDeDadosEm, definirPapel, definirSupervisorDeDados, gestorEmAlguma, gestorEmTodas, emAlgumaEquipe, equipeEmComum, abrirEquipe, entrarEquipe, sairEquipe };

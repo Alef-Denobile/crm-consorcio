@@ -1777,7 +1777,6 @@ if(getToken()){
   loadCamposPersonalizados();
   loadPossiveisLeads();
   loadMetaVendas();
-  loadMetaVendasEquipe();
   if(!agendaLoaded) loadAgendaMes(agendaMesAtual); // carrega em segundo plano — o Dashboard também usa eventos do Google em "Tarefas abertas"
   loadConversas();
   loadEquipe();

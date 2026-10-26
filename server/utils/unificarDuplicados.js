@@ -6,6 +6,7 @@ const MensagemAgendada = require('../models/MensagemAgendada');
 const Contrato = require('../models/Contrato');
 const FluxoExecucao = require('../models/FluxoExecucao');
 const Task = require('../models/Task');
+const Column = require('../models/Column');
 const { chaveTelefone } = require('./telefone');
 
 const nomeGenerico = (n) => !n || /^novo contato/i.test(String(n).trim());
@@ -35,9 +36,14 @@ async function listarDuplicados(userId) {
 async function unificarDuplicados(userId) {
   const grupos = await listarDuplicados(userId);
   let removidos = 0;
+  const colunas = grupos.length ? await Column.find({ userId }).select('tipo') : [];
+  const tipoDaColuna = new Map(colunas.map((c) => [String(c._id), c.tipo]));
   for (const g of grupos) {
     const completos = await Card.find({ _id: { $in: g.cards.map((c) => c._id) }, userId });
-    completos.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    // quem fica: o que está à vista (não arquivado) primeiro, depois o que já tem venda (coluna "ganho"), depois o mais antigo.
+    // Assim a venda nunca some dentro de um contato arquivado nem de um que está em "perdido".
+    const peso = (c) => (c.arquivado ? 0 : 2) + (tipoDaColuna.get(String(c.columnId)) === 'ganho' ? 1 : 0);
+    completos.sort((a, b) => peso(b) - peso(a) || new Date(a.createdAt) - new Date(b.createdAt));
     const [fica, ...resto] = completos;
     for (const outro of resto) {
       const mover = { cardId: outro._id, userId };

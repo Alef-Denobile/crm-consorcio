@@ -28,7 +28,7 @@ async function apiRequestUmaVez(method, path, body, timeoutMs){
   const opts = { method, headers: {} };
   const token = getToken();
   if(token) opts.headers['Authorization'] = 'Bearer ' + token;
-  if(atuandoComo && /^\/(board|columns|cards|tasks|funis|historico-contato|campos-personalizados|whatsapp)(\/|\?|$)/.test(path)) opts.headers['X-Atuar-Como'] = atuandoComo.userId;
+  if(atuandoComo && /^\/(board|columns|cards|tasks|funis|historico-contato|campos-personalizados|whatsapp|calendar\/agenda-mes)(\/|\?|$)/.test(path)) opts.headers['X-Atuar-Como'] = atuandoComo.userId;
   if(body !== undefined){
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
@@ -57,6 +57,12 @@ async function apiRequestUmaVez(method, path, body, timeoutMs){
     if(res.status === 401 && dados && dados.codigo === 'sessao_invalida'){
       logout();
       throw new Error('Sessão expirada.');
+    }
+    // o gestor perdeu o acesso enquanto atuava no funil de alguém (saiu da equipe, deixou de ser gestor,
+    // o consultor saiu...): volta sozinho para o funil dele em vez de ficar numa tela quebrada
+    if(atuandoComo && dados && dados.codigo === 'atuar_como_negado'){
+      const nome = atuandoComo.nome;
+      Promise.resolve(sairDoFunilDe()).then(()=>{ errorMsg = `Você não tem mais acesso ao funil de ${nome}. Voltamos para o seu funil.`; renderApp(); });
     }
     const falha = new Error(msg);
     if(res.status === 503 || res.status === 502 || res.status === 504) falha.transitorio = true;

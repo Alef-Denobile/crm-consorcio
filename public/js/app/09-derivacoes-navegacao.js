@@ -1,10 +1,24 @@
 /* ---------- derivações (Pipeline) ---------- */
+// Data de início de contato de um card ("YYYY-MM-DD"). Contatos antigos não têm o campo
+// preenchido: nesse caso vale o dia em que o card foi criado, para não sumirem do filtro de mês.
+function dataInicioDoCard(c){
+  const v = c && c.mesInicioContato;
+  if(v){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+    if(/^\d{4}-\d{2}$/.test(v)) return v + '-01';
+  }
+  if(c && c.createdAt){
+    const d = new Date(c.createdAt);
+    if(!isNaN(d)) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  return '';
+}
 function monthsList(){
-  const set = new Set([currentMonthKey(), ...board.cards.map(c=>c.mesInicioContato).filter(Boolean).map(d=>d.slice(0,7))]);
+  const set = new Set([currentMonthKey(), ...board.cards.map(dataInicioDoCard).filter(Boolean).map(d=>d.slice(0,7))]);
   return Array.from(set).sort((a,b)=> a<b?1:-1);
 }
 function visibleCards(){
-  let cards = filterMonth ? board.cards.filter(c=>c.mesInicioContato && c.mesInicioContato.slice(0,7)===filterMonth) : board.cards;
+  let cards = filterMonth ? board.cards.filter(c=>dataInicioDoCard(c).slice(0,7)===filterMonth) : board.cards;
   cards = cards.filter(c=>!c.arquivado);
   if(filtroEsfriando){
     const limite = Date.now() - 7*24*60*60*1000;
@@ -71,8 +85,9 @@ function periodRange(period){
 function cardsInPeriod(){
   const { start, end } = periodRange(dashboardPeriod);
   return board.cards.filter(c=>{
-    if(!c.createdAt) return false;
-    const d = new Date(c.createdAt);
+    const ini = dataInicioDoCard(c);
+    if(!ini) return false;
+    const d = new Date(ini + 'T12:00:00');
     return d >= start && d <= end;
   });
 }
@@ -160,7 +175,7 @@ function leadsPorPeriodoBuckets(){
   }
   if(!buckets.length) buckets.push({ date:new Date(start), count:0 });
   cards.forEach(c=>{
-    const d = new Date(c.createdAt);
+    const d = new Date(dataInicioDoCard(c) + 'T12:00:00');
     for(let i=buckets.length-1;i>=0;i--){
       if(d >= buckets[i].date){ buckets[i].count++; break; }
     }
@@ -516,11 +531,7 @@ function goToPage(page){
   }
   if(page === 'equipe'){
     equipeMsg = null;
-    equipeDentro = false; equipeMostrarNovo = false;
-    if(equipe && equipeDentro){
-      if(equipeSubTab==='chat' && !chatLoaded) loadChat();
-      if(equipeSubTab==='supervisao' && equipe.souSupervisor && !supervisaoLoaded) loadSupervisao();
-    }
+    equipeDentro = false; equipeMostrarNovo = false; // sempre começa na lista de equipes
   }
   if(page === 'comissoes'){
     loadContratos(); // recarrega sempre, pra pegar comissões que o Pipeline gerou automaticamente
