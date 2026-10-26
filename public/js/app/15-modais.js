@@ -2,7 +2,32 @@
 function openNewCard(columnId){
   const colId = columnId || ((board.columns.find(c=>c.tipo==='aberto') || board.columns[0] || {}).id);
   escolhaTipoPessoaColId = colId;
-  renderEscolhaTipoPessoaModal();
+  escolhaModoGestor = false;
+  // quem é gestor de uma equipe escolhe primeiro o modo (Padrão ou Gestor); os demais vão direto para física/jurídica
+  if(podeAtribuirLeads()) renderEscolhaModoGestorModal();
+  else renderEscolhaTipoPessoaModal();
+}
+function renderEscolhaModoGestorModal(){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="overlay" id="escolha-modo-overlay">
+      <div class="modal" style="max-width:380px;">
+        <div class="modal-head">
+          <h3>Novo lead</h3>
+          <button id="escolha-modo-close">✕</button>
+        </div>
+        <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
+          <button type="button" class="tipo-pessoa-escolha-btn" data-modo-novo="0">Padrão<br><span class="settings-page-note" style="font-weight:400;">O lead fica no seu pipeline.</span></button>
+          <button type="button" class="tipo-pessoa-escolha-btn" data-modo-novo="1">⭐ Gestor<br><span class="settings-page-note" style="font-weight:400;">Cadastrar o lead direto para alguém da equipe.</span></button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('escolha-modo-close').addEventListener('click', fecharEscolhaTipoPessoa);
+  document.getElementById('escolha-modo-overlay').addEventListener('click', (e)=>{ if(e.target.id==='escolha-modo-overlay') fecharEscolhaTipoPessoa(); });
+  root.querySelectorAll('[data-modo-novo]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ escolhaModoGestor = btn.dataset.modoNovo==='1'; renderEscolhaTipoPessoaModal(); });
+  });
 }
 function fecharEscolhaTipoPessoa(){
   escolhaTipoPessoaColId = null;
@@ -40,9 +65,12 @@ function abrirNovoCardComTipo(columnId, tipoPessoa){
     mes: '', mesInicioContato: dataInicial, // início de contato já vem preenchido (é agora); mês de venda fica em branco até a venda acontecer de verdade
     etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
     tipoPessoa, clienteFisica:'', clienteJuridica:'',
+    __modoGestor: !!(escolhaModoGestor && podeAtribuirLeads()), __atribuirParaId: '',
     cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
   };
   tipoPessoaDropdownAberto = false;
+  modoGestorDropdownAberto = false;
+  escolhaModoGestor = false;
   extrasTela = null; // sem isso, se a última coisa vista tivesse sido a tela de Extras
                       // de outro cliente, o formulário de novo lead nascia mostrando
                       // aquela tela por engano, em vez do formulário de verdade
@@ -415,34 +443,48 @@ function renderModal(){
           <button id="modal-close">✕</button>
         </div>
         <div class="modal-body">
-          ${podeAtribuirLeads() ? `
-          <div class="field">
-            <label>Modo</label>
-            <div class="modo-gestor-toggle">
-              <button type="button" class="modo-gestor-btn ${!f.__modoGestor?'ativo':''}" data-modo-gestor="0">Padrão</button>
-              <button type="button" class="modo-gestor-btn ${f.__modoGestor?'ativo':''}" data-modo-gestor="1">⭐ Gestor</button>
-            </div>
-            ${f.__modoGestor ? `
-              <label style="margin-top:10px">${f.__isNew ? 'Adicionar este lead para' : 'Passar este lead para'}</label>
-              <select id="f-atribuir-para">
-                <option value="">Selecione uma pessoa…</option>
-                ${equipe.membros.filter(m=>!m.souEu).map(m=>`<option value="${m.id}" ${f.__atribuirParaId===m.id?'selected':''}>${esc(m.nome||m.email)}${m.papel==='supervisor'?' ⭐':''}</option>`).join('')}
-              </select>
-              <p class="settings-page-note" style="margin:6px 0 0">${f.__isNew ? 'O lead vai direto para o pipeline da pessoa escolhida, na coluna de mesmo nome (ou na primeira em aberto).' : 'O lead sai do seu pipeline e vai para o da pessoa escolhida, junto com conversas, anexos, tarefas e histórico.'}</p>
-            ` : ''}
-          </div>` : ''}
-          <div class="field">
-            <button type="button" class="tipo-pessoa-select-btn" id="f-tipo-pessoa-select">
-              <span>${f.tipoPessoa==='juridica' ? '🏢 Pessoa jurídica' : '👤 Pessoa física'}</span>
-              <span class="tipo-pessoa-select-seta ${tipoPessoaDropdownAberto?'aberta':''}">▾</span>
-            </button>
-            ${tipoPessoaDropdownAberto ? `
-              <div class="tipo-pessoa-dropdown">
-                <button type="button" class="tipo-pessoa-dropdown-item" data-tipo-pessoa="fisica">👤 Pessoa física ${f.tipoPessoa!=='juridica'?'✓':''}</button>
-                <button type="button" class="tipo-pessoa-dropdown-item" data-tipo-pessoa="juridica">🏢 Pessoa jurídica ${f.tipoPessoa==='juridica'?'✓':''}</button>
+          ${(()=>{
+            const gestor = podeAtribuirLeads();
+            const caixaTipo = `
+              <div class="field">
+                <button type="button" class="tipo-pessoa-select-btn" id="f-tipo-pessoa-select" aria-label="Tipo de pessoa">
+                  <span>${f.tipoPessoa==='juridica' ? '🏢 Pessoa jurídica' : '👤 Pessoa física'}</span>
+                  <span class="tipo-pessoa-select-seta ${tipoPessoaDropdownAberto?'aberta':''}">▾</span>
+                </button>
+                ${tipoPessoaDropdownAberto ? `
+                  <div class="tipo-pessoa-dropdown">
+                    <button type="button" class="tipo-pessoa-dropdown-item" data-tipo-pessoa="fisica">👤 Pessoa física ${f.tipoPessoa!=='juridica'?'✓':''}</button>
+                    <button type="button" class="tipo-pessoa-dropdown-item" data-tipo-pessoa="juridica">🏢 Pessoa jurídica ${f.tipoPessoa==='juridica'?'✓':''}</button>
+                  </div>
+                ` : ''}
+              </div>`;
+            if(!gestor) return caixaTipo;
+            return `
+              <div class="field-row field-row-modo">
+                <div class="field">
+                  <button type="button" class="tipo-pessoa-select-btn" id="f-modo-gestor-select" aria-label="Modo de cadastro">
+                    <span>${f.__modoGestor ? '⭐ Gestor' : 'Padrão'}</span>
+                    <span class="tipo-pessoa-select-seta ${modoGestorDropdownAberto?'aberta':''}">▾</span>
+                  </button>
+                  ${modoGestorDropdownAberto ? `
+                    <div class="tipo-pessoa-dropdown">
+                      <button type="button" class="tipo-pessoa-dropdown-item" data-modo-gestor="0">Padrão ${!f.__modoGestor?'✓':''}</button>
+                      <button type="button" class="tipo-pessoa-dropdown-item" data-modo-gestor="1">⭐ Gestor ${f.__modoGestor?'✓':''}</button>
+                    </div>
+                  ` : ''}
+                </div>
+                ${caixaTipo}
               </div>
-            ` : ''}
-          </div>
+              ${f.__modoGestor ? `
+                <div class="field">
+                  <label>${f.__isNew ? 'Adicionar este lead para' : 'Passar este lead para'}</label>
+                  <select id="f-atribuir-para">
+                    <option value="">Selecione uma pessoa…</option>
+                    ${equipe.membros.filter(m=>!m.souEu).map(m=>`<option value="${m.id}" ${f.__atribuirParaId===m.id?'selected':''}>${esc(m.nome||m.email)}${m.papel==='supervisor'?' ⭐':''}</option>`).join('')}
+                  </select>
+                  <p class="settings-page-note" style="margin:6px 0 0">${f.__isNew ? 'O lead vai direto para o pipeline da pessoa escolhida, na coluna de mesmo nome (ou na primeira em aberto).' : 'O lead sai do seu pipeline e vai para o da pessoa escolhida, junto com conversas, anexos, tarefas e histórico.'}</p>
+                </div>` : ''}`;
+          })()}
           <div class="field">
             <label>${f.tipoPessoa==='juridica' ? 'Nome fantasia' : 'Nome do cliente'}</label>
             <input type="text" id="f-cliente" value="${esc(f.tipoPessoa==='juridica' ? (f.clienteJuridica||'') : (f.clienteFisica||''))}" placeholder="${f.tipoPessoa==='juridica' ? 'Ex: Padaria do João' : 'Ex: Ana Souza'}" />
@@ -680,6 +722,7 @@ function renderModal(){
 
   document.getElementById('f-tipo-pessoa-select').addEventListener('click', ()=>{
     tipoPessoaDropdownAberto = !tipoPessoaDropdownAberto;
+    modoGestorDropdownAberto = false;
     renderModal();
   });
   document.querySelectorAll('.tipo-pessoa-dropdown-item').forEach(btn=>{
@@ -702,8 +745,10 @@ function renderModal(){
   const contatoCargoInput = document.getElementById('f-contato-cargo');
   if(contatoCargoInput) contatoCargoInput.addEventListener('input', (e)=> modalForm.contatoCargo = e.target.value);
 
+  const modoSelectBtn = document.getElementById('f-modo-gestor-select');
+  if(modoSelectBtn) modoSelectBtn.addEventListener('click', ()=>{ modoGestorDropdownAberto = !modoGestorDropdownAberto; tipoPessoaDropdownAberto = false; renderModal(); });
   root.querySelectorAll('[data-modo-gestor]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ modalForm.__modoGestor = btn.dataset.modoGestor==='1'; if(!modalForm.__modoGestor) modalForm.__atribuirParaId = ''; renderModal(); });
+    btn.addEventListener('click', ()=>{ modalForm.__modoGestor = btn.dataset.modoGestor==='1'; if(!modalForm.__modoGestor) modalForm.__atribuirParaId = ''; modoGestorDropdownAberto = false; renderModal(); });
   });
   const atribuirParaSel = document.getElementById('f-atribuir-para');
   if(atribuirParaSel) atribuirParaSel.addEventListener('change', (e)=> modalForm.__atribuirParaId = e.target.value);

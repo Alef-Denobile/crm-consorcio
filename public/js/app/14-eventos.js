@@ -539,6 +539,15 @@ function bindAppEvents(){
       });
     });
   });
+  const contaNomeInput = document.getElementById('conta-nova-nome');
+  if(contaNomeInput) contaNomeInput.addEventListener('input', (e)=> contaNovaNome = e.target.value);
+  const contaEmailInput = document.getElementById('conta-nova-email');
+  if(contaEmailInput){
+    contaEmailInput.addEventListener('input', (e)=> contaNovaEmail = e.target.value);
+    contaEmailInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') criarContaMembro(); });
+  }
+  const criarContaBtn = app.querySelector('[data-action="criar-conta-membro"]');
+  if(criarContaBtn) criarContaBtn.addEventListener('click', criarContaMembro);
   const conviteEmailInput = document.getElementById('convite-email-novo');
   if(conviteEmailInput){
     conviteEmailInput.addEventListener('input', (e)=> conviteEmailNovo = e.target.value);

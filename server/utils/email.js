@@ -119,7 +119,23 @@ function montarEmailConviteEquipe({ gestorNome, link }) {
   return { assunto: 'Convite para equipe — Painel CRM', html, texto };
 }
 
+// e-mail de boas-vindas de quem teve a conta criada pelo gestor: o link deixa a própria pessoa escolher a senha
+function montarEmailBoasVindasEquipe({ nome, gestorNome, equipeNome, link, validadeDias }) {
+  const saudacao = nome ? `Olá, ${escaparHtml(nome)}!` : 'Olá!';
+  const quem = gestorNome ? escaparHtml(gestorNome) : 'Seu gestor';
+  const equipe = equipeNome ? ` (equipe ${escaparHtml(equipeNome)})` : '';
+  const html = moldeEmail('Sua conta no Painel CRM', `
+<p style="line-height:1.55;">${saudacao} ${quem} criou uma conta para você no Painel CRM${equipe}.</p>
+<p style="line-height:1.55;">Para começar, escolha a sua senha:</p>
+<p style="margin:24px 0;"><a href="${escaparHtml(link)}" style="background:#141414;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;display:inline-block;">Criar minha senha</a></p>
+<p style="line-height:1.55;font-size:14px;color:#555;">O link vale por ${validadeDias} dias e só pode ser usado uma vez. Se o botão não funcionar, copie e cole este endereço no navegador:<br><span style="word-break:break-all;">${escaparHtml(link)}</span></p>
+<p style="line-height:1.55;font-size:14px;color:#555;">Depois é só entrar com este e-mail e a senha que você escolheu. Seu funil de leads é só seu. Se o link vencer, use "Esqueci minha senha" na tela de login.</p>`);
+  const texto = `${nome ? `Olá, ${nome}!` : 'Olá!'} ${gestorNome || 'Seu gestor'} criou uma conta para você no Painel CRM. Escolha a sua senha neste link (vale por ${validadeDias} dias, uso único): ${link}`;
+  return { assunto: 'Sua conta no Painel CRM', html, texto };
+}
+
 module.exports = {
+  montarEmailBoasVindasEquipe,
   emailConfigurado,
   urlBaseDoApp,
   enviarEmail,

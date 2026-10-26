@@ -482,6 +482,7 @@ function goToPage(page){
   }
   if(currentPage === 'conversas') pararPollingConversa();
   currentPage = page;
+  if(page === 'equipe'){ equipeDentro = false; equipeMostrarNovo = false; } // sempre começa na lista de equipes
   dateMenuOpen = false;
   openMenuColId = null;
   addingCol = false;
@@ -531,7 +532,6 @@ function goToPage(page){
   }
   if(page === 'equipe'){
     equipeMsg = null;
-    equipeDentro = false; equipeMostrarNovo = false; // sempre começa na lista de equipes
   }
   if(page === 'comissoes'){
     loadContratos(); // recarrega sempre, pra pegar comissões que o Pipeline gerou automaticamente

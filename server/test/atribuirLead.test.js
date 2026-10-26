@@ -85,3 +85,15 @@ test('transferirTodosOsCards passa todos os leads em lote, mapeando colunas, e l
     assert.ok(chamadas.some((c) => c[0] === nome && c[2].userId === 'novo'), `${nome} não foi transferido`);
   }
 });
+
+test('com vários funis, o lead cai no funil de mesmo nome (ou no primeiro) e não numa coluna de outro funil', async () => {
+  const Funil = require('../models/Funil');
+  Funil.findById = async (id) => ({ _id: id, nome: id === 'fo' ? 'Principal' : 'X' });
+  Funil.find = () => ({ sort: async () => [{ _id: 'f1', nome: 'Indicações' }, { _id: 'f2', nome: 'principal' }] });
+  Column.findById = async () => ({ _id: 'origem', nome: 'Leads', tipo: 'aberto', funilId: 'fo' });
+  Column.find = () => ({ sort: async () => [
+    { _id: 'a', nome: 'Leads', tipo: 'aberto', ordem: 1, funilId: 'f1' },
+    { _id: 'b', nome: 'Leads', tipo: 'aberto', ordem: 2, funilId: 'f2' },
+  ] });
+  assert.equal((await colunaEquivalente('origem', MEMBRO))._id, 'b');
+});

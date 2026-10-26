@@ -326,7 +326,7 @@ async function addColumn(){
 
 /* ---------- modo gestor: passar o lead pra outra pessoa da equipe ---------- */
 function podeAtribuirLeads(){
-  return !!(equipe && equipe.souSupervisor && (equipe.membros||[]).some(m=>!m.souEu));
+  return !!(!atuandoComo && equipe && equipe.souSupervisor && (equipe.membros||[]).some(m=>!m.souEu));
 }
 
 async function saveCardFromModal(){

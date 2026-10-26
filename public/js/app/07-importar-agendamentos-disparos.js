@@ -400,6 +400,28 @@ async function entrarNaEquipe(){
     renderApp();
   }
 }
+async function criarContaMembro(){
+  if(criandoConta) return;
+  const nome = contaNovaNome.trim();
+  const email = contaNovaEmail.trim();
+  if(!nome || !email){ equipeMsg = { tipo:'erro', texto:'Digite o nome e o e-mail da pessoa.' }; renderApp(); return; }
+  criandoConta = true; contaNovaLink = null; equipeMsg = null;
+  renderApp();
+  try{
+    const r = await apiRequest('POST', '/equipe/criar-membro', { nome, email });
+    contaNovaNome = ''; contaNovaEmail = '';
+    contaNovaLink = (r && r.link) || null;
+    equipeMsg = { tipo:'ok', texto: (r && r.emailEnviado)
+      ? `Conta criada para ${nome}. Enviamos um e-mail para ${email} com o link para ela escolher a senha.`
+      : `Conta criada para ${nome}, mas o e-mail não foi enviado (o servidor não tem e-mail configurado). Mande o link abaixo para a pessoa.` };
+    criandoConta = false;
+    await loadEquipe();
+  }catch(e){
+    criandoConta = false;
+    equipeMsg = { tipo:'erro', texto: e.message || 'Não foi possível criar a conta.' };
+    renderApp();
+  }
+}
 async function enviarConviteEquipe(){
   const email = conviteEmailNovo.trim();
   if(!email){ equipeMsg = { tipo:'erro', texto:'Digite o e-mail da pessoa.' }; renderApp(); return; }

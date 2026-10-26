@@ -2,6 +2,7 @@ const User = require('../models/User');
 const { filtroMembros } = require('./equipesDoUsuario');
 const Column = require('../models/Column');
 const Card = require('../models/Card');
+const Funil = require('../models/Funil');
 const Message = require('../models/Message');
 const Anexo = require('../models/Anexo');
 const HistoricoContato = require('../models/HistoricoContato');
@@ -27,10 +28,26 @@ async function validarAtribuicao(gestorId, alvoId) {
 // Acha a coluna equivalente na conta da outra pessoa: mesmo nome (e tipo); se não tiver, a primeira coluna "em aberto".
 async function colunaEquivalente(colunaOrigemId, alvoId) {
   const origem = colunaOrigemId ? await Column.findById(colunaOrigemId) : null;
-  const colunasAlvo = await Column.find({ userId: alvoId }).sort({ ordem: 1 });
+  const todas = await Column.find({ userId: alvoId }).sort({ ordem: 1 });
   const norm = (t) => String(t || '').trim().toLowerCase();
+  // quem tem vários funis: procura primeiro no funil de mesmo nome do de origem (senão no primeiro funil dele),
+  // para o lead não cair numa coluna "Leads" de outro funil
+  let colunasAlvo = todas;
+  if (todas.some((c) => c.funilId)) {
+    const funisAlvo = await Funil.find({ userId: alvoId }).sort({ ordem: 1 });
+    let funilAlvo = null;
+    if (origem && origem.funilId) {
+      const funilOrigem = await Funil.findById(origem.funilId);
+      if (funilOrigem) funilAlvo = funisAlvo.find((f) => norm(f.nome) === norm(funilOrigem.nome)) || null;
+    }
+    if (!funilAlvo) funilAlvo = funisAlvo[0] || null;
+    if (funilAlvo) {
+      const doFunil = todas.filter((c) => String(c.funilId) === String(funilAlvo._id));
+      if (doFunil.length) colunasAlvo = doFunil;
+    }
+  }
   let destino = origem ? colunasAlvo.find((c) => norm(c.nome) === norm(origem.nome) && c.tipo === origem.tipo) : null;
-  if (!destino) destino = colunasAlvo.find((c) => c.tipo === 'aberto');
+  if (!destino) destino = colunasAlvo.find((c) => c.tipo === 'aberto') || todas.find((c) => c.tipo === 'aberto');
   return destino || null;
 }
 

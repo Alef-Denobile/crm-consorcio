@@ -10,7 +10,9 @@ const Column = require('../models/Column');
 const MetaVendasEquipe = require('../models/MetaVendasEquipe');
 const MetaVendas = require('../models/MetaVendas');
 const Task = require('../models/Task');
-const { emailConfigurado, urlBaseDoApp, enviarEmail, montarEmailConviteEquipe } = require('../utils/email');
+const { emailConfigurado, urlBaseDoApp, enviarEmail, montarEmailConviteEquipe, montarEmailBoasVindasEquipe } = require('../utils/email');
+const { gerarTokenReset } = require('../utils/senhaReset');
+const { seedColunasPadrao } = require('../seed');
 const { registrarAuditoria } = require('../utils/auditoria');
 const { transferirTodosOsCards } = require('../utils/atribuirLead');
 const T = require('../utils/equipesDoUsuario');
@@ -132,6 +134,53 @@ router.post('/convites', async (req, res) => {
     res.status(201).json({ emailEnviado });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao enviar o convite.' });
+  }
+});
+
+// POST /api/equipe/criar-membro -> o gestor cria a CONTA de uma pessoa, já dentro da equipe aberta, sem sair da própria conta.
+// Não define senha: a pessoa recebe um e-mail com um link (vale 7 dias) para escolher a dela.
+// Se o e-mail não puder ser enviado, a resposta traz o link para o gestor repassar.
+const VALIDADE_BOAS_VINDAS_DIAS = 7;
+router.post('/criar-membro', async (req, res) => {
+  try {
+    const gestor = await User.findById(req.userId);
+    if (!gestor || !gestor.equipeId || gestor.papelEquipe !== 'supervisor') {
+      return res.status(403).json({ error: 'Só o gestor da equipe pode criar contas.' });
+    }
+    const nome = String((req.body && req.body.nome) || '').trim().slice(0, 120);
+    const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+    if (!nome) return res.status(400).json({ error: 'Digite o nome da pessoa.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Digite um e-mail válido.' });
+    const existente = await User.findOne({ email });
+    if (existente) {
+      return res.status(409).json({ error: 'Já existe uma conta com esse e-mail. Use "Enviar convite" para chamar a pessoa para a equipe.' });
+    }
+
+    const perfil = gestor.perfil === 'rh' ? 'rh' : 'consorcio';
+    const { token, hash } = gerarTokenReset();
+    const user = await User.create({
+      nome, email, senhaHash: null, perfil,
+      equipeId: gestor.equipeId, papelEquipe: 'membro',
+      resetSenhaHash: hash,
+      resetSenhaExpira: new Date(Date.now() + VALIDADE_BOAS_VINDAS_DIAS * 24 * 3600 * 1000),
+    });
+    await seedColunasPadrao(user._id, perfil); // funil padrão, como em qualquer conta nova
+    registrarAuditoria(req.userId, 'conta_criada_pelo_gestor', `Criou a conta de "${email}" na equipe`);
+    registrarAuditoria(user._id, 'conta_criada_pelo_gestor', `Conta criada pelo gestor ${gestor.nome || gestor.email}`);
+
+    const link = `${urlBaseDoApp()}/login.html?reset=${token}`;
+    let emailEnviado = false;
+    if (emailConfigurado()) {
+      try {
+        const eq = await Equipe.findById(gestor.equipeId);
+        const msg = montarEmailBoasVindasEquipe({ nome, gestorNome: gestor.nome, equipeNome: eq && eq.nome, link, validadeDias: VALIDADE_BOAS_VINDAS_DIAS });
+        await enviarEmail({ para: email, assunto: msg.assunto, html: msg.html, texto: msg.texto });
+        emailEnviado = true;
+      } catch (e) { console.error('Erro ao enviar e-mail de boas-vindas:', e.message); }
+    }
+    res.status(201).json({ ok: true, emailEnviado, link: emailEnviado ? undefined : link });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao criar a conta.' });
   }
 });
 

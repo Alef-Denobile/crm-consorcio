@@ -71,6 +71,7 @@ function respostas(cenario) {
     'GET /api/tasks': { tasks: [] },
     'GET /api/calendar/status': { connected: false },
     'GET /api/equipe': cenario === 'semEquipe' ? semEquipe : { equipe: cenario === 'membro' ? { ...equipeGestor, souSupervisor: false, rodizio: null, convitesPendentes: [], codigoConvite: null } : equipeGestor, minhasEquipes: [{ id: 'e1', nome: 'Equipe Teste', papel: cenario === 'membro' ? 'membro' : 'supervisor', ativa: true, membros: 2 }, { id: 'e2', nome: 'Equipe do Norte', papel: cenario === 'membro' ? 'membro' : 'supervisor', ativa: false, membros: 4 }], convitesRecebidos: [] },
+    'POST /api/equipe/criar-membro': { ok: true, emailEnviado: true },
     'GET /api/equipe/supervisao': { mes, membros: [
       { userId: 'u1', nome: 'Gestor Teste', papel: 'supervisor', totalLeads: 2, ganhoValor: 80000, perdidoValor: 0, abertoValor: 50000, vendidoNoMes: 80000, metaMes: 0 },
       { userId: 'u2', nome: 'Ana Vendas', papel: 'membro', totalLeads: 5, ganhoValor: 30000, perdidoValor: 1000, abertoValor: 9000, vendidoNoMes: 30000, metaMes: 60000 },
@@ -166,6 +167,25 @@ async function abrir(browser, url, cenario, extra = {}) {
     const abrirEq = t.chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/api/equipe/abrir');
     checar('Abrir envia a equipe escolhida', !!abrirEq && JSON.parse(abrirEq.corpo).equipeId === 'e2', abrirEq && abrirEq.corpo);
 
+    console.log('Gestor: novo lead (Padrão ou Gestor, depois física ou jurídica)');
+    await t.page.click('[data-action="nav"][data-page="leads"]');
+    await t.page.waitForTimeout(300);
+    await t.page.click('[data-action="open-new-lead"] >> nth=0');
+    checar('gestor escolhe primeiro Padrão ou Gestor', (await t.page.locator('[data-modo-novo]').count()) === 2);
+    await t.page.click('[data-modo-novo="1"]');
+    checar('depois escolhe pessoa física ou jurídica', (await t.page.locator('.tipo-pessoa-escolha-btn[data-tipo]').count()) === 2);
+    await t.page.click('.tipo-pessoa-escolha-btn[data-tipo="juridica"]');
+    checar('o formulário abre com as duas caixas lado a lado (Gestor + jurídica)', (await t.page.locator('.field-row-modo #f-modo-gestor-select').count()) === 1 && (await t.page.locator('.field-row-modo #f-tipo-pessoa-select').count()) === 1 && (await t.page.locator('#f-modo-gestor-select').innerText()).includes('Gestor') && (await t.page.locator('#f-tipo-pessoa-select').innerText()).includes('jurídica'));
+    checar('modo Gestor mostra para quem vai o lead', (await t.page.locator('#f-atribuir-para').count()) === 1);
+    await t.page.click('#f-modo-gestor-select');
+    await t.page.click('[data-modo-gestor="0"]');
+    checar('trocar a caixa para Padrão esconde a escolha de pessoa', (await t.page.locator('#f-atribuir-para').count()) === 0);
+    await t.page.click('#modal-close');
+    await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
+    await t.page.waitForTimeout(200);
+    await t.page.click('.equipe-cartao >> text=Equipe Teste');
+    await t.page.waitForTimeout(300);
+
     console.log('Gestor: rodízio, metas e remoção de membro');
     await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
     await t.page.waitForTimeout(300);
@@ -181,6 +201,13 @@ async function abrir(browser, url, cenario, extra = {}) {
       const put = t.chamadas.find((c) => c.metodo === 'PUT' && c.caminho === '/api/equipe/rodizio');
       checar('salvar rodízio envia ativo + membro escolhido', !!put && JSON.parse(put.corpo).ativo === true && JSON.parse(put.corpo).membros.includes('u2'), put && put.corpo);
     }
+    await t.page.fill('#conta-nova-nome', 'Beto Novo');
+    await t.page.fill('#conta-nova-email', 'beto@x.com');
+    await t.page.click('[data-action="criar-conta-membro"]');
+    await t.page.waitForTimeout(400);
+    const criar = t.chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/api/equipe/criar-membro');
+    checar('gestor cria a conta da pessoa na aba Gestão (nome + e-mail, sem senha)', !!criar && JSON.parse(criar.corpo).email === 'beto@x.com' && JSON.parse(criar.corpo).nome === 'Beto Novo' && !('senha' in JSON.parse(criar.corpo)), criar && criar.corpo);
+    checar('avisa que o e-mail com o link de senha foi enviado', (await t.page.locator('.settings-page-msg.ok', { hasText: 'link para ela escolher a senha' }).count()) >= 1);
     checar('tabela mostra coluna "Meta do mês"', (await t.page.locator('th', { hasText: 'Meta do mês' }).count()) >= 1);
     const defMeta = t.page.locator('[data-action="definir-meta-membro"]').first();
     if (await defMeta.count()) {

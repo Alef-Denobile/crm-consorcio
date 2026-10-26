@@ -495,8 +495,20 @@ function renderRankingSupervisao(membros){
 function renderSupervisaoConteudo(){
   return `
     <div class="settings-page-section" style="margin-bottom:20px;">
+      <h3>Criar conta para alguém</h3>
+      <p class="settings-page-note">Cria a conta da pessoa já dentro desta equipe, sem você sair da sua. Ela recebe um e-mail com um link para escolher a própria senha. O funil de leads dela é só dela.</p>
+      <div class="field-row">
+        <div class="field"><input type="text" id="conta-nova-nome" placeholder="Nome da pessoa" value="${esc(contaNovaNome)}" /></div>
+        <div class="field"><input type="email" id="conta-nova-email" placeholder="E-mail da pessoa" value="${esc(contaNovaEmail)}" /></div>
+      </div>
+      <button class="btn-primary" data-action="criar-conta-membro" ${criandoConta?'disabled':''}>${criandoConta?'Criando…':'Criar conta'}</button>
+      ${contaNovaLink ? `
+        <p class="settings-page-note" style="margin-top:12px;">O e-mail não pôde ser enviado. Mande este link para a pessoa (vale por 7 dias, uso único):</p>
+        <div class="field"><input type="text" id="conta-nova-link" value="${esc(contaNovaLink)}" readonly onclick="this.select()" /></div>
+      ` : ''}
+      <div class="settings-sep-line"></div>
       <h3>Adicionar pessoas</h3>
-      <p class="settings-page-note">Convide pelo e-mail: a pessoa vê o convite na aba Equipe do CRM dela e entra quando aceitar. O funil de cada um continua separado.</p>
+      <p class="settings-page-note">Quem já tem conta? Convide pelo e-mail: a pessoa vê o convite na aba Equipe do CRM dela e entra quando aceitar. O funil de cada um continua separado.</p>
       <div class="field">
         <input type="email" id="convite-email-novo" placeholder="E-mail da pessoa (o mesmo do cadastro dela)" value="${esc(conviteEmailNovo)}" />
       </div>
