@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#141414" />
 <link rel="icon" href="icons/icon-192.png" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
-<link rel="stylesheet" href="css/style.css?v=20261114" />
+<link rel="stylesheet" href="css/style.css?v=20261118" />
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -35,7 +35,7 @@
         </div>
         <div class="field">
           <label>Senha</label>
-          <input type="password" id="a-senha" placeholder="Mínimo 6 caracteres" required minlength="6" />
+          <input type="password" id="a-senha" placeholder="Senha" required />
         </div>
         <button type="submit" class="btn-save auth-submit" id="auth-submit">Entrar</button>
         <p id="esqueci-wrap" style="display:none;text-align:center;font-size:calc(13px * var(--fs,1));margin:12px 0 0;"><a href="#" id="esqueci-link" style="color:inherit;opacity:.8;">Esqueci minha senha</a></p>
@@ -55,7 +55,7 @@
         <p class="settings-page-note">Crie uma nova senha para a sua conta.</p>
         <div class="field">
           <label>Nova senha</label>
-          <input type="password" id="reset-senha" placeholder="Mínimo 6 caracteres" required minlength="6" autocomplete="new-password" />
+          <input type="password" id="reset-senha" placeholder="Mínimo 8 caracteres" required minlength="8" autocomplete="new-password" />
         </div>
         <div class="field">
           <label>Repita a nova senha</label>
@@ -83,6 +83,6 @@
     </div>
   </div>
 
-  <script src="js/login.js?v=20261114"></script>
+  <script src="js/login.js?v=20261118"></script>
 </body>
 </html>

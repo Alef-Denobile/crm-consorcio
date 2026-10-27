@@ -204,7 +204,7 @@ main.pipeline-main{ padding-bottom:4px; }
 .modal-head button:hover{ color:#fff; background:rgba(255,255,255,.1); }
 .modal-body{ padding:20px; display:flex; flex-direction:column; gap:14px; max-height:70vh; overflow-y:auto; }
 .field label{ font-size:calc(12px * var(--fs,1)); font-weight:600; color:var(--ink-soft); }
-.field input[type=text], .field input[type=number], .field input[type=month], .field select, .field textarea{
+.field input[type=text], .field input[type=email], .field input[type=number], .field input[type=month], .field select, .field textarea{
   width:100%; margin-top:5px; padding:10px 12px; min-height:42px; border-radius:8px; border:1px solid var(--line); font-size:calc(13px * var(--fs,1)); outline:none; font-family:inherit; color:var(--ink); background:var(--paper);
 }
 /* Campos de data/hora — estilizados à parte porque, por padrão, o navegador não
@@ -1075,4 +1075,16 @@ html.a11y-destaque :is(button,.btn-outline,.btn-primary,.tab-btn,.nav-item){ bor
 @media (max-width: 768px){
   .overlay{ z-index:190; }
   .conversas-overlay-backdrop{ z-index:190; }
+}
+
+/* caixas de escolha do formulário do lead (Padrão/Gestor e Física/Jurídica): a lista abre POR CIMA, sem empurrar o resto */
+.field-dropdown{ position:relative; }
+.field-dropdown .tipo-pessoa-dropdown{ position:absolute; left:0; right:0; top:calc(100% + 4px); margin-top:0; z-index:40; box-shadow:0 12px 28px rgba(0,0,0,.18); }
+
+/* alinhamento (computador): abas do mês, resumo e colunas do Pipeline começam na mesma linha do título */
+.main-area .tabs, .main-area .stats-wrap{ padding-left:0; padding-right:0; }
+.main-area main{ padding-left:0; padding-right:0; }
+/* celular, Leads: os chips (Todos/Novos/Ganho/Perdido) já filtram — esconde o seletor repetido e os botões de exportar, que só atrapalham a tela pequena */
+@media (max-width: 768px){
+  .leads-toolbar #leads-status-filter, .leads-toolbar [data-action="exportar-leads"], .leads-toolbar [data-action="exportar-leads-xlsx"]{ display:none; }
 }

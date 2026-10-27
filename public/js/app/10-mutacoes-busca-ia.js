@@ -825,8 +825,8 @@ async function desconectarTodosDispositivos(){
   }
 }
 async function salvarSenha(){
-  if(!senhaNovaVal || senhaNovaVal.length < 6){
-    senhaMsg = { tipo:'erro', texto:'A nova senha precisa ter ao menos 6 caracteres.' };
+  if(!senhaNovaVal || senhaNovaVal.length < 8){
+    senhaMsg = { tipo:'erro', texto:'A nova senha precisa ter ao menos 8 caracteres.' };
     renderApp();
     if(modalAlterarSenhaAberto) renderAlterarSenhaModal();
     return;

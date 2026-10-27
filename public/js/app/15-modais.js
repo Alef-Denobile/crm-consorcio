@@ -303,7 +303,6 @@ function ligarBindingsExtras(){
     etiquetaInputValor = '';
     renderModal();
   });
-  app.querySelectorAll ? null : null; // (sem uso — mantém o padrão dos outros bindings do arquivo)
 
   document.querySelectorAll('[data-action="extras-ir"]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ extrasTela = btn.dataset.tela; renderModal(); });
@@ -446,7 +445,7 @@ function renderModal(){
           ${(()=>{
             const gestor = podeAtribuirLeads();
             const caixaTipo = `
-              <div class="field">
+              <div class="field field-dropdown">
                 <button type="button" class="tipo-pessoa-select-btn" id="f-tipo-pessoa-select" aria-label="Tipo de pessoa">
                   <span>${f.tipoPessoa==='juridica' ? '🏢 Pessoa jurídica' : '👤 Pessoa física'}</span>
                   <span class="tipo-pessoa-select-seta ${tipoPessoaDropdownAberto?'aberta':''}">▾</span>
@@ -461,7 +460,7 @@ function renderModal(){
             if(!gestor) return caixaTipo;
             return `
               <div class="field-row field-row-modo">
-                <div class="field">
+                <div class="field field-dropdown">
                   <button type="button" class="tipo-pessoa-select-btn" id="f-modo-gestor-select" aria-label="Modo de cadastro">
                     <span>${f.__modoGestor ? '⭐ Gestor' : 'Padrão'}</span>
                     <span class="tipo-pessoa-select-seta ${modoGestorDropdownAberto?'aberta':''}">▾</span>
@@ -954,7 +953,7 @@ function renderAlterarSenhaModal(){
           </div>
           <div class="field">
             <label>Nova senha</label>
-            <input type="password" id="s-senha-nova" value="${esc(senhaNovaVal)}" placeholder="Mínimo 6 caracteres" />
+            <input type="password" id="s-senha-nova" value="${esc(senhaNovaVal)}" placeholder="Mínimo 8 caracteres" />
           </div>
           ${senhaMsg ? `<p class="settings-page-msg ${senhaMsg.tipo}">${esc(senhaMsg.texto)}</p>` : ''}
         </div>

@@ -68,3 +68,27 @@ function iniciarPerfilRH(){
 iniciarPerfilRH();
 // a conta pode virar "rh" depois que o /auth/me responde
 document.addEventListener('DOMContentLoaded', iniciarPerfilRH);
+
+
+/* ---------- janelas (modais): leitor de tela + tecla Esc ---------- */
+(function(){
+  const root = document.getElementById('modal-root');
+  if(!root) return;
+  // toda janela que abrir ganha role="dialog" e o título como nome (para leitores de tela)
+  new MutationObserver(()=>{
+    root.querySelectorAll('.modal:not([role])').forEach(m=>{
+      m.setAttribute('role','dialog');
+      m.setAttribute('aria-modal','true');
+      const h = m.querySelector('.modal-head h3');
+      if(h){ if(!h.id) h.id = 'modal-titulo'; m.setAttribute('aria-labelledby', h.id); }
+    });
+  }).observe(root, { childList:true, subtree:true });
+  // Esc fecha a janela aberta (o mesmo que clicar no ✕)
+  document.addEventListener('keydown', (e)=>{
+    if(e.key !== 'Escape' || e.defaultPrevented) return;
+    const overlay = root.querySelector('.overlay');
+    if(!overlay) return;
+    const fechar = overlay.querySelector('#modal-close') || overlay.querySelector('.modal-head button');
+    if(fechar){ e.preventDefault(); fechar.click(); }
+  });
+})();

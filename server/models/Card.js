@@ -75,4 +75,8 @@ cardSchema.pre('findOneAndUpdate', function (next) {
   next();
 });
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+cardSchema.index({ userId: 1, columnId: 1, ordem: 1 });
+cardSchema.index({ userId: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Card', cardSchema);

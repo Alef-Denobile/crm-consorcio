@@ -19,4 +19,7 @@ const auditLogSchema = new mongoose.Schema(
   }
 );
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+auditLogSchema.index({ userId: 1, createdAt: -1 });
+
 module.exports = mongoose.model('AuditLog', auditLogSchema);

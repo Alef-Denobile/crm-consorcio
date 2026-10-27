@@ -492,9 +492,15 @@ function renderRankingSupervisao(membros){
   }
   return html || '<p class="dash-empty">Nenhum membro ainda.</p>';
 }
-function renderSupervisaoConteudo(){
-  return `
-    <div class="settings-page-section" style="margin-bottom:20px;">
+// Aba Gestão: mesmo tratamento das Configurações — lista de seções ao lado e uma seção por vez
+const GESTAO_SECOES = [
+  { grupo: 'Pessoas', itens: [['membros', 'Membros'], ['criar-conta', 'Criar conta'], ['convites', 'Convites e código']] },
+  { grupo: 'Desempenho', itens: [['ranking', 'Ranking'], ['desempenho', 'Desempenho e metas']] },
+  { grupo: 'Distribuição', itens: [['rodizio', 'Rodízio de leads']] },
+];
+function gestaoBloco(corpo){ return `<div class="settings-page-section">${corpo}</div>`; }
+function renderGestaoCriarConta(){
+  return gestaoBloco(`
       <h3>Criar conta para alguém</h3>
       <p class="settings-page-note">Cria a conta da pessoa já dentro desta equipe, sem você sair da sua. Ela recebe um e-mail com um link para escolher a própria senha. O funil de leads dela é só dela.</p>
       <div class="field-row">
@@ -506,7 +512,11 @@ function renderSupervisaoConteudo(){
         <p class="settings-page-note" style="margin-top:12px;">O e-mail não pôde ser enviado. Mande este link para a pessoa (vale por 7 dias, uso único):</p>
         <div class="field"><input type="text" id="conta-nova-link" value="${esc(contaNovaLink)}" readonly onclick="this.select()" /></div>
       ` : ''}
-      <div class="settings-sep-line"></div>
+      ${equipeMsg ? `<p class="settings-page-msg ${equipeMsg.tipo}" style="margin-top:12px;">${esc(equipeMsg.texto)}</p>` : ''}
+  `);
+}
+function renderGestaoConvites(){
+  return gestaoBloco(`
       <h3>Adicionar pessoas</h3>
       <p class="settings-page-note">Quem já tem conta? Convide pelo e-mail: a pessoa vê o convite na aba Equipe do CRM dela e entra quando aceitar. O funil de cada um continua separado.</p>
       <div class="field">
@@ -521,15 +531,16 @@ function renderSupervisaoConteudo(){
             <button class="btn-outline" data-action="cancelar-convite-equipe" data-convite-id="${c.id}">Cancelar</button>
           </div>`).join('')}
       ` : ''}
-      ${equipeMsg ? `<p class="settings-page-msg ${equipeMsg.tipo}">${esc(equipeMsg.texto)}</p>` : ''}
+      ${equipeMsg ? `<p class="settings-page-msg ${equipeMsg.tipo}" style="margin-top:12px;">${esc(equipeMsg.texto)}</p>` : ''}
       <div class="settings-sep-line"></div>
       <h3>Ou use o código</h3>
       <p class="settings-page-note">Compartilhe esse código — quem entrar com ele vira membro da equipe, mantendo o funil próprio dele:</p>
       <div class="settings-page-row"><span>Código de convite</span><span style="font-family:'IBM Plex Mono',monospace; font-weight:700; letter-spacing:.05em;">${esc(equipe.codigoConvite||'')}</span></div>
       <button class="btn-outline" data-action="regenerar-codigo-equipe">Gerar novo código</button>
-    </div>
-
-    <div class="settings-page-section" style="margin-bottom:20px;">
+  `);
+}
+function renderGestaoRodizio(){
+  return gestaoBloco(`
       <h3>Rodízio de leads novos</h3>
       <p class="settings-page-note">Com o rodízio ligado, cada lead novo que chegar pelo seu WhatsApp ou por formulário de anúncio vai para a próxima pessoa da lista, uma de cada vez. O menu de triagem e a IA não rodam nesses leads. Se a pessoa não tiver WhatsApp próprio conectado, ela responde pelo seu número.</p>
       <label class="settings-page-row" style="cursor:pointer;"><span>Rodízio ligado</span><input type="checkbox" id="rodizio-ativo" ${(equipe.rodizio&&equipe.rodizio.ativo)?'checked':''} /></label>
@@ -538,9 +549,10 @@ function renderSupervisaoConteudo(){
         <label class="settings-page-row" style="cursor:pointer;"><span>${esc(m.nome||m.email)}${m.souEu?' (você)':''}</span><input type="checkbox" class="rodizio-membro" value="${m.id}" ${((equipe.rodizio&&equipe.rodizio.membros)||[]).includes(String(m.id))?'checked':''} /></label>
       `).join('')}
       <button class="btn-primary" data-action="salvar-rodizio" style="margin-top:10px;">Salvar rodízio</button>
-    </div>
-
-    <div class="settings-page-section" style="margin-bottom:20px;">
+  `);
+}
+function renderGestaoMembros(){
+  return gestaoBloco(`
       <h3>Membros</h3>
       <div class="disparo-lista-leads" style="max-height:none;">
         ${membrosOrdenados(equipe.membros).map(m=>`
@@ -559,14 +571,16 @@ function renderSupervisaoConteudo(){
         `).join('')}
       </div>
       <button class="btn-outline" data-action="sair-equipe" style="margin-top:10px;">Sair da equipe</button>
-    </div>
-
-    <div class="settings-page-section" style="margin-bottom:20px;">
+  `);
+}
+function renderGestaoRanking(){
+  return gestaoBloco(`
       <h3>Ranking de desempenho (por valor ganho)</h3>
       ${!supervisaoLoaded ? `<p class="settings-page-note">Carregando…</p>` : (supervisaoMembros.length ? renderRankingSupervisao(supervisaoMembros) : `<p class="dash-empty">Nenhum membro ainda.</p>`)}
-    </div>
-
-    <div class="settings-page-section">
+  `);
+}
+function renderGestaoDesempenho(){
+  return gestaoBloco(`
       <h3>Desempenho por membro</h3>
       ${!supervisaoLoaded ? `<p class="settings-page-note">Carregando…</p>` : `
         <div class="leads-table-wrap" style="border:none;">
@@ -591,6 +605,23 @@ function renderSupervisaoConteudo(){
           </table>
         </div>
       `}
+  `);
+}
+function renderSupervisaoConteudo(){
+  const secoes = { 'membros': renderGestaoMembros, 'criar-conta': renderGestaoCriarConta, 'convites': renderGestaoConvites, 'ranking': renderGestaoRanking, 'desempenho': renderGestaoDesempenho, 'rodizio': renderGestaoRodizio };
+  if(!secoes[gestaoSecao]) gestaoSecao = 'membros';
+  return `
+    <div class="config-layout ${gestaoMobileConteudo?'mostrando-conteudo':'mostrando-lista'}">
+      <div class="config-sidebar">
+        ${GESTAO_SECOES.map(g=>`
+          <div class="config-sidebar-grupo">${g.grupo}</div>
+          ${g.itens.map(([key,label])=>`<button class="config-sidebar-item ${gestaoSecao===key?'active':''}" data-action="set-gestao-secao" data-secao="${key}">${label}</button>`).join('')}
+        `).join('')}
+      </div>
+      <div class="config-content">
+        <button type="button" class="config-voltar-mobile" data-action="gestao-voltar-lista">‹ Gestão</button>
+        ${secoes[gestaoSecao]()}
+      </div>
     </div>
   `;
 }

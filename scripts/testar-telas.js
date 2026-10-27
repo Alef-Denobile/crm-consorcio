@@ -140,6 +140,7 @@ async function abrir(browser, url, cenario, extra = {}) {
     for (const pg of paginas) {
       await t.page.click(`[data-action="nav"][data-page="${pg}"]`);
       await t.page.waitForTimeout(250);
+      if (process.env.CAPTURAS) await t.page.screenshot({ path: `/tmp/pg-${pg}.png` });
       checar(`página "${pg}" abre sem erro`, t.erros.length === 0, t.erros[t.erros.length - 1]);
     }
 
@@ -179,8 +180,32 @@ async function abrir(browser, url, cenario, extra = {}) {
     checar('modo Gestor mostra para quem vai o lead', (await t.page.locator('#f-atribuir-para').count()) === 1);
     await t.page.click('#f-modo-gestor-select');
     await t.page.click('[data-modo-gestor="0"]');
+    await t.page.click('#f-modo-gestor-select');
+    const antes = await t.page.locator('#f-cliente').boundingBox();
+    await t.page.click('#f-tipo-pessoa-select');
+    const depois = await t.page.locator('#f-cliente').boundingBox();
+    if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/lead-dropdown.png' });
+    checar('a lista aberta fica por cima: o resto da tela não desce', !!antes && !!depois && Math.abs(antes.y - depois.y) < 2 && (await t.page.locator('.field-dropdown .tipo-pessoa-dropdown').count()) === 1);
+    await t.page.click('#f-tipo-pessoa-select');
+    await t.page.click('#f-modo-gestor-select');
     checar('trocar a caixa para Padrão esconde a escolha de pessoa', (await t.page.locator('#f-atribuir-para').count()) === 0);
     await t.page.click('#modal-close');
+    await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
+    await t.page.waitForTimeout(200);
+    await t.page.click('.equipe-cartao >> text=Equipe Teste');
+    await t.page.waitForTimeout(300);
+
+    console.log('Janelas: acessibilidade e Esc');
+    await t.page.click('[data-action="nav"][data-page="leads"]');
+    await t.page.waitForTimeout(200);
+    await t.page.click('[data-action="open-new-lead"] >> nth=0');
+    await t.page.click('[data-modo-novo="0"]');
+    await t.page.click('.tipo-pessoa-escolha-btn[data-tipo="fisica"]');
+    await t.page.waitForTimeout(100);
+    checar('a janela do lead tem role="dialog" e aria-modal', (await t.page.locator('#modal-root .modal[role="dialog"][aria-modal="true"]').count()) === 1);
+    await t.page.keyboard.press('Escape');
+    await t.page.waitForTimeout(100);
+    checar('Esc fecha a janela', (await t.page.locator('#modal-root .overlay').count()) === 0);
     await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
     await t.page.waitForTimeout(200);
     await t.page.click('.equipe-cartao >> text=Equipe Teste');
@@ -191,6 +216,9 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.waitForTimeout(300);
     await t.page.click('[data-action="set-equipe-subtab"][data-subtab="supervisao"]').catch(() => {});
     await t.page.waitForTimeout(500);
+    checar('Gestão tem lista de seções como nas Configurações (Pessoas, Desempenho, Distribuição)', (await t.page.locator('.config-sidebar-item[data-action="set-gestao-secao"]').count()) === 6);
+    checar('Gestão abre mostrando uma seção só (Membros)', (await t.page.locator('#rodizio-ativo').count()) === 0 && (await t.page.locator('[data-action="remover-membro"]').count()) >= 1);
+    await t.page.click('[data-action="set-gestao-secao"][data-secao="rodizio"]'); await t.page.waitForTimeout(150);
     const temEquipe = await t.page.locator('#rodizio-ativo').count();
     checar('seção de rodízio aparece na página Equipe', temEquipe === 1);
     if (temEquipe) {
@@ -201,6 +229,8 @@ async function abrir(browser, url, cenario, extra = {}) {
       const put = t.chamadas.find((c) => c.metodo === 'PUT' && c.caminho === '/api/equipe/rodizio');
       checar('salvar rodízio envia ativo + membro escolhido', !!put && JSON.parse(put.corpo).ativo === true && JSON.parse(put.corpo).membros.includes('u2'), put && put.corpo);
     }
+    await t.page.click('[data-action="set-gestao-secao"][data-secao="criar-conta"]'); await t.page.waitForTimeout(150);
+    if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/gestao-criar-conta.png' });
     await t.page.fill('#conta-nova-nome', 'Beto Novo');
     await t.page.fill('#conta-nova-email', 'beto@x.com');
     await t.page.click('[data-action="criar-conta-membro"]');
@@ -208,6 +238,7 @@ async function abrir(browser, url, cenario, extra = {}) {
     const criar = t.chamadas.find((c) => c.metodo === 'POST' && c.caminho === '/api/equipe/criar-membro');
     checar('gestor cria a conta da pessoa na aba Gestão (nome + e-mail, sem senha)', !!criar && JSON.parse(criar.corpo).email === 'beto@x.com' && JSON.parse(criar.corpo).nome === 'Beto Novo' && !('senha' in JSON.parse(criar.corpo)), criar && criar.corpo);
     checar('avisa que o e-mail com o link de senha foi enviado', (await t.page.locator('.settings-page-msg.ok', { hasText: 'link para ela escolher a senha' }).count()) >= 1);
+    await t.page.click('[data-action="set-gestao-secao"][data-secao="desempenho"]'); await t.page.waitForTimeout(150);
     checar('tabela mostra coluna "Meta do mês"', (await t.page.locator('th', { hasText: 'Meta do mês' }).count()) >= 1);
     const defMeta = t.page.locator('[data-action="definir-meta-membro"]').first();
     if (await defMeta.count()) {
@@ -220,6 +251,7 @@ async function abrir(browser, url, cenario, extra = {}) {
       checar('salvar meta envia o valor digitado', !!putMeta && JSON.parse(putMeta.corpo).valorMeta === 45000, putMeta && putMeta.corpo);
       checar('modal de meta fecha', (await t.page.locator('#meta-membro-valor').count()) === 0);
     } else checar('botão Definir meta existe', false);
+    await t.page.click('[data-action="set-gestao-secao"][data-secao="membros"]'); await t.page.waitForTimeout(150);
     const rem = t.page.locator('[data-action="remover-membro"]').first();
     if (await rem.count()) {
       await rem.click();
@@ -230,6 +262,7 @@ async function abrir(browser, url, cenario, extra = {}) {
 
     console.log('Gestor: atuar no funil de um consultor');
     await t.page.evaluate(() => { document.getElementById('modal-root').innerHTML = ''; });
+    await t.page.click('[data-action="set-gestao-secao"][data-secao="ranking"]'); await t.page.waitForTimeout(150);
     const abrirFunil = t.page.locator('[data-action="atuar-como-membro"]').first();
     checar('ranking tem o botão "Abrir funil"', (await abrirFunil.count()) === 1);
     if (await abrirFunil.count()) {

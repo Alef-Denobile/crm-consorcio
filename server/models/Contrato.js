@@ -45,4 +45,7 @@ const contratoSchema = new mongoose.Schema(
   }
 );
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+contratoSchema.index({ userId: 1 });
+
 module.exports = mongoose.model('Contrato', contratoSchema);

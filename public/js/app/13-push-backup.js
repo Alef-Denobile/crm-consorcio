@@ -309,8 +309,20 @@ function renderBlocoDuplicados(){
   `;
 }
 
+// versão do painel que está rodando neste aparelho (vem do ?v= do script carregado)
+function versaoDoPainel(){
+  try{
+    const el = document.querySelector('script[src*="01-base.js"]');
+    const m = el && /[?&]v=(\d+)/.exec(el.getAttribute('src'));
+    return m ? m[1] : '';
+  }catch(e){ return ''; }
+}
 function renderConfigManutencao(){
   return `
+    <div class="settings-page-section">
+      <h3>Versão do painel</h3>
+      <p class="settings-page-note">Versão carregada neste aparelho: <b>${esc(versaoDoPainel() || 'desconhecida')}</b>. Se for mais antiga do que a que você acabou de publicar, o site ainda não atualizou (ou o navegador está com a versão antiga guardada).</p>
+    </div>
     <div class="settings-page-section">
       <h3>Backup dos seus dados</h3>
       <p class="settings-page-note">Guarda ou restaura uma cópia de todos os seus clientes, tarefas, comissões, mensagens e configurações.</p>

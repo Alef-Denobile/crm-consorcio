@@ -33,6 +33,7 @@ async function abrirEquipeDaLista(equipeId){
     equipeMsg = null;
     equipeSubTab = 'chat';
     equipeDentro = true;
+    gestaoMobileConteudo = false;
     await loadEquipe();
   }catch(e){
     errorMsg = e.message || 'Não foi possível abrir a equipe.';

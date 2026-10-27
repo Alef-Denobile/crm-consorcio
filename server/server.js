@@ -70,10 +70,24 @@ process.on('unhandledRejection', (motivo) => {
 });
 
 app.use(cors());
+// cabeçalhos de segurança básicos (sem bloquear o uso em iframe, que a página pública de agendamento pode precisar)
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 // Guarda o corpo CRU só dos webhooks (Meta e YCloud) — a conferência da assinatura (X-Hub-Signature-256)
 // precisa dos bytes exatos que a Meta mandou, e depois do parse do JSON isso se perde.
+// Corpos grandes (50 MB) só onde realmente existem: anexos de cliente e restauração de backup.
+// O resto da API aceita até 10 MB — um limite alto em tudo facilita derrubar o servidor com pedidos enormes.
+const verificarCorpoCru = (req, _res, buf) => {
+  if (req.originalUrl.startsWith('/api/whatsapp/webhook') || req.originalUrl.startsWith('/api/whatsapp/ycloud-webhook') || req.originalUrl.startsWith('/api/instagram/webhook')) {
+    req.rawBody = buf;
+  }
+};
+app.use(['/api/backup', /^\/api\/cards\/[^/]+\/anexos/], express.json({ limit: '50mb', verify: verificarCorpoCru }));
 app.use(express.json({
-  limit: '50mb',
+  limit: '10mb',
   verify: (req, _res, buf) => {
     if (req.originalUrl.startsWith('/api/whatsapp/webhook') || req.originalUrl.startsWith('/api/whatsapp/ycloud-webhook') || req.originalUrl.startsWith('/api/instagram/webhook')) {
       req.rawBody = buf;

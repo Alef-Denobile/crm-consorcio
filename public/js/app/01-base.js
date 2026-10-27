@@ -415,6 +415,8 @@ let equipeNomeNovo = '';
 let equipeCodigoEntrar = '';
 let equipeMsg = null;
 let equipeSubTab = 'chat'; // dentro de uma equipe: 'chat' | 'supervisao'
+let gestaoSecao = 'membros';        // aba Gestão: seção aberta
+let gestaoMobileConteudo = false;   // celular: mostrando a seção (true) ou a lista de seções (false)
 let equipeDentro = false;  // false = lista de equipes; true = dentro da equipe aberta
 let equipeMostrarNovo = false; // botão "+": mostra criar equipe / entrar com código
 let minhasEquipes = []; // [{id, nome, papel, ativa, membros}] — todas as equipes de que a pessoa faz parte

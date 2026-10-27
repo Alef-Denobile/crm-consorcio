@@ -23,4 +23,8 @@ const fluxoExecucaoSchema = new mongoose.Schema(
   }
 );
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+fluxoExecucaoSchema.index({ cardId: 1 });
+fluxoExecucaoSchema.index({ userId: 1 });
+
 module.exports = mongoose.model('FluxoExecucao', fluxoExecucaoSchema);

@@ -22,4 +22,7 @@ const anexoSchema = new mongoose.Schema(
   }
 );
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+anexoSchema.index({ cardId: 1 });
+
 module.exports = mongoose.model('Anexo', anexoSchema);

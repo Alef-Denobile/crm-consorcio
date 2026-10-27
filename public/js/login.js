@@ -48,6 +48,7 @@ document.querySelectorAll('.auth-tab').forEach(btn=>{
     document.querySelectorAll('.auth-tab').forEach(b=> b.classList.toggle('active', b===btn));
     fieldNome.style.display = modo==='register' ? 'block' : 'none';
     submitBtn.textContent = modo==='register' ? 'Criar conta' : 'Entrar';
+    document.getElementById('a-senha').placeholder = modo==='register' ? 'Mínimo 8 caracteres' : 'Senha';
     errorBox.style.display = 'none';
   });
 });
@@ -62,6 +63,7 @@ form.addEventListener('submit', async (e)=>{
   const nome = document.getElementById('a-nome').value.trim();
 
   const path = modo==='register' ? '/auth/register' : '/auth/login';
+  if(modo==='register' && senha.length < 8){ mostrarErro('A senha precisa ter ao menos 8 caracteres.'); submitBtn.disabled = false; return; }
   const body = modo==='register' ? { nome, email, senha, perfil: PERFIL } : { email, senha };
 
   try{
@@ -244,7 +246,7 @@ resetForm.addEventListener('submit', async (e)=>{
   errorBox.style.display = 'none';
   const s1 = document.getElementById('reset-senha').value;
   const s2 = document.getElementById('reset-senha2').value;
-  if(s1.length < 6){ mostrarErro('A senha precisa ter ao menos 6 caracteres.'); return; }
+  if(s1.length < 8){ mostrarErro('A senha precisa ter ao menos 8 caracteres.'); return; }
   if(s1 !== s2){ mostrarErro('As duas senhas não são iguais.'); return; }
   const btn = document.getElementById('reset-submit');
   btn.disabled = true;

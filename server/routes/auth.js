@@ -24,6 +24,12 @@ const limiteLogin = criarMiddlewareLimite({
   chaveDe: (req) => `login:${req.ip}`,
   mensagem: 'Muitas tentativas de login. Aguarde alguns minutos e tente de novo.',
 });
+// cadastro aberto: freia criação de contas em massa por IP (30 por hora)
+const limiteCadastro = criarMiddlewareLimite({
+  janelaMs: 60 * 60 * 1000, max: 30,
+  chaveDe: (req) => `cadastro:${req.ip}`,
+  mensagem: 'Muitos cadastros deste endereço. Tente de novo mais tarde.',
+});
 const limite2FA = criarMiddlewareLimite({
   janelaMs: 15 * 60 * 1000, max: 10,
   chaveDe: (req) => `2fa:${req.ip}`,
@@ -55,15 +61,15 @@ function gerarTempToken2FA(user) {
 }
 
 // POST /api/auth/register -> cria a conta e já devolve o token (login automático)
-router.post('/register', async (req, res) => {
+router.post('/register', limiteCadastro, async (req, res) => {
   try {
     const { nome, email, senha } = req.body;
     const perfil = req.body.perfil === 'rh' ? 'rh' : 'consorcio'; // 'rh' vem da página /adm
     if (!email || !senha) {
       return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
     }
-    if (senha.length < 6) {
-      return res.status(400).json({ error: 'A senha precisa ter ao menos 6 caracteres.' });
+    if (senha.length < 8) {
+      return res.status(400).json({ error: 'A senha precisa ter ao menos 8 caracteres.' });
     }
 
     const emailNormalizado = email.toLowerCase().trim();
@@ -354,8 +360,8 @@ router.post('/redefinir-senha', limiteRedefinir, async (req, res) => {
   try {
     const { token, senhaNova } = req.body || {};
     if (!token || !senhaNova) return res.status(400).json({ error: 'Link inválido ou senha ausente.' });
-    if (String(senhaNova).length < 6) {
-      return res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres.' });
+    if (String(senhaNova).length < 8) {
+      return res.status(400).json({ error: 'A nova senha precisa ter ao menos 8 caracteres.' });
     }
     const user = await User.findOne({ resetSenhaHash: hashToken(token) });
     if (!tokenResetValido(user, token)) {
@@ -386,8 +392,8 @@ router.post('/redefinir-senha', limiteRedefinir, async (req, res) => {
 router.put('/password', auth, async (req, res) => {
   try {
     const { senhaAtual, senhaNova } = req.body;
-    if (!senhaNova || senhaNova.length < 6) {
-      return res.status(400).json({ error: 'A nova senha precisa ter ao menos 6 caracteres.' });
+    if (!senhaNova || senhaNova.length < 8) {
+      return res.status(400).json({ error: 'A nova senha precisa ter ao menos 8 caracteres.' });
     }
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: 'Usuário não encontrado.' });

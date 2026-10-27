@@ -29,4 +29,8 @@ const messageSchema = new mongoose.Schema(
   }
 );
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+messageSchema.index({ cardId: 1, createdAt: 1 });
+messageSchema.index({ userId: 1 });
+
 module.exports = mongoose.model('Message', messageSchema);

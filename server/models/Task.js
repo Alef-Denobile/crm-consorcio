@@ -26,4 +26,8 @@ const taskSchema = new mongoose.Schema(
   }
 );
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+taskSchema.index({ userId: 1, vencimento: 1 });
+taskSchema.index({ leadId: 1 });
+
 module.exports = mongoose.model('Task', taskSchema);

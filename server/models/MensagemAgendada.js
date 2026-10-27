@@ -22,4 +22,8 @@ const mensagemAgendadaSchema = new mongoose.Schema(
   }
 );
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+mensagemAgendadaSchema.index({ cardId: 1 });
+mensagemAgendadaSchema.index({ userId: 1 });
+
 module.exports = mongoose.model('MensagemAgendada', mensagemAgendadaSchema);

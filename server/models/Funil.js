@@ -18,4 +18,7 @@ const funilSchema = new mongoose.Schema(
   }
 );
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+funilSchema.index({ userId: 1, ordem: 1 });
+
 module.exports = mongoose.model('Funil', funilSchema);

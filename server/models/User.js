@@ -140,4 +140,8 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+// Índices (consultas mais usadas): sem eles o banco lê a coleção inteira a cada pedido
+userSchema.index({ equipeId: 1 });
+userSchema.index({ 'outrasEquipes.equipeId': 1 });
+
 module.exports = mongoose.model('User', userSchema);

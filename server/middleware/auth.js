@@ -5,6 +5,10 @@ const AuditLog = require('../models/AuditLog');
 const { filtroMembros } = require('../utils/equipesDoUsuario');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'troque-este-segredo-no-env';
+if (!process.env.JWT_SECRET && process.env.NODE_ENV !== 'test' && !process.argv.some((a) => a.includes('--test'))) {
+  // sem JWT_SECRET qualquer pessoa conseguiria forjar um login: define a variável no Render (Environment)
+  console.warn('⚠ ATENÇÃO: JWT_SECRET não está definido. Defina uma frase longa e secreta nas variáveis de ambiente do servidor.');
+}
 
 // Protege rotas: exige um header "Authorization: Bearer <token>" válido.
 // Também confere se o token ainda é a versão mais recente do usuário — permite
