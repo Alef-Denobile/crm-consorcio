@@ -1181,3 +1181,9 @@ main.pipeline-main{ padding-top:16px; }
 .auth-passo-titulo{ font-family:'Fraunces',serif; font-size:calc(20px * var(--fs,1)); font-weight:600; margin:0; text-align:center; }
 #nome-form .settings-page-note{ text-align:center; }
 @media (prefers-reduced-motion: reduce){ .auth-tab-pill, .auth-box{ transition:none; } .auth-slide, #auth-main, #nome-form{ animation:none !important; } }
+
+/* Relatórios: alternar entre gráfico e lista */
+.rel-visao{ display:inline-flex; gap:4px; padding:4px; margin:0 0 14px; background:var(--col-bg); border-radius:10px; }
+.rel-visao-btn{ min-height:40px; padding:0 18px; border:none; border-radius:8px; background:none; color:var(--ink-soft); font-family:inherit; font-size:calc(13px * var(--fs,1)); font-weight:600; cursor:pointer; }
+.rel-visao-btn.active{ background:var(--accent); color:#fff; }
+[data-theme="dark"] .rel-visao-btn.active{ background:var(--ink); color:var(--bg); }

@@ -147,6 +147,12 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.click('[data-action="nav"][data-page="relatorios"]');
     await t.page.waitForTimeout(250);
     checar('relatórios: gráficos de barras dos 12 meses', (await t.page.locator('.rel-graficos .dash-panel').count()) === 2 && (await t.page.locator('.rel-coluna').count()) % 12 === 0);
+    await t.page.click('[data-action="rel-visao"][data-visao="lista"]');
+    await t.page.waitForTimeout(200);
+    checar('relatórios: botão Lista mostra os 12 meses em linhas (sem gráfico)', (await t.page.locator('.rel-grafico').count()) === 0 && (await t.page.locator('.stage-row').count()) >= 24);
+    await t.page.click('[data-action="rel-visao"][data-visao="grafico"]');
+    await t.page.waitForTimeout(200);
+    checar('relatórios: botão Gráfico volta aos gráficos', (await t.page.locator('.rel-graficos').count()) === 1);
     await t.page.click('[data-action="nav"][data-page="pipeline"]');
     await t.page.waitForTimeout(250);
     checar('pipeline: filtro de ordenar fica na linha das abas', (await t.page.locator('.tabs .pipeline-ordenar-row').count()) === 1);

@@ -173,6 +173,13 @@ function bindEventosAutomacoesEImportar(){
 
   /* -- Relatórios -- */
   const relatorioFunilSelect = document.getElementById('relatorio-funil-select');
+  app.querySelectorAll('[data-action="rel-visao"]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      relatorioVisao = btn.dataset.visao === 'lista' ? 'lista' : 'grafico';
+      try{ localStorage.setItem('relatorio-visao', relatorioVisao); }catch(e){}
+      renderApp();
+    });
+  });
   if(relatorioFunilSelect) relatorioFunilSelect.addEventListener('change', (e)=>{ relatorioFunilId = e.target.value; renderApp(); });
   const exportarXlsxBtn = app.querySelector('[data-action="exportar-xlsx"]');
   if(exportarXlsxBtn) exportarXlsxBtn.addEventListener('click', exportarXlsx);

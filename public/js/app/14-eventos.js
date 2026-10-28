@@ -211,7 +211,6 @@ function trocarEtapaMobile(colId, durante){
     const ativo = c.dataset.colId === colId;
     c.classList.toggle('active', ativo);
     c.setAttribute('aria-selected', ativo ? 'true' : 'false');
-    if(ativo && c.scrollIntoView) c.scrollIntoView({ inline:'center', block:'nearest' });
   });
 }
 function atualizarAutoScrollDoArrasto(x, y, colAlvo){
@@ -219,7 +218,8 @@ function atualizarAutoScrollDoArrasto(x, y, colAlvo){
   if(ehCelular() && cardTouchDrag){
     // celular: a página inteira rola (a lista da etapa não tem rolagem própria)
     let dy = 0;
-    if(!cardTouchDrag.chipHover && y < 130) dy = -12;
+    const topoLivreY = (document.querySelector('.main-topbar') || { getBoundingClientRect:()=>({ bottom:0 }) }).getBoundingClientRect().bottom;
+    if(!cardTouchDrag.chipHover && y < topoLivreY + 60) dy = -12;
     else if(y > window.innerHeight - 150) dy = 12;
     // na ponta da fileira de etapas, ela desliza e mostra as próximas (quanto mais na ponta, mais rápido)
     let dxChips = 0;

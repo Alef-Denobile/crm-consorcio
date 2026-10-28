@@ -276,6 +276,11 @@ function renderRelatoriosPage(){
       <div class="metric-card"><div class="metric-card-top"><span>Total de leads</span></div><div class="metric-value">${cardsRel.length}</div></div>
     </div>
 
+    <div class="rel-visao" role="group" aria-label="Como mostrar os 12 meses">
+      <button type="button" class="rel-visao-btn ${relatorioVisao==='grafico'?'active':''}" data-action="rel-visao" data-visao="grafico" aria-pressed="${relatorioVisao==='grafico'}">Gráfico</button>
+      <button type="button" class="rel-visao-btn ${relatorioVisao==='lista'?'active':''}" data-action="rel-visao" data-visao="lista" aria-pressed="${relatorioVisao==='lista'}">Lista</button>
+    </div>
+    ${relatorioVisao==='grafico' ? `
     <div class="rel-graficos">
       <div class="dash-panel">
         <div class="dash-panel-title">Valor ganho por mês</div>
@@ -285,7 +290,30 @@ function renderRelatoriosPage(){
         <div class="dash-panel-title">Novos leads por mês</div>
         ${graficoMensal(dados, d=>d.novos, n=>String(n), d=>`${d.novos} lead${d.novos===1?'':'s'}`, 'Nenhum lead novo nos últimos 12 meses.')}
       </div>
+    </div>` : `
+    <div class="dash-panel">
+      <div class="dash-panel-title">Valor ganho por mês (histórico)</div>
+      <div class="stage-list">
+        ${dados.map(d=>`
+          <div class="stage-row">
+            <div class="stage-row-top"><span>${monthLabel(d.key)}</span><span>${fmtBRL(d.ganhoValor)} ${d.ganhoQtd?`· ${d.ganhoQtd} venda${d.ganhoQtd===1?'':'s'}`:''}</span></div>
+            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${d.ganhoValor/Math.max(1, ...dados.map(x=>x.ganhoValor))*100}%"></div></div>
+          </div>
+        `).join('')}
+      </div>
     </div>
+
+    <div class="dash-panel">
+      <div class="dash-panel-title">Novos leads por mês</div>
+      <div class="stage-list">
+        ${dados.map(d=>`
+          <div class="stage-row">
+            <div class="stage-row-top"><span>${monthLabel(d.key)}</span><span>${d.novos}</span></div>
+            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${d.novos/Math.max(1, ...dados.map(x=>x.novos))*100}%"></div></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`}
 
     <div class="dash-panel">
       <div class="dash-panel-title">Leads por qualificação</div>

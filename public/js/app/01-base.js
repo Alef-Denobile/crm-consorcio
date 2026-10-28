@@ -402,6 +402,8 @@ let funilAtualId = null;
 let editingFunilId = null;
 let editingFunilName = '';
 let relatorioFunilId = '';
+let relatorioVisao = 'grafico'; // 'grafico' | 'lista' — Relatórios: como mostrar os 12 meses
+try{ if(localStorage.getItem('relatorio-visao')==='lista') relatorioVisao = 'lista'; }catch(e){}
 let equipe = null;
 let equipeLoaded = false;
 let metaVendasEquipeId = null; // de qual equipe é a meta carregada (recarrega ao trocar de equipe)
