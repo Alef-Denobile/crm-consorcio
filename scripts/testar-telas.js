@@ -144,6 +144,13 @@ async function abrir(browser, url, cenario, extra = {}) {
       checar(`página "${pg}" abre sem erro`, t.erros.length === 0, t.erros[t.erros.length - 1]);
     }
 
+    await t.page.click('[data-action="nav"][data-page="relatorios"]');
+    await t.page.waitForTimeout(250);
+    checar('relatórios: gráficos de barras dos 12 meses', (await t.page.locator('.rel-graficos .dash-panel').count()) === 2 && (await t.page.locator('.rel-coluna').count()) % 12 === 0);
+    await t.page.click('[data-action="nav"][data-page="pipeline"]');
+    await t.page.waitForTimeout(250);
+    checar('pipeline: filtro de ordenar fica na linha das abas', (await t.page.locator('.tabs .pipeline-ordenar-row').count()) === 1);
+
     console.log('Equipe: lista de equipes (várias equipes)');
     await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
     await t.page.waitForTimeout(400);
@@ -217,7 +224,7 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.click('[data-action="set-equipe-subtab"][data-subtab="supervisao"]').catch(() => {});
     await t.page.waitForTimeout(500);
     checar('Gestão tem lista de seções como nas Configurações (Pessoas, Desempenho, Distribuição)', (await t.page.locator('.config-sidebar-item[data-action="set-gestao-secao"]').count()) === 6);
-    checar('Gestão abre mostrando uma seção só (Membros)', (await t.page.locator('#rodizio-ativo').count()) === 0 && (await t.page.locator('[data-action="remover-membro"]').count()) >= 1);
+    checar('Gestão abre mostrando uma seção só (Membros)', (await t.page.locator('#rodizio-ativo').count()) === 0 && (await t.page.locator('[data-action="abrir-opcoes-membro"]').count()) >= 1);
     await t.page.click('[data-action="set-gestao-secao"][data-secao="rodizio"]'); await t.page.waitForTimeout(150);
     const temEquipe = await t.page.locator('#rodizio-ativo').count();
     checar('seção de rodízio aparece na página Equipe', temEquipe === 1);
@@ -252,9 +259,13 @@ async function abrir(browser, url, cenario, extra = {}) {
       checar('modal de meta fecha', (await t.page.locator('#meta-membro-valor').count()) === 0);
     } else checar('botão Definir meta existe', false);
     await t.page.click('[data-action="set-gestao-secao"][data-secao="membros"]'); await t.page.waitForTimeout(150);
-    const rem = t.page.locator('[data-action="remover-membro"]').first();
-    if (await rem.count()) {
-      await rem.click();
+    const opc = t.page.locator('[data-action="abrir-opcoes-membro"]').first();
+    if (await opc.count()) {
+      await opc.click();
+      await t.page.waitForTimeout(250);
+      checar('Opções do membro abre janela com as 3 ações', (await t.page.locator('#opcoes-membro-overlay .opcao-membro').count()) === 3);
+      if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/membro-opcoes.png' });
+      await t.page.click('#opcao-remover');
       await t.page.waitForTimeout(400);
       checar('janela de remover membro abre (manter / passar leads)', (await t.page.locator('#rm-destino').count()) >= 1 || (await t.page.locator('input[type=radio]').count()) >= 2);
     } else checar('botão Remover existe', false);
@@ -365,9 +376,11 @@ async function abrir(browser, url, cenario, extra = {}) {
     console.log('Celular: barra inferior, Pipeline por etapa, Leads em cartões, Configurações em lista');
     t = await abrir(browser, url, 'mobile', { mobile: true });
     await t.page.waitForTimeout(700);
-    checar('celular: barra inferior aparece com 5 botões', (await t.page.locator('.bottom-nav .bottom-nav-item').count()) === 5 && await t.page.locator('.bottom-nav').isVisible());
+    checar('celular: sem barra embaixo; o menu abre pelos três pontinhos do topo', !(await t.page.locator('.bottom-nav').isVisible()) && await t.page.locator('.main-topbar .hamburger-btn').isVisible());
+    const irMobile = async (pg) => { await t.page.click('.main-topbar .hamburger-btn'); await t.page.waitForTimeout(350); await t.page.click(`.sidebar [data-page="${pg}"]`); await t.page.waitForTimeout(350); };
     checar('celular: o menu lateral fechado não deixa sombra nem aparece', await t.page.evaluate(() => { const e = document.querySelector('.sidebar'); const c = getComputedStyle(e); return c.visibility === 'hidden' && c.boxShadow === 'none'; }));
-    await t.page.click('.bottom-nav [data-page="pipeline"]');
+    await irMobile('pipeline');
+    checar('celular: cartão com uma faixa só (arrastar + trocar etapa)', (await t.page.locator('.card .card-faixa .card-drag-handle').count()) > 0 && (await t.page.locator('.card .card-faixa .card-move-btn').count()) > 0);
     await t.page.waitForTimeout(400);
     if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/cel-pipeline.png' });
     checar('celular: Pipeline tem uma aba por etapa', (await t.page.locator('#etapas-chips-mobile .etapa-chip-mobile').count()) === 3);
@@ -399,7 +412,7 @@ async function abrir(browser, url, cenario, extra = {}) {
     const dadosMover = mover && JSON.parse(mover.corpo);
     checar('celular: soltar acima do outro cliente manda a etapa nova e a ordem antes dele', !!dadosMover && dadosMover.columnId === 'c2' && dadosMover.ordem < 0, mover && mover.corpo);
 
-    await t.page.click('.bottom-nav [data-page="leads"]');
+    await irMobile('leads');
     await t.page.waitForTimeout(400);
     if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/cel-leads.png' });
     checar('celular: Leads vira lista de cartões (sem tabela)', (await t.page.locator('.lead-card-mobile').count()) === 3 && !(await t.page.locator('.leads-table-wrap').isVisible()));
@@ -409,10 +422,7 @@ async function abrir(browser, url, cenario, extra = {}) {
     checar('celular: a janela do lead ocupa a tela toda', await t.page.evaluate(() => { const m = document.querySelector('#modal-root .modal'); return !!m && Math.round(m.getBoundingClientRect().width) === window.innerWidth; }));
     await t.page.evaluate(() => { document.getElementById('modal-root').innerHTML = ''; });
 
-    await t.page.click('.bottom-nav [data-action="toggle-sidebar"]');
-    await t.page.waitForTimeout(400);
-    await t.page.click('.sidebar [data-page="configuracoes"]');
-    await t.page.waitForTimeout(400);
+    await irMobile('configuracoes');
     if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/cel-config.png' });
     checar('celular: Configurações abre em lista', (await t.page.locator('.config-layout.mostrando-lista').count()) === 1 && !(await t.page.locator('.config-content').isVisible()) && await t.page.locator('.config-sidebar').isVisible());
     await t.page.click('.config-sidebar-item[data-categoria="acessibilidade"]');
@@ -422,8 +432,7 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.waitForTimeout(250);
     checar('celular: voltar mostra a lista de novo', await t.page.locator('.config-sidebar').isVisible());
     for (const pg of ['dashboard', 'pipeline', 'leads', 'conversas']) {
-      await t.page.click(`.bottom-nav [data-page="${pg}"]`);
-      await t.page.waitForTimeout(300);
+      await irMobile(pg);
       const l = await t.page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
       checar(`celular: "${pg}" não estoura a largura da tela`, l.sw <= l.cw + 1, JSON.stringify(l));
     }

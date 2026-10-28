@@ -223,11 +223,32 @@ function cardsParaRelatorio(){
   const colunaIds = new Set(board.columns.filter(c=>c.funilId===relatorioFunilId).map(c=>c.id));
   return board.cards.filter(c=>colunaIds.has(c.columnId));
 }
+// Valor curto para cima da barra: 15,6 mil · 1,2 mi
+function valorCurto(v){
+  const f = (n)=> n.toLocaleString('pt-BR', { maximumFractionDigits:1 });
+  if(v >= 1e6) return f(v/1e6)+' mi';
+  if(v >= 1e3) return f(v/1e3)+' mil';
+  return f(v);
+}
+function graficoMensal(dados, valorDe, formatarEixo, textoDoMes, vazio){
+  const max = Math.max(0, ...dados.map(valorDe));
+  if(!max) return `<p class="dash-empty">${vazio}</p>`;
+  const comValor = dados.filter(d=> valorDe(d) > 0).slice().reverse();
+  return `
+    <div class="rel-grafico" role="img" aria-label="${esc(dados.map(d=>`${monthLabel(d.key)}: ${textoDoMes(d)}`).join('; '))}">
+      ${dados.map(d=>{ const v = valorDe(d); return `
+        <div class="rel-coluna" title="${esc(monthLabel(d.key))}: ${esc(textoDoMes(d))}">
+          <div class="rel-barra-area"><div class="rel-barra" style="height:${v ? Math.max(4, v/max*100) : 0}%">${v ? `<span class="rel-valor ${v===max?'rel-max':''}">${esc(formatarEixo(v))}</span>` : ''}</div></div>
+          <span class="rel-mes">${esc(monthLabel(d.key).slice(0,3))}</span>
+        </div>`; }).join('')}
+    </div>
+    <ul class="rel-lista">
+      ${comValor.map(d=>`<li><span>${esc(monthLabel(d.key))}</span><b>${esc(textoDoMes(d))}</b></li>`).join('')}
+    </ul>`;
+}
 function renderRelatoriosPage(){
   const cardsRel = cardsParaRelatorio();
   const dados = relatoriosDadosMensais(12, cardsRel);
-  const maxNovos = Math.max(1, ...dados.map(d=>d.novos));
-  const maxGanhoValor = Math.max(1, ...dados.map(d=>d.ganhoValor));
   const totalGanho = cardsRel.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='ganho' ? s+(Number(c.valor)||0) : s; },0);
   const totalPerdido = cardsRel.reduce((s,c)=>{ const col=board.columns.find(k=>k.id===c.columnId); return col&&col.tipo==='perdido' ? s+(Number(c.valor)||0) : s; },0);
   const porTemp = ['quente','morno','frio'].map(t=>({ temp:t, count: cardsRel.filter(c=>c.temperatura===t).length }));
@@ -255,27 +276,14 @@ function renderRelatoriosPage(){
       <div class="metric-card"><div class="metric-card-top"><span>Total de leads</span></div><div class="metric-value">${cardsRel.length}</div></div>
     </div>
 
-    <div class="dash-panel">
-      <div class="dash-panel-title">Valor ganho por mês (histórico)</div>
-      <div class="stage-list">
-        ${dados.map(d=>`
-          <div class="stage-row">
-            <div class="stage-row-top"><span>${monthLabel(d.key)}</span><span>${fmtBRL(d.ganhoValor)} ${d.ganhoQtd?`· ${d.ganhoQtd} venda${d.ganhoQtd===1?'':'s'}`:''}</span></div>
-            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${d.ganhoValor/maxGanhoValor*100}%"></div></div>
-          </div>
-        `).join('')}
+    <div class="rel-graficos">
+      <div class="dash-panel">
+        <div class="dash-panel-title">Valor ganho por mês</div>
+        ${graficoMensal(dados, d=>d.ganhoValor, valorCurto, d=>`${fmtBRL(d.ganhoValor)}${d.ganhoQtd?` · ${d.ganhoQtd} venda${d.ganhoQtd===1?'':'s'}`:''}`, 'Nenhuma venda nos últimos 12 meses.')}
       </div>
-    </div>
-
-    <div class="dash-panel">
-      <div class="dash-panel-title">Novos leads por mês</div>
-      <div class="stage-list">
-        ${dados.map(d=>`
-          <div class="stage-row">
-            <div class="stage-row-top"><span>${monthLabel(d.key)}</span><span>${d.novos}</span></div>
-            <div class="stage-bar-track"><div class="stage-bar-fill" style="width:${d.novos/maxNovos*100}%"></div></div>
-          </div>
-        `).join('')}
+      <div class="dash-panel">
+        <div class="dash-panel-title">Novos leads por mês</div>
+        ${graficoMensal(dados, d=>d.novos, n=>String(n), d=>`${d.novos} lead${d.novos===1?'':'s'}`, 'Nenhum lead novo nos últimos 12 meses.')}
       </div>
     </div>
 
@@ -551,22 +559,46 @@ function renderGestaoRodizio(){
       <button class="btn-primary" data-action="salvar-rodizio" style="margin-top:10px;">Salvar rodízio</button>
   `);
 }
+// Opções de um membro (promover/rebaixar, supervisor de dados, remover) numa janela por cima da tela
+function abrirOpcoesMembroModal(userId){
+  const m = (equipe && equipe.membros || []).find(x=>String(x.id)===String(userId));
+  if(!m || m.souEu) return;
+  const nome = m.nome || m.email;
+  const ehGestor = m.papel==='supervisor';
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="overlay" id="opcoes-membro-overlay">
+      <div class="modal" role="dialog" aria-label="Opções de ${esc(nome)}">
+        <div class="modal-head">
+          <h3>${esc(nome)}</h3>
+          <button id="opcoes-membro-close" aria-label="Fechar">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="settings-page-note" style="margin:0">${ehGestor?'⭐ Gestor':'Membro'}${m.supervisorDeDados?' · 🛠 Supervisor de dados':''}</p>
+          <button class="opcao-membro" id="opcao-papel"><b>${ehGestor?'Rebaixar para membro':'Promover a gestor'}</b><span>${ehGestor?'Deixa de ver e gerir a equipe.':'Passa a ver e gerir a equipe.'}</span></button>
+          <button class="opcao-membro" id="opcao-dados"><b>${m.supervisorDeDados?'Remover supervisor de dados':'Tornar supervisor de dados'}</b><span>Acesso ao monitoramento de erros e dados do painel.</span></button>
+          <button class="opcao-membro opcao-perigo" id="opcao-remover"><b>Remover da equipe</b><span>Você escolhe o que fazer com os leads dele.</span></button>
+        </div>
+      </div>
+    </div>`;
+  const fechar = ()=>{ root.innerHTML = ''; };
+  document.getElementById('opcoes-membro-close').addEventListener('click', fechar);
+  document.getElementById('opcoes-membro-overlay').addEventListener('click', (e)=>{ if(e.target.id==='opcoes-membro-overlay') fechar(); });
+  document.getElementById('opcao-papel').addEventListener('click', ()=>{ fechar(); alterarPapelMembro(m.id, ehGestor?'membro':'supervisor'); });
+  document.getElementById('opcao-dados').addEventListener('click', ()=>{ fechar(); alterarSupervisorDeDados(m.id, !m.supervisorDeDados); });
+  document.getElementById('opcao-remover').addEventListener('click', ()=>{ fechar(); abrirRemoverMembroModal(m.id); });
+}
 function renderGestaoMembros(){
   return gestaoBloco(`
       <h3>Membros</h3>
       <div class="disparo-lista-leads" style="max-height:none;">
         ${membrosOrdenados(equipe.membros).map(m=>`
-          <div class="disparo-lead-item ${m.papel==='supervisor'?'membro-supervisor-destaque':''}" style="cursor:default; flex-direction:column; align-items:stretch; gap:8px;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <span>${esc(m.nome||m.email)} — ${m.papel==='supervisor'?'⭐ Gestor':'Membro'}${m.supervisorDeDados?' · 🛠 Supervisor de dados':''}${m.souEu?' (você)':''}</span>
-              ${!m.souEu ? `
-                <div class="settings-btn-row">
-                  <button class="btn-outline" data-action="alterar-papel-membro" data-user-id="${m.id}" data-papel="${m.papel==='supervisor'?'membro':'supervisor'}">${m.papel==='supervisor'?'Rebaixar':'Promover'}</button>
-                  <button class="btn-outline" data-action="toggle-supervisor-dados" data-user-id="${m.id}" data-ativo="${m.supervisorDeDados?'0':'1'}">${m.supervisorDeDados?'Remover supervisor de dados':'Tornar supervisor de dados'}</button>
-                  <button class="btn-outline" data-action="remover-membro" data-user-id="${m.id}">Remover</button>
-                </div>
-              ` : ''}
+          <div class="disparo-lead-item membro-linha ${m.papel==='supervisor'?'membro-supervisor-destaque':''}" style="cursor:default;">
+            <div class="membro-info">
+              <span class="membro-nome">${esc(m.nome||m.email)}${m.souEu?' (você)':''}</span>
+              <span class="membro-papel">${m.papel==='supervisor'?'⭐ Gestor':'Membro'}${m.supervisorDeDados?' · 🛠 Supervisor de dados':''}</span>
             </div>
+            ${!m.souEu ? `<button class="btn-outline membro-opcoes-btn" data-action="abrir-opcoes-membro" data-user-id="${m.id}" aria-label="Opções de ${esc(m.nome||m.email)}">Opções</button>` : ''}
           </div>
         `).join('')}
       </div>

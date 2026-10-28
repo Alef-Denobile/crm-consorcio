@@ -93,6 +93,9 @@ function bindEventosEquipe(){
   app.querySelectorAll('[data-action="alterar-papel-membro"]').forEach(btn=>{
     btn.addEventListener('click', ()=> alterarPapelMembro(btn.dataset.userId, btn.dataset.papel));
   });
+  app.querySelectorAll('[data-action="abrir-opcoes-membro"]').forEach(btn=>{
+    btn.addEventListener('click', ()=> abrirOpcoesMembroModal(btn.dataset.userId));
+  });
   app.querySelectorAll('[data-action="toggle-supervisor-dados"]').forEach(btn=>{
     btn.addEventListener('click', ()=> alterarSupervisorDeDados(btn.dataset.userId, btn.dataset.ativo==='1'));
   });

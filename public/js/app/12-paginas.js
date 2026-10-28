@@ -247,6 +247,10 @@ function renderPipelinePage(){
         ` : ''}
       </div>
       <button class="tab-btn ${filtroEsfriando?'active':''}" data-action="toggle-esfriando" title="Leads em aberto sem atividade há mais de 7 dias">🧊 Esfriando</button>
+      <div class="pipeline-ordenar-row">
+        ${pipelineOrdenando ? `<span class="settings-page-note">Reordenando…</span>` : ''}
+        ${renderBotaoOrdenar('pipeline', pipelineOrdenarPor, 'Ordem manual (arrastar)')}
+      </div>
     </div>
 
     <div class="stats-wrap-fixo">
@@ -280,11 +284,6 @@ function renderPipelinePage(){
         </div>
       ` : ''}
     </div>` : ''}
-
-    <div class="pipeline-ordenar-row">
-      ${renderBotaoOrdenar('pipeline', pipelineOrdenarPor, 'Ordem manual (arrastar)')}
-      ${pipelineOrdenando ? `<span class="settings-page-note">Reordenando…</span>` : ''}
-    </div>
 
     ${columnsDoFunil.length ? `
     <div class="etapas-chips-mobile" id="etapas-chips-mobile" role="tablist" aria-label="Etapas do funil">
@@ -481,15 +480,17 @@ function renderCard(card){
   const showMonth = filterMonth === null && card.mesInicioContato;
   return `
     <div class="card" draggable="true" data-card-id="${card.id}">
-      <div class="card-drag-handle" title="Arraste para mover">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <circle cx="5" cy="3" r="1.4"/><circle cx="11" cy="3" r="1.4"/>
-          <circle cx="5" cy="8" r="1.4"/><circle cx="11" cy="8" r="1.4"/>
-          <circle cx="5" cy="13" r="1.4"/><circle cx="11" cy="13" r="1.4"/>
-        </svg>
-      </div>
-      <div class="card-move-wrap">
-        <button class="card-move-btn" data-action="toggle-move-menu" data-card-id="${card.id}" title="Mover pra outra coluna">${ICON_MOVE}</button>
+      <div class="card-faixa">
+        <div class="card-drag-handle" title="Arraste para mover">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="3" r="1.4"/><circle cx="11" cy="3" r="1.4"/>
+            <circle cx="5" cy="8" r="1.4"/><circle cx="11" cy="8" r="1.4"/>
+            <circle cx="5" cy="13" r="1.4"/><circle cx="11" cy="13" r="1.4"/>
+          </svg>
+        </div>
+        <div class="card-move-wrap">
+          <button class="card-move-btn" data-action="toggle-move-menu" data-card-id="${card.id}" title="Mover pra outra coluna" aria-label="Mover pra outra coluna">${ICON_MOVE}</button>
+        </div>
       </div>
       <div class="card-main">
         <div class="card-perf"></div>

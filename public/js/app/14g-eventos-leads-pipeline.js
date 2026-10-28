@@ -266,6 +266,7 @@ function bindEventosLeadsEPipeline(){
         if(!cardTouchDrag || cardTouchDrag.modoRolagem) return; // já virou rolagem, não inicia arrastar
         try{ cardEl.setPointerCapture(cardTouchDrag.pointerId); }catch(err){ /* aparelho sem suporte — segue sem capturar */ }
         iniciarArrastoDeCard(cardTouchDrag.ultimoX, cardTouchDrag.ultimoY);
+        acompanharArrastoNoDocumento(cardTouchDrag.pointerId);
       }, 280);
     });
 
@@ -294,23 +295,18 @@ function bindEventosLeadsEPipeline(){
         return;
       }
 
-      if(!cardTouchDrag.arrastando) return; // ainda esperando o temporizador decidir
-      e.preventDefault();
-      atualizarArrastoDeCard(e.clientX, e.clientY);
+      // depois de confirmado, quem acompanha o dedo é o documento (acompanharArrastoNoDocumento)
     }, { passive:false });
 
     cardEl.addEventListener('pointerup', (e)=>{
       clearTimeout(cardTouchLongPressTimer);
       if(!cardTouchDrag || cardTouchDrag.cardEl !== cardEl || cardTouchDrag.pointerId !== e.pointerId) return;
-      if(cardTouchDrag.arrastando){
-        e.preventDefault(); // evita o clique fantasma que abriria o card logo depois de soltar
-        finalizarArrastoDeCard(e.clientX, e.clientY);
-      }
+      if(cardTouchDrag.arrastando) return; // o documento cuida de soltar
       cardTouchDrag = null;
     });
     cardEl.addEventListener('pointercancel', ()=>{
       clearTimeout(cardTouchLongPressTimer);
-      if(cardTouchDrag && cardTouchDrag.cardEl === cardEl && cardTouchDrag.arrastando) cancelarArrastoDeCard();
+      if(cardTouchDrag && cardTouchDrag.cardEl === cardEl && cardTouchDrag.arrastando) return; // o documento cuida
       cardTouchDrag = null;
     });
   });

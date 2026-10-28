@@ -144,7 +144,7 @@ function initGoogleButton(clientId){
   });
   google.accounts.id.renderButton(
     document.getElementById('google-btn-container'),
-    { theme:'outline', size:'large', width:320, text:'continue_with', locale:'pt-BR' }
+    { theme: document.documentElement.getAttribute('data-theme')==='dark' ? 'filled_black' : 'outline', size:'large', shape:'rectangular', width: Math.min(400, Math.max(200, Math.round(document.getElementById('google-btn-container').clientWidth) || 320)), text:'continue_with', locale:'pt-BR' }
   );
 }
 fetch(API_BASE + '/config/integracoes')

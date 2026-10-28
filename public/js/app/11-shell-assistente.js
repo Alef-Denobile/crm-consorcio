@@ -19,12 +19,21 @@ function renderAppPreservandoScroll(){
   });
 }
 /* ---------- Assistente flutuante (bolinha de ajuda) ---------- */
+// Primeira altura livre da tela: abaixo da barra fixa do topo (no celular), para a bolinha não ficar escondida atrás dela
+function topoLivre(){
+  const barra = document.querySelector('.main-topbar');
+  if(!barra) return 4;
+  const pos = getComputedStyle(barra).position;
+  if(pos !== 'sticky' && pos !== 'fixed') return 4;
+  return Math.max(4, Math.round(barra.getBoundingClientRect().bottom) + 4);
+}
 function renderAssistente(){
   const root = document.getElementById('assistente-root');
   if(!root) return;
   if(!getToken()){ root.innerHTML=''; return; } // só aparece logado
   if(!integracoesConfig.assistenteIA){ root.innerHTML=''; return; } // servidor sem ANTHROPIC_API_KEY configurada
 
+  if(assistenteBolhaY!=null) assistenteBolhaY = Math.max(assistenteBolhaY, topoLivre()); // quem deixou a bolinha lá em cima
   const posBolha = assistenteBolhaX!=null ? `left:${assistenteBolhaX}px; top:${assistenteBolhaY}px; right:auto; bottom:auto;` : '';
 
   root.innerHTML = `
@@ -139,7 +148,7 @@ function ligarBindingsAssistente(){
       let novoX = assistenteDrag.bolhaXInicial + dx;
       let novoY = assistenteDrag.bolhaYInicial + dy;
       novoX = Math.min(Math.max(4, novoX), window.innerWidth - bolha.offsetWidth - 4);
-      novoY = Math.min(Math.max(4, novoY), window.innerHeight - bolha.offsetHeight - 4);
+      novoY = Math.min(Math.max(topoLivre(), novoY), window.innerHeight - bolha.offsetHeight - 4);
       bolha.style.left = novoX+'px';
       bolha.style.top = novoY+'px';
       bolha.style.right = 'auto';
@@ -236,7 +245,7 @@ function renderApp(){
         <div class="main-topbar">
           <button class="hamburger-btn" data-action="toggle-sidebar" title="Menu">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+              <circle cx="5" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.9" fill="currentColor" stroke="none"/>
             </svg>
           </button>
           <div class="topbar-right">

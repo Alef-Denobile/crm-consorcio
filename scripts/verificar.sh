@@ -82,6 +82,21 @@ for arquivo in public/js/*.js public/js/app/*.js; do
   fi
 done
 
+# 1a) Funções declaradas duas vezes + sintaxe do conjunto (const repetida no mesmo escopo)
+contar
+if node scripts/verificar-duplicados.js >/tmp/dup.txt 2>&1; then
+  ok "nenhuma função duplicada no front-end"
+else
+  falhou "função duplicada no front-end:"; cat /tmp/dup.txt
+fi
+contar
+cat public/js/app/*.js > /tmp/front-junto.js
+if node --check /tmp/front-junto.js 2>/tmp/erro-sintaxe.txt; then
+  ok "sintaxe do front-end inteiro junto"
+else
+  falhou "front-end inteiro junto — erro de sintaxe:"; cat /tmp/erro-sintaxe.txt
+fi
+
 # ---------------------------------------------------------------
 # 1b) Sintaxe JS (node --check) — back-end (ignora node_modules)
 # ---------------------------------------------------------------

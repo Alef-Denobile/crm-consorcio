@@ -106,7 +106,7 @@ function iniciarArrastoDeCard(x, y){
   fantasma.className = 'card-touch-fantasma';
   fantasma.style.width = rect.width + 'px';
   fantasma.style.left = (x - rect.width/2) + 'px';
-  fantasma.style.top = (y - 24) + 'px';
+  fantasma.style.top = (y + (ehCelular() ? 30 : -24)) + 'px';
   fantasma.innerHTML = cardTouchDrag.cardEl.querySelector('.card-body') ? cardTouchDrag.cardEl.querySelector('.card-body').innerHTML : cardTouchDrag.cardEl.innerHTML;
   document.body.appendChild(fantasma);
   cardTouchDrag.fantasmaEl = fantasma;
@@ -117,7 +117,7 @@ function atualizarArrastoDeCard(x, y){
   if(!cardTouchDrag || !cardTouchDrag.fantasmaEl) return;
   // isso aqui é barato — atualiza sempre na hora, o fantasma nunca fica atrasado atrás do dedo
   cardTouchDrag.fantasmaEl.style.left = (x - cardTouchDrag.fantasmaEl.offsetWidth/2) + 'px';
-  cardTouchDrag.fantasmaEl.style.top = (y - 24) + 'px';
+  cardTouchDrag.fantasmaEl.style.top = (y + (ehCelular() ? 30 : -24)) + 'px';
   cardTouchDrag.ultimoXCalculo = x;
   cardTouchDrag.ultimoYCalculo = y;
   // isso aqui é caro (olha a posição de TODOS os cards da coluna, toda vez) — segurando
@@ -187,6 +187,7 @@ function verificarChipDeEtapaSobDedo(x, y){
   const sob = document.elementFromPoint(x, y);
   const chip = sob && sob.closest ? sob.closest('#etapas-chips-mobile .etapa-chip-mobile') : null;
   document.querySelectorAll('.etapa-chip-mobile.etapa-chip-alvo').forEach(c=>{ if(c!==chip) c.classList.remove('etapa-chip-alvo'); });
+  if(cardTouchDrag.fantasmaEl) cardTouchDrag.fantasmaEl.classList.toggle('sobre-chips', !!chip);
   const id = chip ? chip.dataset.colId : null;
   if(id === cardTouchDrag.chipHover) return;
   clearTimeout(chipHoverTimer);
@@ -220,7 +221,18 @@ function atualizarAutoScrollDoArrasto(x, y, colAlvo){
     let dy = 0;
     if(!cardTouchDrag.chipHover && y < 130) dy = -12;
     else if(y > window.innerHeight - 150) dy = 12;
-    if(dy) autoScrollDoArrastoInterval = setInterval(()=> window.scrollBy(0, dy), 16);
+    // na ponta da fileira de etapas, ela desliza e mostra as próximas (quanto mais na ponta, mais rápido)
+    let dxChips = 0;
+    const fileira = document.getElementById('etapas-chips-mobile');
+    if(fileira){
+      const r = fileira.getBoundingClientRect();
+      if(y >= r.top - 10 && y <= r.bottom + 10){
+        const borda = 70;
+        if(x < r.left + borda) dxChips = -Math.ceil(((r.left + borda - x) / borda) * 14);
+        else if(x > r.right - borda) dxChips = Math.ceil(((x - (r.right - borda)) / borda) * 14);
+      }
+    }
+    if(dy || dxChips) autoScrollDoArrastoInterval = setInterval(()=>{ if(dy) window.scrollBy(0, dy); if(dxChips && fileira) fileira.scrollLeft += dxChips; }, 16);
     return;
   }
   const margemHorizontal = 260; // cobre a largura da barra lateral — passar por cima dela já conta como "quero rolar pra lá"
@@ -325,3 +337,38 @@ function closeMenusOnOutsideClick(e){
   }
 }
 
+
+// Faixa do resumo do funil no celular: esconde o sinal "continua" quando já chegou ao fim
+document.addEventListener('scroll', (e)=>{
+  const faixa = e.target && e.target.classList && e.target.classList.contains('stats') ? e.target : null;
+  if(!faixa || !faixa.parentElement) return;
+  faixa.parentElement.classList.toggle('no-fim', faixa.scrollLeft + faixa.clientWidth >= faixa.scrollWidth - 4);
+}, true);
+
+// Depois que o arrastar do cliente é confirmado, quem acompanha o dedo é o DOCUMENTO, não o cartão:
+// ao abrir outra etapa durante o arrasto, a etapa de origem some (display:none) e o cartão deixaria de
+// receber o dedo — o arrastar travava no meio.
+function acompanharArrastoNoDocumento(pointerId){
+  const mover = (e)=>{
+    if(!cardTouchDrag || !cardTouchDrag.arrastando || e.pointerId !== pointerId) return;
+    e.preventDefault();
+    atualizarArrastoDeCard(e.clientX, e.clientY);
+  };
+  const soltar = (e)=>{
+    if(e.pointerId !== pointerId) return;
+    parar();
+    if(cardTouchDrag && cardTouchDrag.arrastando){
+      if(e.type === 'pointerup'){ e.preventDefault(); finalizarArrastoDeCard(e.clientX, e.clientY); } // preventDefault evita o clique fantasma que abriria o card
+      else cancelarArrastoDeCard();
+    }
+    cardTouchDrag = null;
+  };
+  const parar = ()=>{
+    document.removeEventListener('pointermove', mover);
+    document.removeEventListener('pointerup', soltar);
+    document.removeEventListener('pointercancel', soltar);
+  };
+  document.addEventListener('pointermove', mover, { passive:false });
+  document.addEventListener('pointerup', soltar);
+  document.addEventListener('pointercancel', soltar);
+}
