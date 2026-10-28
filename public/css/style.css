@@ -267,7 +267,7 @@ input[type=date]::-webkit-calendar-picker-indicator:hover, input[type=time]::-we
 .auth-subtitle{ font-size:calc(12px * var(--fs,1)); color:var(--ink-soft); text-align:center; margin:4px 0 20px; }
 .auth-tabs{ display:flex; gap:6px; margin-bottom:18px; background:var(--col-bg); border-radius:10px; padding:4px; }
 .auth-tab{ flex:1; padding:10px; min-height:40px; border-radius:8px; border:none; background:none; font-size:calc(12px * var(--fs,1)); font-weight:600; color:var(--ink-soft); cursor:pointer; }
-.auth-tab.active{ background:var(--accent); color:#fff; }
+.auth-tab.active{ color:#fff; }
 .auth-form{ display:flex; flex-direction:column; gap:14px; }
 .auth-submit{ margin-top:6px; padding:12px; min-height:44px; font-size:calc(13px * var(--fs,1)); width:100%; }
 .auth-box .error-banner{ position:static; margin:0 0 14px; box-shadow:none; animation:none; max-width:none; }
@@ -1137,8 +1137,9 @@ main.pipeline-main{ padding-top:16px; }
 }
 
 /* Tela de login: botões no mesmo tom e na mesma largura (Entrar, Criar conta, Google) */
-.auth-tab.active{ background:var(--accent); color:#fff; }
-[data-theme="dark"] .auth-tab.active, [data-theme="dark"] .auth-submit{ background:var(--ink); color:var(--bg); }
+.auth-tab.active{ color:#fff; }
+[data-theme="dark"] .auth-tab.active{ color:var(--bg); }
+[data-theme="dark"] .auth-submit{ background:var(--ink); color:var(--bg); }
 .auth-submit{ border-radius:10px; min-height:44px; font-size:calc(14px * var(--fs,1)); }
 .field input:focus{ border-color:var(--accent); box-shadow:0 0 0 3px var(--hover-tint); }
 [data-theme="dark"] .field input:focus{ border-color:var(--ink-soft); }
@@ -1157,3 +1158,26 @@ main.pipeline-main{ padding-top:16px; }
 .opcao-membro span{ font-size:calc(12px * var(--fs,1)); color:var(--ink-soft); }
 .opcao-membro:hover{ border-color:var(--ink); }
 .opcao-perigo b{ color:var(--danger); }
+
+/* Login: bloco que desliza entre as abas, campos que saem/entram com fade, passo do nome */
+.auth-tabs{ position:relative; }
+.auth-tab{ position:relative; z-index:1; transition:color .25s ease; }
+.auth-tab-pill{ position:absolute; top:4px; bottom:4px; left:4px; width:calc(50% - 7px); border-radius:8px; background:var(--accent); transition:transform .32s cubic-bezier(.4,0,.2,1); }
+.auth-tabs[data-modo="register"] .auth-tab-pill{ transform:translateX(calc(100% + 6px)); }
+[data-theme="dark"] .auth-tab-pill{ background:var(--ink); }
+.auth-slide{ display:flex; flex-direction:column; gap:14px; }
+.auth-slide.sai-esq{ animation:auth-sai-esq .17s ease-in forwards; }
+.auth-slide.sai-dir{ animation:auth-sai-dir .17s ease-in forwards; }
+.auth-slide.entra-dir{ animation:auth-entra-dir .23s ease-out; }
+.auth-slide.entra-esq{ animation:auth-entra-esq .23s ease-out; }
+@keyframes auth-sai-esq{ to{ opacity:0; transform:translateX(-28px); } }
+@keyframes auth-sai-dir{ to{ opacity:0; transform:translateX(28px); } }
+@keyframes auth-entra-dir{ from{ opacity:0; transform:translateX(28px); } to{ opacity:1; transform:none; } }
+@keyframes auth-entra-esq{ from{ opacity:0; transform:translateX(-28px); } to{ opacity:1; transform:none; } }
+.auth-box{ transition:height .3s cubic-bezier(.4,0,.2,1); }
+#auth-main.passo-sai, #nome-form.passo-sai{ animation:auth-sai-esq .17s ease-in forwards; }
+#auth-main.passo-entra, #nome-form.passo-entra{ animation:auth-entra-dir .3s ease-out; }
+#nome-form{ flex-direction:column; }
+.auth-passo-titulo{ font-family:'Fraunces',serif; font-size:calc(20px * var(--fs,1)); font-weight:600; margin:0; text-align:center; }
+#nome-form .settings-page-note{ text-align:center; }
+@media (prefers-reduced-motion: reduce){ .auth-tab-pill, .auth-box{ transition:none; } .auth-slide, #auth-main, #nome-form{ animation:none !important; } }
