@@ -475,6 +475,7 @@ async function toggleEventoConcluido(id){
 async function saveContratoFromModal(){
   const f = contratoModalForm;
   if(!f.desc.trim() || !f.creditoValor) return;
+  if(!f.tipoCarta){ errorMsg = 'Escolha o tipo de carta ou produto: é ele que define a comissão.'; renderApp(); return; }
   const dados = { desc: f.desc, scope: f.scope, date: f.date, creditoValor: f.creditoValor, tipoCarta: f.tipoCarta };
   try{
     if(f.__isNew){

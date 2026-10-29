@@ -23,6 +23,7 @@ const cardSchema = new mongoose.Schema(
     // chave da Regra de Comissão (ver server/models/RegraComissao.js) — deixou de ser um enum
     // fixo pra permitir regras/tipos de carta criados e renomeados pelo usuário
     tipoCarta: { type: String, default: 'imovel', trim: true },
+    produtoDetalhe: { type: String, default: '', trim: true, maxlength: 140 }, // texto livre sobre o produto/serviço (ex.: "carta de 300 mil, 2 cotas")
     mes: { type: String, default: '' }, // formato "YYYY-MM" — mês de referência/venda (já usado pra filtrar o Pipeline e sincronizar com Comissões)
     mesInicioContato: { type: String, default: '' }, // formato "YYYY-MM" — quando o contato com esse cliente começou, pra documentar o ciclo de venda
     colunaDesde: { type: Date, default: Date.now }, // quando entrou na coluna atual — usado pelas automações por tempo

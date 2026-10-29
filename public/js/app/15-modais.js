@@ -63,7 +63,7 @@ function abrirNovoCardComTipo(columnId, tipoPessoa){
     __isNew: true, id:null, columnId,
     cliente:'', valor:0, temperatura:'morno', telefone:'', obs:'',
     mes: '', mesInicioContato: dataInicial, // início de contato já vem preenchido (é agora); mês de venda fica em branco até a venda acontecer de verdade
-    etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel',
+    etiquetas: [], camposPersonalizados: {}, tipoCarta: 'imovel', produtoDetalhe: '',
     tipoPessoa, clienteFisica:'', clienteJuridica:'',
     __modoGestor: !!(escolhaModoGestor && podeAtribuirLeads()), __atribuirParaId: '',
     cnpj:'', razaoSocial:'', inscricaoEstadual:'', ramoAtividade:'', contatoNome:'', contatoCargo:'',
@@ -533,11 +533,8 @@ function renderModal(){
               </select>
             </div>
           </div>
-          <div class="field" ${perfilRH()?'style="display:none;"':''}>
-            <label>Tipo de carta de crédito</label>
-            <select id="f-tipo-carta">
-              ${renderOpcoesTipoCarta(f.tipoCarta||'imovel')}
-            </select>
+          <div ${perfilRH()?'style="display:none;"':''}>
+            ${htmlCampoProduto('f', f.tipoCarta||'', { detalhe: f.produtoDetalhe||'', rotulo:'Tipo de carta de crédito' })}
           </div>
           <div class="field-row">
             <div class="field">
@@ -691,8 +688,7 @@ function renderModal(){
   const toggleArquivarBtn = document.getElementById('f-toggle-arquivar');
   if(toggleArquivarBtn) toggleArquivarBtn.addEventListener('click', toggleArquivarCard);
   document.getElementById('f-coluna').addEventListener('change', (e)=> modalForm.columnId = e.target.value);
-  const tipoCartaEl = document.getElementById('f-tipo-carta');
-  if(tipoCartaEl) tipoCartaEl.addEventListener('change', (e)=> modalForm.tipoCarta = e.target.value);
+  ligarCampoProduto('f', (chave)=>{ modalForm.tipoCarta = chave; }, { aoDetalhe: (t)=>{ modalForm.produtoDetalhe = t; } });
   document.getElementById('f-mes').addEventListener('change', (e)=>{
     modalForm.mes = e.target.value;
     atualizarNotaCicloDeVenda();

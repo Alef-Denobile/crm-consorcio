@@ -2,7 +2,7 @@ const Contrato = require('../models/Contrato');
 const Column = require('../models/Column');
 const Card = require('../models/Card');
 const { calcComissaoPorRegra } = require('./comissaoCalc');
-const { obterRegraPorChave } = require('./regrasComissao');
+const { obterRegraPorChave, percentualTotalDaRegra } = require('./regrasComissao');
 
 // Quando um cliente entra numa coluna do tipo "ganho" (fechado), gera a comissão
 // dele automaticamente na aba Comissões — só uma vez por cliente, mesmo que passe
@@ -21,6 +21,7 @@ async function gerarComissaoAutomaticaSeGanho(userId, card, columnId) {
     if (jaExiste) return; // já foi gerada antes pra esse cliente, não duplica
 
     const regra = await obterRegraPorChave(userId, card.tipoCarta);
+    if (!regra || !(percentualTotalDaRegra(regra) > 0)) return; // produto/serviço sem comissão: não cria contrato de valor zero
     const { parcelas, parcelas1, value, value2, blocos } = calcComissaoPorRegra(credito, regra);
     // Usa o "mês" que a pessoa definiu no lead como referência — só cai pra data de hoje
     // se o lead não tiver esse campo preenchido. Aceita tanto "YYYY-MM" (formato antigo)

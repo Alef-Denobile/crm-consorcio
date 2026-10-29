@@ -162,11 +162,61 @@
     return partes.join('|');
   }
 
+
+  /* ---------- trocas marcadas com data-anim-troca (mês, período, aba…) ----------
+     O elemento marcado diz "eu mostro este valor". Se o valor mudou desde a última vez que vimos o grupo,
+     o conteúdo novo entra: com data-anim-ordem desliza para o lado certo (ordem maior = vem da direita),
+     sem ordem só faz fade. Se a tela for redesenhada NO MEIO da animação, ela continua de onde estava. */
+  window.ordemDoMes = (key)=>{ const [a, m] = String(key||'').split('-').map(Number); return (a||0)*12 + (m||0); };
+  const trocasVistas = {}, trocasCorrendo = {};
+  const DUR_TROCA = 260;
+  function animarTrocas(permitido){
+    document.querySelectorAll('#app [data-anim-troca]').forEach(el=>{
+      const g = el.dataset.animGrupo || 'pagina';
+      const valor = el.dataset.animTroca, ordem = parseFloat(el.dataset.animOrdem);
+      const ant = trocasVistas[g];
+      trocasVistas[g] = { k: valor, o: ordem };
+      const correndo = trocasCorrendo[g];
+      let atraso = 0;
+      if(ant && ant.k !== valor){
+        if(!permitido) return;
+        const lado = Number.isFinite(ant.o) && Number.isFinite(ordem) && ant.o !== ordem ? (ordem > ant.o ? 28 : -28) : 0;
+        trocasCorrendo[g] = { inicio: Date.now(), lado, k: valor };
+      } else if(correndo && correndo.k === valor && Date.now() - correndo.inicio < DUR_TROCA){
+        atraso = Date.now() - correndo.inicio; // redesenhado durante a animação: continua do mesmo ponto
+      } else return;
+      if(!el.animate) return;
+      const c = trocasCorrendo[g];
+      const quadros = c.lado ? [{ opacity:0, translate:c.lado+'px 0' }, { opacity:1, translate:'0 0' }] : [{ opacity:0, translate:'0 6px' }, { opacity:1, translate:'0 0' }];
+      const a = el.animate(quadros, { duration: DUR_TROCA, easing:'cubic-bezier(.2,.8,.2,1)' });
+      if(atraso) a.currentTime = atraso;
+    });
+  }
+
+  /* ---------- mensagem nova no chat / conversa: entra com fade (as listas de mensagens ficam fora da comparação) ---------- */
+  function contarMensagens(){
+    const mapa = {};
+    document.querySelectorAll('.chat-interno-mensagens, .wa-conversa-mensagens, [id$="-mensagens"]').forEach(c=>{ mapa[c.id || c.className] = c.querySelectorAll('.wa-msg').length; });
+    return mapa;
+  }
+  function animarMensagensNovas(antesMsgs){
+    if(!antesMsgs) return;
+    document.querySelectorAll('.chat-interno-mensagens, .wa-conversa-mensagens, [id$="-mensagens"]').forEach(c=>{
+      const k = c.id || c.className, n0 = antesMsgs[k];
+      const msgs = c.querySelectorAll('.wa-msg');
+      if(n0 === undefined || !n0 || msgs.length <= n0 || msgs.length - n0 > 3) return;
+      [...msgs].slice(n0).forEach(m=>{
+        m.classList.add('item-entra');
+        setTimeout(()=> m.classList.remove('item-entra'), 600);
+      });
+    });
+  }
+
   let antes = null;
   window.animarAntesDeRenderizar = function(){
     if(reduzido()){ antes = null; return; }
     const raiz = document.querySelector('.main-area');
-    antes = { chave: ultimaChave, raiz, estados: raiz ? lerEstados(document.getElementById('app')) : null, digitando: Date.now() - ultimaDigitacao < 700 };
+    antes = { chave: ultimaChave, raiz, estados: raiz ? lerEstados(document.getElementById('app')) : null, digitando: Date.now() - ultimaDigitacao < 700, msgs: contarMensagens() };
   };
 
   window.animarDepoisDeRenderizar = function(){
@@ -174,7 +224,7 @@
     const mudouDeTela = ultimaChave !== null && chave !== ultimaChave;
     const a = antes; antes = null;
     const guardar = ()=>{ ultimaChave = chave; ultimaEtapaIdx = idx; ultimoNivel = nivel; ultimaSubAba = equipeSubTab; };
-    if(reduzido()){ guardar(); return; }
+    if(reduzido()){ guardar(); document.querySelectorAll('#app [data-anim-troca]').forEach(el=>{ trocasVistas[el.dataset.animGrupo||'pagina'] = { k: el.dataset.animTroca, o: parseFloat(el.dataset.animOrdem) }; }); return; }
 
     if(mudouDeTela){
       let lado = 'sobe';
@@ -199,6 +249,9 @@
       const nova = document.querySelector('.main-area');
       animarDiferencas(a.raiz, nova);
     }
+    // mês, período e abas marcados com data-anim-troca; mensagens novas do chat
+    animarTrocas(!mudouDeTela && !(a && a.digitando));
+    if(!mudouDeTela && a) animarMensagensNovas(a.msgs);
     // setas, chaves e abas (só na mesma tela)
     if(a && a.estados && !mudouDeTela) animarEstados(a.estados, document.getElementById('app'));
     guardar();

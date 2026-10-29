@@ -62,4 +62,9 @@ async function gerarChaveUnica(userId, nome, ignorarId) {
   return `${base}_${n}`;
 }
 
-module.exports = { REGRAS_PADRAO, obterRegrasDoUsuario, obterRegraPorChave, slugify, gerarChaveUnica };
+// Soma de todos os percentuais x parcelas (0 = produto/serviço sem comissão)
+function percentualTotalDaRegra(regra) {
+  return (regra && Array.isArray(regra.blocos) ? regra.blocos : []).reduce((s, b) => s + (Number(b.percentual) || 0) * Math.max(1, parseInt(b.parcelas, 10) || 1), 0);
+}
+
+module.exports = { percentualTotalDaRegra, REGRAS_PADRAO, obterRegrasDoUsuario, obterRegraPorChave, slugify, gerarChaveUnica };

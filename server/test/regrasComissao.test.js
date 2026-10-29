@@ -89,3 +89,19 @@ describe('slugify — transforma nome digitado numa chave técnica estável', ()
     assert.equal(slugify('!!!'), 'regra');
   });
 });
+
+describe('percentualTotalDaRegra — produto sem comissão não gera contrato', () => {
+  const { percentualTotalDaRegra } = require('../utils/regrasComissao');
+  test('soma percentual x parcelas dos blocos', () => {
+    assert.equal(percentualTotalDaRegra({ blocos: [{ parcelas: 1, percentual: 0.04 }] }), 0.04);
+    assert.ok(Math.abs(percentualTotalDaRegra({ blocos: [{ parcelas: 10, percentual: 0.001 }, { parcelas: 3, percentual: 0.002 }] }) - 0.016) < 1e-9);
+  });
+  test('0%, sem blocos ou regra ausente = 0', () => {
+    assert.equal(percentualTotalDaRegra({ blocos: [{ parcelas: 1, percentual: 0 }] }), 0);
+    assert.equal(percentualTotalDaRegra({ blocos: [] }), 0);
+    assert.equal(percentualTotalDaRegra(null), 0);
+  });
+  test('as regras iniciais do consórcio todas têm comissão', () => {
+    REGRAS_PADRAO.forEach(r => assert.ok(percentualTotalDaRegra(r) > 0, r.chave));
+  });
+});

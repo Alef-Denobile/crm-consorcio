@@ -47,7 +47,7 @@ const colunas = [
   { id: 'c3', nome: 'Perdido', tipo: 'perdido', ordem: 2, cor: '#a22' },
 ];
 const cards = [
-  { id: 'k1', columnId: 'c1', cliente: 'Maria Teste', telefone: '15988053447', valor: 50000, temperatura: 'morno', mes: '', mesInicioContato: mes, ordem: 0 },
+  { id: 'k1', columnId: 'c1', cliente: 'Maria Teste', telefone: '15988053447', valor: 50000, temperatura: 'morno', tipoCarta: 'imovel', produtoDetalhe: 'carta de 300 mil', mes: '', mesInicioContato: mes, ordem: 0 },
   { id: 'k2', columnId: 'c2', cliente: 'João Ganho', telefone: '15911112222', valor: 80000, temperatura: 'quente', mes, mesInicioContato: mes, ordem: 0 },
 ];
 
@@ -499,6 +499,51 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.waitForTimeout(400);
     await t.page.click('[data-action="add-lead"], .btn-primary >> nth=0').catch(() => {});
     checar('sem erro de JavaScript (rh)', t.erros.length === 0, t.erros[0]);
+    await t.ctx.close();
+
+
+    console.log('Tipo de carta / produto (digitar + "+ Criar") e Detalhe');
+    t = await abrir(browser, url, 'mobile', { interceptar: (m, p) => (m === 'POST' && p === '/api/regras-comissao') ? { status: 201, contentType: 'application/json', body: JSON.stringify({ id: 'r9', chave: 'plano_x', nome: 'Plano X', blocos: [{ parcelas: 1, percentual: 0.04 }] }) } : (m === 'GET' && p === '/api/regras-comissao') ? { status: 200, contentType: 'application/json', body: JSON.stringify({ regras: [{ id: 'r1', chave: 'imovel', nome: 'Imóvel', blocos: [{ parcelas: 10, percentual: 0.001 }], mesIndependente: false }, { id: 'r2', chave: 'zero', nome: 'Sem comissão X', blocos: [{ parcelas: 1, percentual: 0 }], mesIndependente: false }] }) } : null });
+    await t.page.click('[data-action="nav"][data-page="pipeline"]');
+    await t.page.waitForTimeout(400);
+    checar('cartão do funil mostra "Tipo · detalhe"', ((await t.page.locator('.card-produto').first().textContent()) || '').includes('carta de 300 mil'));
+    await t.page.click('[data-card-id="k1"][data-action="open-edit-card"]');
+    await t.page.waitForTimeout(400);
+    checar('ficha: tipo de carta já escolhido + campo Detalhe', (await t.page.locator('.ps-escolhido-nome').first().textContent()) === 'Imóvel' && (await t.page.inputValue('#f-detalhe')) === 'carta de 300 mil');
+    await t.page.click('[data-ps-limpar]');
+    await t.page.fill('#f-ps-input', 'Plano X');
+    if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/ps-lista.png' });
+    checar('digitou nome novo: aparece "+ Criar"', (await t.page.locator('.ps-criar').count()) === 1);
+    checar('lista mostra as regras existentes com a comissão', (await t.page.locator('#f-ps-input').count()) === 1);
+    await t.page.click('.ps-criar');
+    await t.page.fill('#f-ps-pct', '4');
+    await t.page.click('[data-ps-criar]');
+    await t.page.waitForTimeout(300);
+    checar('"+ Criar" cria a regra e escolhe', (await t.page.locator('.ps-escolhido-nome').first().textContent()) === 'Plano X' && t.chamadas.some((c) => c.metodo === 'POST' && c.caminho === '/api/regras-comissao' && /"percentual":4/.test(c.corpo || '')));
+    checar('mostra a comissão do tipo escolhido', ((await t.page.locator('.ps-dica').first().textContent()) || '').includes('4%'));
+    await t.page.fill('#f-detalhe', 'cota nova');
+    await t.page.click('[data-action="save-card"], #modal-save, .btn-save >> nth=0').catch(() => {});
+    await t.page.waitForTimeout(300);
+    const put = t.chamadas.find((c) => c.metodo === 'PUT' && /\/api\/cards\/k1$/.test(c.caminho));
+    checar('salvar envia tipoCarta e produtoDetalhe', !!put && /"tipoCarta":"plano_x"/.test(put.corpo) && /"produtoDetalhe":"cota nova"/.test(put.corpo), put && put.corpo);
+    checar('sem erro de JavaScript (tipo/produto)', t.erros.length === 0, t.erros[0]);
+    await t.ctx.close();
+
+    console.log('Animação de troca de mês / período / abas (data-anim-troca)');
+    t = await abrir(browser, url, 'gestor');
+    await t.page.click('[data-action="nav"][data-page="tarefas"]').catch(() => {});
+    await t.page.waitForTimeout(400);
+    await t.page.click('[data-action="agenda-mes"][data-delta="1"]');
+    const rodando = await t.page.evaluate(() => document.getAnimations().filter((a) => a.effect && a.effect.target && a.effect.target.matches && a.effect.target.matches('.agenda-grid')).length);
+    checar('Agenda: avançar o mês anima a grade', rodando >= 1, rodando);
+    await t.page.waitForTimeout(400);
+    await t.page.click('[data-action="set-agenda-subtab"]:not(.active)').catch(() => {});
+    await t.page.click('[data-action="nav"][data-page="dashboard"]');
+    await t.page.waitForTimeout(500);
+    await t.page.click('[data-action="set-dash-period"][data-period="ano"]');
+    const rodandoDash = await t.page.evaluate(() => document.getAnimations().filter((a) => a.effect && a.effect.target && a.effect.target.matches && a.effect.target.matches('.metric-grid')).length);
+    checar('Dashboard: trocar o período anima os cartões', rodandoDash >= 1, rodandoDash);
+    checar('sem erro de JavaScript (troca)', t.erros.length === 0, t.erros[0]);
     await t.ctx.close();
 
     console.log('Sem equipe: convite recebido');

@@ -62,7 +62,7 @@ async function executarAutomacoesDaColuna(userId, colunaId, card) {
   }
 }
 
-const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'mesInicioContato', 'etiquetas', 'camposPersonalizados', 'tipoCarta', 'tipoPessoa', 'cnpj', 'razaoSocial', 'inscricaoEstadual', 'ramoAtividade', 'contatoNome', 'contatoCargo'];
+const CAMPOS_PERMITIDOS = ['columnId', 'cliente', 'valor', 'temperatura', 'telefone', 'obs', 'mes', 'mesInicioContato', 'etiquetas', 'camposPersonalizados', 'tipoCarta', 'produtoDetalhe', 'tipoPessoa', 'cnpj', 'razaoSocial', 'inscricaoEstadual', 'ramoAtividade', 'contatoNome', 'contatoCargo'];
 function filtrarCampos(body) {
   const dados = {};
   for (const campo of CAMPOS_PERMITIDOS) {
@@ -170,6 +170,11 @@ router.put('/:id', async (req, res) => {
     // nessa edição — usado depois pra saber se está passando de vazio pra
     // preenchido de verdade (não simplesmente sendo reenviado igual)
     let mesAntesDoUpdate = null;
+    let tipoAntesDoUpdate = null;
+    if (dados.tipoCarta !== undefined) {
+      const cardAntesTipo = await Card.findOne({ _id: req.params.id, userId: req.userId }).select('tipoCarta');
+      tipoAntesDoUpdate = cardAntesTipo ? cardAntesTipo.tipoCarta : null;
+    }
     if (dados.mes !== undefined) {
       const cardAntes = await Card.findOne({ _id: req.params.id, userId: req.userId }).select('mes');
       mesAntesDoUpdate = cardAntes ? cardAntes.mes : null;
@@ -211,6 +216,14 @@ router.put('/:id', async (req, res) => {
           gerarComissaoAutomaticaSeGanho(req.userId, card, colunaGanho._id);
         }
       }
+    }
+
+    // escolheu/trocou o produto depois de a venda já estar em "ganho": gera a comissão agora
+    // (a função não duplica: se já existe contrato desse cliente, não faz nada)
+    if (dados.tipoCarta !== undefined && dados.columnId === undefined && String(dados.tipoCarta) !== String(tipoAntesDoUpdate)) {
+      await gerarComissaoAutomaticaSeGanho(req.userId, card, card.columnId);
+      const recarregado = await Card.findOne({ _id: card._id, userId: req.userId });
+      if (recarregado) return res.json(recarregado.toJSON());
     }
 
     res.json(card.toJSON());

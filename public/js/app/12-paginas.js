@@ -96,7 +96,7 @@ function renderDashboardPage(){
       </div>
     </div>
 
-    <div class="metric-grid">
+    <div class="metric-grid" data-anim-grupo="dash-periodo" data-anim-troca="${dashboardPeriod}" data-anim-ordem="${['7dias','mes','trimestre','ano'].indexOf(dashboardPeriod)}">
       <div class="metric-card">
         <div class="metric-card-top"><span>Novos leads</span><span class="metric-icon">${ICON_USERS}</span></div>
         <div class="metric-value">${m.novosLeads}</div>
@@ -499,6 +499,7 @@ function renderCard(card){
             <span class="card-name">${card.tipoPessoa==='juridica' ? '🏢 ' : ''}${esc(card.cliente) || 'Sem nome'}</span>
             <span class="temp-badge" style="color:${temp.color};background:${temp.bg}">${temp.emoji} ${temp.label}</span>
           </div>
+          ${(!perfilRH() && (card.tipoCarta || card.produtoDetalhe)) ? `<div class="card-produto">${card.tipoCarta ? `<span class="card-produto-nome">${esc(nomeDoProduto(card.tipoCarta))}</span>` : ''}${card.tipoCarta && card.produtoDetalhe ? ' · ' : ''}${card.produtoDetalhe ? `<span>${esc(card.produtoDetalhe)}</span>` : ''}</div>` : ''}
           <div class="card-value-row">
             <span class="card-value">${fmtBRL(card.valor)}</span>
             ${showMonth ? `<span class="month-badge">${monthLabel(card.mesInicioContato)}</span>` : ''}
@@ -846,7 +847,7 @@ function renderTarefasPage(){
     <div class="funil-tabs" style="margin-bottom:20px;">
       ${abas.map(([key,label])=>`<button class="tab-btn ${agendaSubTab===key?'active':''}" data-action="set-agenda-subtab" data-subtab="${key}">${label}</button>`).join('')}
     </div>
-    ${agendaSubTab==='calendario' ? renderCalendarioConteudo() : renderGerotConteudo()}
+    <div data-anim-grupo="agenda-sub" data-anim-troca="${agendaSubTab}" data-anim-ordem="${agendaSubTab==='calendario'?0:1}">${agendaSubTab==='calendario' ? renderCalendarioConteudo() : renderGerotConteudo()}</div>
   `;
 }
 const GEROT_DIAS = ['Segunda','Terça','Quarta','Quinta','Sexta'];
@@ -958,7 +959,7 @@ function renderCalendarioConteudo(){
 
     <div class="month-step-nav" style="margin-bottom:16px;">
       <button class="icon-btn" data-action="agenda-mes" data-delta="-1" title="Mês anterior">‹</button>
-      <span>${monthLabel(agendaMesAtual, true)}</span>
+      <span data-anim-grupo="agenda-mes-rotulo" data-anim-troca="${agendaMesAtual}" data-anim-ordem="${ordemDoMes(agendaMesAtual)}">${monthLabel(agendaMesAtual, true)}</span>
       <button class="icon-btn" data-action="agenda-mes" data-delta="1" title="Próximo mês">›</button>
       <button class="btn-outline" data-action="agenda-hoje" style="margin-left:10px;">Hoje</button>
     </div>
@@ -970,7 +971,7 @@ function renderCalendarioConteudo(){
       </div>
     ` : ''}
 
-    <div class="agenda-grid">
+    <div class="agenda-grid" data-anim-grupo="agenda-mes" data-anim-troca="${agendaMesAtual}" data-anim-ordem="${ordemDoMes(agendaMesAtual)}">
       ${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="agenda-grid-header">${d}</div>`).join('')}
       ${celulas.map(dia=>{
         if(dia===null) return `<div class="agenda-cell agenda-cell-vazia"></div>`;
@@ -1013,7 +1014,7 @@ function renderComissoesPage(){
       <div class="page-head-actions">
         <div class="month-step-nav">
           <button class="icon-btn" data-action="comissoes-mes" data-delta="-1" title="Mês anterior">‹</button>
-          <span>${monthLabel(comissoesMonth, true)}</span>
+          <span data-anim-grupo="comissoes-mes-rotulo" data-anim-troca="${comissoesMonth}" data-anim-ordem="${ordemDoMes(comissoesMonth)}">${monthLabel(comissoesMonth, true)}</span>
           <button class="icon-btn" data-action="comissoes-mes" data-delta="1" title="Próximo mês">›</button>
         </div>
         ${renderBotaoOrdenar('comissoes', comissoesOrdenarPor, null, true)}
@@ -1022,7 +1023,7 @@ function renderComissoesPage(){
       </div>
     </div>
 
-    <div class="metric-grid">
+    <div class="metric-grid" data-anim-grupo="comissoes-mes" data-anim-troca="${comissoesMonth}" data-anim-ordem="${ordemDoMes(comissoesMonth)}">
       <div class="metric-card">
         <div class="metric-card-top"><span>Previsto este mês</span></div>
         <div class="metric-value">${fmtBRL(stats.previstoMes)}</div>
@@ -1038,7 +1039,7 @@ function renderComissoesPage(){
     </div>
 
     ${contratos.length ? `
-      <div class="contratos-list">
+      <div class="contratos-list" data-anim-grupo="comissoes-lista" data-anim-troca="${comissoesMonth}" data-anim-ordem="${ordemDoMes(comissoesMonth)}">
         ${ordenarPorCriterio(contratos, comissoesOrdenarPor, 'desc', null, 'date').map(c=>renderContratoCard(c)).join('')}
       </div>
     ` : `<div class="tasks-empty">Nenhum contrato de comissão cadastrado ainda.</div>`}

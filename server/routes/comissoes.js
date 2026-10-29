@@ -33,7 +33,8 @@ router.post('/', async (req, res) => {
     if (credito <= 0) {
       return res.status(400).json({ error: 'Valor da carta de crédito é obrigatório.' });
     }
-    const tipo = tipoCarta && String(tipoCarta).trim() ? String(tipoCarta).trim() : 'imovel';
+    const tipo = tipoCarta && String(tipoCarta).trim() ? String(tipoCarta).trim() : '';
+    if (!tipo) return res.status(400).json({ error: 'Escolha o tipo de carta ou produto: é ele que define a comissão.' });
     const regra = await obterRegraPorChave(req.userId, tipo);
 
     const { parcelas, parcelas1, value, value2, blocos } = calcComissaoPorRegra(credito, regra);

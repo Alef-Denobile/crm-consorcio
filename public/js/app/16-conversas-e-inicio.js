@@ -1027,12 +1027,7 @@ function renderContratoModal(){
               <div class="scope-btn ${f.scope==='Empresa'?'active':''}" data-scope="Empresa">Empresa</div>
             </div>
           </div>
-          <div class="field">
-            <label>Tipo de carta de crédito</label>
-            <select id="c-tipo-carta">
-              ${renderOpcoesTipoCarta(f.tipoCarta)}
-            </select>
-          </div>
+          ${htmlCampoProduto('c', f.tipoCarta||'', { obrigatorio:true, rotulo:'Tipo de carta de crédito' })}
           <div class="field">
             <label>Valor da carta de crédito vendida</label>
             <div class="money-wrap">
@@ -1077,8 +1072,8 @@ function renderContratoModal(){
     });
   });
 
-  document.getElementById('c-tipo-carta').addEventListener('change', (e)=>{
-    contratoModalForm.tipoCarta = e.target.value;
+  ligarCampoProduto('c', (chave)=>{
+    contratoModalForm.tipoCarta = chave;
     const prev = calcComissaoPreviewPorTipo(contratoModalForm.creditoValor, contratoModalForm.tipoCarta);
     const previewEl = document.getElementById('c-preview');
     if(previewEl) previewEl.innerHTML = previewComissaoHtml(prev);
