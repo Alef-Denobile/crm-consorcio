@@ -174,6 +174,15 @@ async function abrir(browser, url, cenario, extra = {}) {
     checar('animação: ao fechar, uma cópia some com fade', (await t.page.locator('body > .overlay.anim-saida').count()) === 1);
     await t.page.waitForTimeout(400);
     checar('animação: a cópia que some é removida depois', (await t.page.locator('.anim-saida').count()) === 0);
+    await t.page.click('[data-action="toggle-notif"]');
+    await t.page.waitForTimeout(40);
+    checar('animação: menu de notificações abre com fade', (await t.page.locator('.notif-panel.anim-popup-entra').count()) === 1);
+    await t.page.waitForTimeout(400);
+    await t.page.click('[data-action="toggle-notif"]');
+    await t.page.waitForTimeout(40);
+    checar('animação: ao fechar o menu, a cópia antiga some com fade (e o menu novo não existe)', (await t.page.locator('.notif-panel').count()) === 1 && (await t.page.locator('.notif-panel[aria-hidden="true"]').count()) === 1);
+    await t.page.waitForTimeout(400);
+    checar('animação: a cópia do menu é removida depois', (await t.page.locator('.notif-panel').count()) === 0);
     console.log('Equipe: lista de equipes (várias equipes)');
     await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
     await t.page.waitForTimeout(400);
@@ -204,6 +213,10 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.click('[data-action="open-new-lead"] >> nth=0');
     checar('gestor escolhe primeiro Padrão ou Gestor', (await t.page.locator('[data-modo-novo]').count()) === 2);
     await t.page.click('[data-modo-novo="1"]');
+    await t.page.waitForTimeout(60);
+    checar('animação: de uma janela para a outra a nova entra deslizando e a antiga sai', (await t.page.locator('#modal-root .overlay.anim-troca-entra').count()) === 1 && (await t.page.locator('body > .overlay.anim-troca-saida').count()) === 1);
+    await t.page.waitForTimeout(350);
+    checar('animação: a janela antiga é removida depois da saída', (await t.page.locator('.anim-troca-saida').count()) === 0);
     checar('depois escolhe pessoa física ou jurídica', (await t.page.locator('.tipo-pessoa-escolha-btn[data-tipo]').count()) === 2);
     await t.page.click('.tipo-pessoa-escolha-btn[data-tipo="juridica"]');
     checar('o formulário abre com as duas caixas lado a lado (Gestor + jurídica)', (await t.page.locator('.field-row-modo #f-modo-gestor-select').count()) === 1 && (await t.page.locator('.field-row-modo #f-tipo-pessoa-select').count()) === 1 && (await t.page.locator('#f-modo-gestor-select').innerText()).includes('Gestor') && (await t.page.locator('#f-tipo-pessoa-select').innerText()).includes('jurídica'));
@@ -214,6 +227,7 @@ async function abrir(browser, url, cenario, extra = {}) {
     const antes = await t.page.locator('#f-cliente').boundingBox();
     await t.page.click('#f-tipo-pessoa-select');
     const depois = await t.page.locator('#f-cliente').boundingBox();
+    await t.page.waitForTimeout(350); // a lista que fechou some com fade
     if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/lead-dropdown.png' });
     checar('a lista aberta fica por cima: o resto da tela não desce', !!antes && !!depois && Math.abs(antes.y - depois.y) < 2 && (await t.page.locator('.field-dropdown .tipo-pessoa-dropdown').count()) === 1);
     await t.page.click('#f-tipo-pessoa-select');

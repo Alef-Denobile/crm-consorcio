@@ -1240,3 +1240,11 @@ main.pipeline-main{ padding-top:16px; }
 @media (prefers-reduced-motion: reduce){
   .tela-entra-sobe, .tela-entra-dir, .tela-entra-esq, .item-entra, .anim-popup-entra, .anim-entra, .anim-entra > .modal, .anim-saida{ animation:none !important; }
 }
+
+/* troca de uma janela por outra (ex.: escolha Padrão/Gestor -> Física/Jurídica -> Novo lead): a nova entra pela direita, a antiga sai pela esquerda */
+@keyframes janela-troca-entra{ from{ opacity:0; transform:translateX(44px); } to{ opacity:1; transform:none; } }
+@keyframes janela-troca-sai{ to{ opacity:0; transform:translateX(-44px); } }
+.overlay.anim-troca-entra > .modal, .overlay.anim-troca-entra > .confirm-box{ animation:janela-troca-entra .3s cubic-bezier(.2,.8,.3,1); }
+.overlay.anim-troca-saida{ background:transparent; animation:none !important; }
+.overlay.anim-troca-saida > .modal, .overlay.anim-troca-saida > .confirm-box{ animation:janela-troca-sai .22s ease-in forwards !important; }
+@media (prefers-reduced-motion: reduce){ .anim-troca-entra > .modal, .anim-troca-saida > .modal{ animation:none !important; } }
