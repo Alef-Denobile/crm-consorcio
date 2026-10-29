@@ -13,6 +13,7 @@ const router = express.Router();
 const VERIFY_TOKEN = process.env.INSTAGRAM_VERIFY_TOKEN || '';
 const { GRAPH_API } = require('../utils/meta');
 const { exigirAssinaturaMeta } = require('../utils/webhookMeta');
+const { guardarComoPossivelLead } = require('../utils/triagemContatos');
 const { enviarPush, montarPayloadMensagem } = require('../utils/push');
 
 // tenta achar o valor de um campo do formulário, testando os nomes mais comuns
@@ -128,6 +129,20 @@ async function processarMensagensDiretas(entry) {
         if (perfilResp.ok) nomeContato = perfil.name || (perfil.username ? `@${perfil.username}` : nomeContato);
       } catch (e) { /* segue com o nome genérico se não conseguir buscar o perfil */ }
 
+      if (user.triagemContatos) {
+        // triagem ligada: contato novo NÃO vira lead sozinho — fica em "Possíveis leads" esperando a decisão do usuário
+        try {
+          const textoTriagem = evento.message.text || (evento.message.attachments && evento.message.attachments.length ? '📎 Anexo do Instagram' : '[mensagem sem texto]');
+          const { possivel, criado } = await guardarComoPossivelLead(user._id, {
+            canal: 'instagram', instagramId: remetenteId, nome: nomeContato === 'Novo contato (Instagram)' ? '' : nomeContato,
+            mensagem: { texto: textoTriagem, instagramMessageId: evento.message.mid, timestamp: evento.timestamp ? new Date(evento.timestamp) : new Date() },
+          });
+          if (criado) enviarPush(user._id, { titulo: 'Novo contato aguardando você', corpo: `${possivel.nome || 'Instagram'}: ${textoTriagem.slice(0, 80)} — decida em Importar/Exportar se vira lead.`, tag: 'triagem-contatos', url: '/index.html' });
+        } catch (err) {
+          console.error('[instagram] erro ao guardar contato novo na triagem:', err.message);
+        }
+        continue;
+      }
       card = await Card.create({
         userId: user._id,
         columnId: coluna._id,

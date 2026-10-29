@@ -354,6 +354,8 @@ let possiveisSelecionados = new Set(); // ids marcados na lista de possíveis le
 let possiveisDestinoId = ''; // gestor: pra quem vão os leads ('' = pra mim)
 let possiveisPassandoLote = false;
 let possiveisLoteMsg = null;
+let triagemContatosAtiva = false; // quando ligado, contato novo do WhatsApp/Instagram cai em "Possíveis leads" em vez de virar lead
+let triagemContatosSalvando = false;
 let importPlanilhaLinhas = [];
 let importPlanilhaColunas = [];
 let importPlanilhaNomeArquivo = '';

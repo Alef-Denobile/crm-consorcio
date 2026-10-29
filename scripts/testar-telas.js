@@ -534,16 +534,42 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.click('[data-action="nav"][data-page="tarefas"]').catch(() => {});
     await t.page.waitForTimeout(400);
     await t.page.click('[data-action="agenda-mes"][data-delta="1"]');
-    const rodando = await t.page.evaluate(() => document.getAnimations().filter((a) => a.effect && a.effect.target && a.effect.target.matches && a.effect.target.matches('.agenda-grid')).length);
+    const rodando = await t.page.evaluate(() => new Promise((ok) => { const ini = Date.now(); const ver = () => { const n = document.getAnimations().filter((a) => a.effect && a.effect.target && a.effect.target.matches && a.effect.target.matches('.agenda-grid')).length; if (n || Date.now() - ini > 600) ok(n); else setTimeout(ver, 15); }; ver(); }));
     checar('Agenda: avançar o mês anima a grade', rodando >= 1, rodando);
     await t.page.waitForTimeout(400);
     await t.page.click('[data-action="set-agenda-subtab"]:not(.active)').catch(() => {});
     await t.page.click('[data-action="nav"][data-page="dashboard"]');
     await t.page.waitForTimeout(500);
     await t.page.click('[data-action="set-dash-period"][data-period="ano"]');
-    const rodandoDash = await t.page.evaluate(() => document.getAnimations().filter((a) => a.effect && a.effect.target && a.effect.target.matches && a.effect.target.matches('.metric-grid')).length);
+    const rodandoDash = await t.page.evaluate(() => new Promise((ok) => { const ini = Date.now(); const ver = () => { const n = document.getAnimations().filter((a) => a.effect && a.effect.target && a.effect.target.matches && a.effect.target.matches('.metric-grid')).length; if (n || Date.now() - ini > 600) ok(n); else setTimeout(ver, 15); }; ver(); }));
     checar('Dashboard: trocar o período anima os cartões', rodandoDash >= 1, rodandoDash);
     checar('sem erro de JavaScript (troca)', t.erros.length === 0, t.erros[0]);
+    await t.ctx.close();
+
+
+    console.log('Triagem de contatos novos (Possíveis leads do WhatsApp/Instagram)');
+    t = await abrir(browser, url, 'gestor', { interceptar: (m, p) => {
+      if (m === 'GET' && p === '/api/possiveis-leads') return { status: 200, contentType: 'application/json', body: JSON.stringify({ triagemContatos: false, leads: [
+        { id: 'p1', nome: 'Carla WhatsApp', telefone: '5515999990000', origem: 'whatsapp', mensagens: [{ texto: 'Oi, quero saber de consórcio', timestamp: '2026-10-29T10:00:00Z' }, { texto: 'Tem carta de imóvel?', timestamp: '2026-10-29T10:01:00Z' }] },
+        { id: 'p2', nome: 'Planilha Joana', telefone: '1511', origem: 'planilha', tipoServico: 'auto', mensagens: [] },
+      ] }) };
+      if (m === 'PUT' && p === '/api/possiveis-leads/config') return { status: 200, contentType: 'application/json', body: JSON.stringify({ triagemContatos: true }) };
+      return null;
+    } });
+    await t.page.waitForTimeout(500);
+    checar('menu mostra a bolinha com 1 contato aguardando', ((await t.page.locator('[data-page="import-export"] .nav-contador').first().textContent()) || '').trim() === '1');
+    await t.page.click('[data-action="nav"][data-page="import-export"]');
+    await t.page.waitForTimeout(400);
+    checar('lista mostra a origem WhatsApp e a última mensagem', (await t.page.locator('.triagem-origem-whatsapp').count()) === 1 && ((await t.page.locator('.triagem-ultima').first().textContent()) || '').includes('Tem carta de imóvel'));
+    checar('contato da planilha continua mostrando o serviço', ((await t.page.locator('.leads-table tbody tr').nth(1).textContent()) || '').includes('auto'));
+    await t.page.click('[data-action="toggle-triagem-contatos"]');
+    await t.page.waitForTimeout(300);
+    checar('ligar a triagem salva no servidor e acende a chave', t.chamadas.some((c) => c.metodo === 'PUT' && c.caminho === '/api/possiveis-leads/config' && /"triagemContatos":true/.test(c.corpo || '')) && (await t.page.locator('[data-action="toggle-triagem-contatos"].on').count()) === 1);
+    await t.page.click('[data-action="completar-possivel-lead"][data-lead-id="p1"]');
+    await t.page.waitForTimeout(300);
+    checar('"Completar" mostra a conversa que o contato mandou', (await t.page.locator('.triagem-msg').count()) === 2);
+    if (process.env.CAPTURAS) await t.page.screenshot({ path: '/tmp/triagem.png' });
+    checar('sem erro de JavaScript (triagem)', t.erros.length === 0, t.erros[0]);
     await t.ctx.close();
 
     console.log('Sem equipe: convite recebido');

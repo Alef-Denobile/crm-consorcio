@@ -8,6 +8,9 @@ const Column = require('../models/Column');
 const { validarAtribuicao, colunaEquivalente, proximaOrdem } = require('../utils/atribuirLead');
 const { enviarPush } = require('../utils/push');
 const { gerarComissaoAutomaticaSeGanho } = require('../utils/comissaoAutomatica');
+const User = require('../models/User');
+const { normalizarTelefone } = require('../utils/telefone');
+const { levarMensagensParaOCard } = require('../utils/triagemContatos');
 
 const router = express.Router();
 router.use(auth); // todas as rotas de possível lead exigem login
@@ -15,10 +18,23 @@ router.use(auth); // todas as rotas de possível lead exigem login
 // GET /api/possiveis-leads -> lista os que ainda não foram completados/descartados
 router.get('/', async (req, res) => {
   try {
-    const leads = await PossivelLead.find({ userId: req.userId }).sort({ createdAt: -1 });
-    res.json({ leads: leads.map((l) => l.toJSON()) });
+    const leads = await PossivelLead.find({ userId: req.userId }).sort({ updatedAt: -1 });
+    const dono = await User.findById(req.userId).select('triagemContatos');
+    res.json({ leads: leads.map((l) => l.toJSON()), triagemContatos: !!(dono && dono.triagemContatos) });
   } catch (err) {
     res.status(500).json({ error: 'Erro ao carregar os possíveis leads.' });
+  }
+});
+
+// PUT /api/possiveis-leads/config -> liga/desliga a triagem de contatos novos (WhatsApp/Instagram).
+// Ligada: quem manda mensagem pela primeira vez não vira lead sozinho, cai aqui esperando a sua decisão.
+router.put('/config', async (req, res) => {
+  try {
+    const ativo = !!(req.body && req.body.triagemContatos);
+    await User.updateOne({ _id: req.userId }, { triagemContatos: ativo });
+    res.json({ triagemContatos: ativo });
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao salvar a configuração.' });
   }
 });
 
@@ -37,6 +53,7 @@ router.post('/importar', async (req, res) => {
         nome: (l.nome || '').toString().trim(),
         telefone: (l.telefone || '').toString().trim(),
         tipoServico: (l.tipoServico || '').toString().trim(),
+        telefoneNormalizado: normalizarTelefone(l.telefone),
         origemArquivo: origemArquivo || '',
       }));
     if (!documentos.length) return res.status(400).json({ error: 'Nenhuma linha válida encontrada.' });
@@ -87,6 +104,7 @@ router.post('/promover-lote', async (req, res) => {
         valor: 0,
         temperatura: 'morno',
         obs: p.tipoServico ? `Serviço de interesse: ${p.tipoServico}` : '',
+        instagramId: p.instagramId || null,
         mes: '', // mês de venda só é preenchido quando a venda acontece
         mesInicioContato: hoje, // dia em que o lead entrou no Pipeline
         ordem,
@@ -94,6 +112,7 @@ router.post('/promover-lote', async (req, res) => {
       });
       ordem += 1000;
       criados.push(card);
+      await levarMensagensParaOCard(p, card); // a conversa que o contato já mandou vira o histórico do cliente
     }
     await PossivelLead.deleteMany({ _id: { $in: possiveis.map((p) => p._id) } });
     if (alvoInfo) {
@@ -128,9 +147,11 @@ router.post('/:id/promover', async (req, res) => {
       valor: valor || 0,
       temperatura: temperatura || 'morno',
       obs: obs || '',
+      instagramId: possivel.instagramId || null,
       mes: '', // mês de venda só é preenchido quando a venda acontece
       mesInicioContato: hojeBR(), // dia em que o lead entrou no Pipeline
     });
+    await levarMensagensParaOCard(possivel, card); // a conversa que o contato já mandou vira o histórico do cliente
     await PossivelLead.findByIdAndDelete(possivel._id);
     res.status(201).json(card.toJSON());
     gerarComissaoAutomaticaSeGanho(req.userId, card, columnId);

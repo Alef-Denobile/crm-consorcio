@@ -60,6 +60,8 @@ const userSchema = new mongoose.Schema(
     whatsappBusiness: { type: whatsappBusinessSchema, default: () => ({}) },
     instagramLeads: { type: instagramLeadsSchema, default: () => ({}) },
     menuTriagem: { type: menuTriagemSchema, default: () => ({ opcoes: [] }) },
+    // quando ligado, quem manda mensagem pela primeira vez (WhatsApp/Instagram) NÃO vira lead sozinho: cai em "Possíveis leads" esperando sua decisão
+    triagemContatos: { type: Boolean, default: false },
     equipeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipe', default: null },
     papelEquipe: { type: String, enum: ['supervisor', 'membro'], default: 'membro' },
     // outras equipes da pessoa (a que está aberta fica nos campos acima): ver utils/equipesDoUsuario.js

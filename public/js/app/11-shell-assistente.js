@@ -408,7 +408,7 @@ function renderSidebar(){
       </div>
       <nav class="sidebar-nav">
         ${NAV.filter(([key])=>!atuandoComo || PAGINAS_ATUANDO_COMO.includes(key)).map(([key,label,icon])=>`
-          <button class="nav-item ${currentPage===key?'active':''}" data-action="nav" data-page="${key}">${icon}<span>${label}</span></button>
+          <button class="nav-item ${currentPage===key?'active':''}" data-action="nav" data-page="${key}">${icon}<span>${label}</span>${(key==='import-export' && contatosAguardando()>0) ? `<span class="nav-contador" title="Contatos novos esperando sua decisão">${contatosAguardando()}</span>` : ''}</button>
         `).join('')}
       </nav>
       <div class="nav-reordenar-wrap">

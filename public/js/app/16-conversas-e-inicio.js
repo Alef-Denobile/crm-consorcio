@@ -908,6 +908,10 @@ function renderImportExportPage(){
 
     <div class="settings-page-section">
       <h3>2. Possíveis leads (${possiveisLeads.length})</h3>
+      <label class="settings-toggle-row triagem-toggle">
+        <span><b>Perguntar antes de criar lead</b><br><small>Quem mandar mensagem pela primeira vez no WhatsApp ou Instagram não vira lead sozinho: aparece aqui para você decidir (a conversa vai junto ao aceitar).</small></span>
+        <span class="switch ${triagemContatosAtiva?'on':''}" role="switch" aria-checked="${triagemContatosAtiva?'true':'false'}" tabindex="0" aria-label="Perguntar antes de criar lead" data-action="toggle-triagem-contatos"><span class="switch-knob"></span></span>
+      </label>
       <p class="settings-page-note">Complete as informações de cada um, ou passe vários de uma vez para os Leads. O início de contato fica com a data de hoje e o mês de venda em branco.</p>
       ${(possiveisLeadsCarregados && possiveisLeads.length) ? `
         <div class="settings-btn-row" style="margin-bottom:10px; align-items:center; flex-wrap:wrap;">
@@ -919,14 +923,14 @@ function renderImportExportPage(){
       ${!possiveisLeadsCarregados ? `<p class="settings-page-note">Carregando…</p>` : (possiveisLeads.length ? `
         <div class="leads-table-wrap">
           <table class="leads-table">
-            <thead><tr><th style="width:34px;"><input type="checkbox" data-action="possiveis-select-all" ${(possiveisLeads.length && possiveisLeads.every(l=>possiveisSelecionados.has(l.id)))?'checked':''} /></th><th>Nome</th><th>Telefone</th><th>Serviço desejado</th><th>Ações</th></tr></thead>
+            <thead><tr><th style="width:34px;"><input type="checkbox" data-action="possiveis-select-all" ${(possiveisLeads.length && possiveisLeads.every(l=>possiveisSelecionados.has(l.id)))?'checked':''} /></th><th>Nome</th><th>Telefone</th><th>Origem / mensagem</th><th>Ações</th></tr></thead>
             <tbody>
               ${possiveisLeads.map(l=>`
                 <tr>
                   <td><input type="checkbox" data-action="possiveis-select-um" data-lead-id="${l.id}" ${possiveisSelecionados.has(l.id)?'checked':''} /></td>
-                  <td>${esc(l.nome)||'—'}</td>
+                  <td>${esc(l.nome)||(l.origem==='instagram'?'Contato do Instagram':'—')}</td>
                   <td>${esc(l.telefone)||'—'}</td>
-                  <td>${esc(l.tipoServico)||'—'}</td>
+                  <td>${l.origem && l.origem!=='planilha' ? `<span class="triagem-origem triagem-origem-${l.origem}">${ROTULO_ORIGEM_POSSIVEL[l.origem]}</span>${ultimaMensagemDoPossivel(l) ? `<div class="triagem-ultima">${esc(ultimaMensagemDoPossivel(l).slice(0,90))}${(l.mensagens||[]).length>1?` <small>(+${l.mensagens.length-1})</small>`:''}</div>` : ''}` : (esc(l.tipoServico)||'—')}</td>
                   <td>
                     <button class="btn-outline" data-action="completar-possivel-lead" data-lead-id="${l.id}">Completar</button>
                     <button class="icon-btn" data-action="descartar-possivel-lead" data-lead-id="${l.id}" title="Descartar">${ICON_TRASH}</button>

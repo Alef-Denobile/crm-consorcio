@@ -79,6 +79,7 @@ const { provedorDe, enviarTexto: enviarMensagemGraph, enviarTemplate: enviarTemp
 const { motivoAssinaturaYcloud, normalizarEventoYcloud } = require('../utils/whatsappYcloud');
 const crypto = require('crypto');
 const { equipeEmComum } = require('../utils/equipesDoUsuario');
+const { guardarComoPossivelLead } = require('../utils/triagemContatos');
 
 // Gera a resposta do agente a partir do histórico recente da conversa.
 async function gerarRespostaAgente(card, mensagensRecentes, novaMensagem) {
@@ -327,6 +328,22 @@ async function processarEventoDeMensagensSemFila(value) {
       || (await Card.findOne({ atribuidoPorId: user._id, telefoneNormalizado: mesmoNumero }));
     let eraContatoNovo = false;
 
+    if (!card && user.triagemContatos) {
+      // triagem ligada: número novo NÃO vira lead sozinho — fica em "Possíveis leads" esperando a decisão do usuário
+      try {
+        const nomePerfil = value.contacts && value.contacts[0] && value.contacts[0].profile && value.contacts[0].profile.name;
+        const TIPOS = { image: '📷 Foto', audio: '🎤 Áudio', document: '📄 Documento', video: '🎥 Vídeo' };
+        const textoTriagem = (msg.text && msg.text.body) || TIPOS[msg.type] || '[mensagem em formato não suportado]';
+        const { possivel, criado } = await guardarComoPossivelLead(user._id, {
+          canal: 'whatsapp', telefone: msg.from, nome: nomePerfil || '',
+          mensagem: { texto: textoTriagem, whatsappMessageId: msg.id, midiaTipo: TIPOS[msg.type] ? msg.type : null, timestamp: msg.timestamp ? new Date(parseInt(msg.timestamp, 10) * 1000) : new Date() },
+        });
+        if (criado) enviarPush(user._id, { titulo: 'Novo contato aguardando você', corpo: `${possivel.nome || msg.from}: ${textoTriagem.slice(0, 80)} — decida em Importar/Exportar se vira lead.`, tag: 'triagem-contatos', url: '/index.html' });
+      } catch (err) {
+        console.error('[whatsapp] erro ao guardar contato novo na triagem:', err.message);
+      }
+      continue;
+    }
     if (!card) {
       // mensagem de um número que ainda não existe no funil — cria um lead novo automaticamente
       // (se o rodízio estiver ligado, o lead já nasce na conta da próxima pessoa da vez)

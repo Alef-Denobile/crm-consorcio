@@ -113,6 +113,11 @@ function bindEventosAutomacoesEImportar(){
   if(confirmarImportBtn) confirmarImportBtn.addEventListener('click', confirmarImportPlanilha);
   const possiveisDestinoSel = document.getElementById('possiveis-destino');
   if(possiveisDestinoSel) possiveisDestinoSel.addEventListener('change', (e)=>{ possiveisDestinoId = e.target.value; });
+  const triagemSw = app.querySelector('[data-action="toggle-triagem-contatos"]');
+  if(triagemSw){
+    triagemSw.addEventListener('click', (e)=>{ e.preventDefault(); alternarTriagemContatos(); });
+    triagemSw.addEventListener('keydown', (e)=>{ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); alternarTriagemContatos(); } });
+  }
   const passarTodosBtn = app.querySelector('[data-action="possiveis-passar-todos"]');
   if(passarTodosBtn) passarTodosBtn.addEventListener('click', ()=>{
     const qtd = possiveisLeads.length;

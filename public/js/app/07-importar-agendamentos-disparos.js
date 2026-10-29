@@ -103,10 +103,32 @@ async function confirmarImportPlanilha(){
   importandoPlanilha = false;
   renderApp();
 }
+async function alternarTriagemContatos(){
+  if(triagemContatosSalvando) return;
+  const novo = !triagemContatosAtiva;
+  triagemContatosAtiva = novo; triagemContatosSalvando = true; renderApp();
+  try{
+    const r = await apiRequest('PUT', '/possiveis-leads/config', { triagemContatos: novo });
+    triagemContatosAtiva = !!r.triagemContatos;
+  }catch(e){
+    triagemContatosAtiva = !novo;
+    possiveisLoteMsg = { tipo:'erro', texto: (e && e.message) || 'Não foi possível salvar essa opção.' };
+  }
+  triagemContatosSalvando = false;
+  renderApp();
+}
+// quantos contatos novos (WhatsApp/Instagram) estão esperando a decisão — vira a bolinha no menu
+function contatosAguardando(){ return possiveisLeads.filter(l=> l.origem === 'whatsapp' || l.origem === 'instagram').length; }
+const ROTULO_ORIGEM_POSSIVEL = { whatsapp:'WhatsApp', instagram:'Instagram', planilha:'Planilha' };
+function ultimaMensagemDoPossivel(l){
+  const m = l.mensagens && l.mensagens.length ? l.mensagens[l.mensagens.length-1] : null;
+  return m ? m.texto : '';
+}
 async function loadPossiveisLeads(){
   try{
     const data = await apiRequest('GET', '/possiveis-leads');
     possiveisLeads = data.leads || [];
+    triagemContatosAtiva = !!data.triagemContatos;
   }catch(e){
     possiveisLeads = [];
   }
@@ -159,7 +181,7 @@ function abrirCompletarLead(id){
   if(!lead) return;
   completarLeadModalForm = {
     possivelLeadId: lead.id, nome: lead.nome||'', telefone: lead.telefone||'',
-    tipoServico: lead.tipoServico||'', columnId: ((board.columns.find(c=>c.tipo==='aberto')||board.columns[0]||{}).id)||'',
+    tipoServico: lead.tipoServico||'', origem: lead.origem||'planilha', mensagens: lead.mensagens||[], columnId: ((board.columns.find(c=>c.tipo==='aberto')||board.columns[0]||{}).id)||'',
     valor: 0, temperatura:'morno',
   };
   completarLeadMsg = null;
@@ -211,6 +233,11 @@ function renderCompletarLeadModal(){
           <div class="field"><label>Nome</label><input type="text" id="cl-lead-nome" value="${esc(f.nome)}" /></div>
           <div class="field"><label>Telefone</label><input type="text" id="cl-lead-telefone" value="${esc(f.telefone)}" /></div>
           ${f.tipoServico ? `<p class="settings-page-note">Serviço de interesse (da planilha): <b>${esc(f.tipoServico)}</b></p>` : ''}
+          ${(f.mensagens && f.mensagens.length) ? `
+            <div class="triagem-conversa">
+              <div class="triagem-conversa-titulo">O que ${esc(ROTULO_ORIGEM_POSSIVEL[f.origem]||'o contato')} mandou (vai para o histórico do cliente)</div>
+              ${f.mensagens.slice(-5).map(m=>`<div class="triagem-msg"><span>${esc(m.texto)}</span><small>${formatDateHora(m.timestamp)}</small></div>`).join('')}
+            </div>` : ''}
           <div class="field">
             <label>Coluna de destino</label>
             <select id="cl-lead-coluna">

@@ -1274,3 +1274,16 @@ main.pipeline-main{ padding-top:16px; }
 .ps-novo-botoes button{ min-height:36px; padding:0 14px; }
 .card-produto{ font-size:calc(12px * var(--fs,1)); color:var(--ink-soft); margin:4px 0 2px; overflow-wrap:anywhere; }
 .card-produto-nome{ font-weight:600; }
+
+/* ---------- Triagem de contatos novos (Possíveis leads) ---------- */
+.nav-contador{ margin-left:auto; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:#E5484D; color:#fff; font-size:calc(11px * var(--fs,1)); font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+.triagem-toggle{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 0; margin-bottom:6px; border-bottom:1px solid var(--line); cursor:pointer; }
+.triagem-toggle small{ color:var(--ink-soft); font-size:calc(12px * var(--fs,1)); line-height:1.4; }
+.triagem-origem{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:calc(11px * var(--fs,1)); font-weight:700; border:1px solid var(--line); color:var(--ink); }
+.triagem-origem-whatsapp{ border-color:#25D366; color:#128C4B; }
+.triagem-origem-instagram{ border-color:#C13584; color:#C13584; }
+.triagem-ultima{ margin-top:4px; font-size:calc(12px * var(--fs,1)); color:var(--ink-soft); overflow-wrap:anywhere; }
+.triagem-conversa{ border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:6px 0 12px; background:var(--paper); }
+.triagem-conversa-titulo{ font-size:calc(11.5px * var(--fs,1)); color:var(--ink-soft); margin-bottom:6px; }
+.triagem-msg{ display:flex; justify-content:space-between; gap:10px; padding:4px 0; font-size:calc(13px * var(--fs,1)); }
+.triagem-msg small{ color:var(--ink-soft); white-space:nowrap; font-size:calc(11px * var(--fs,1)); }

@@ -533,6 +533,9 @@ function goToPage(page){
   if(page === 'equipe'){
     equipeMsg = null;
   }
+  if(page === 'import-export'){
+    loadPossiveisLeads(); // pega os contatos novos que chegaram pelo WhatsApp/Instagram enquanto você estava em outra tela
+  }
   if(page === 'comissoes'){
     loadContratos(); // recarrega sempre, pra pegar comissões que o Pipeline gerou automaticamente
     if(!regrasComissaoLoaded) loadRegrasComissao();
