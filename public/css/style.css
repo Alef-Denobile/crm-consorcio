@@ -1187,3 +1187,56 @@ main.pipeline-main{ padding-top:16px; }
 .rel-visao-btn{ min-height:40px; padding:0 18px; border:none; border-radius:8px; background:none; color:var(--ink-soft); font-family:inherit; font-size:calc(13px * var(--fs,1)); font-weight:600; cursor:pointer; }
 .rel-visao-btn.active{ background:var(--accent); color:#fff; }
 [data-theme="dark"] .rel-visao-btn.active{ background:var(--ink); color:var(--bg); }
+
+/* ================================================================
+   Animações de transição (ver js/app/18-animacoes.js)
+================================================================ */
+/* troca de tela / aba / etapa: fade + deslize */
+@keyframes tela-sobe{ from{ opacity:0; transform:translateY(10px); } to{ opacity:1; transform:none; } }
+@keyframes tela-dir{ from{ opacity:0; transform:translateX(28px); } to{ opacity:1; transform:none; } }
+@keyframes tela-esq{ from{ opacity:0; transform:translateX(-28px); } to{ opacity:1; transform:none; } }
+.tela-entra-sobe{ animation:tela-sobe .28s ease-out backwards; }
+.tela-entra-dir{ animation:tela-dir .28s ease-out backwards; }
+.tela-entra-esq{ animation:tela-esq .28s ease-out backwards; }
+/* cartões, painéis e colunas entram um depois do outro (o atraso vem do JavaScript) */
+@keyframes item-entra{ from{ opacity:0; transform:translateY(12px); } to{ opacity:1; transform:none; } }
+.item-entra{ animation:item-entra .32s ease-out backwards; }
+
+/* janelas (modais), confirmações e menus flutuantes: entram com fade e sobem um pouco; ao fechar, somem com fade */
+@keyframes janela-fundo-entra{ from{ opacity:0; } to{ opacity:1; } }
+@keyframes janela-entra{ from{ opacity:0; transform:translateY(14px) scale(.98); } to{ opacity:1; transform:none; } }
+@keyframes janela-sai{ to{ opacity:0; } }
+@keyframes janela-corpo-sai{ to{ opacity:0; transform:translateY(10px) scale(.98); } }
+.overlay.anim-entra{ animation:janela-fundo-entra .2s ease-out; }
+.overlay.anim-entra > .modal, .overlay.anim-entra > .confirm-box{ animation:janela-entra .24s cubic-bezier(.2,.8,.3,1); }
+.overlay.anim-saida{ animation:janela-sai .18s ease-in forwards; }
+.overlay.anim-saida > .modal, .overlay.anim-saida > .confirm-box{ animation:janela-corpo-sai .18s ease-in forwards; }
+.card-move-menu.anim-entra{ animation:popup-entra .16s ease-out; }
+.card-move-menu.anim-saida{ animation:janela-sai .14s ease-in forwards; }
+@media (max-width:768px){
+  @keyframes janela-entra-celular{ from{ opacity:0; transform:translateY(36px); } to{ opacity:1; transform:none; } }
+  .overlay.anim-entra > .modal{ animation:janela-entra-celular .28s cubic-bezier(.2,.8,.3,1); }
+}
+
+/* menus que abrem dentro da página (notificações, data, coluna, ordenar, insights, listas de escolha) */
+@keyframes popup-entra{ from{ opacity:0; transform:translateY(-6px) scale(.98); } to{ opacity:1; transform:none; } }
+.anim-popup-entra{ animation:popup-entra .16s ease-out; transform-origin:top center; }
+.anim-saida:not(.overlay){ animation:janela-sai .14s ease-in forwards; }
+
+/* botões e controles: mudança de cor suave, afundam um pouco ao tocar */
+.btn-save, .btn-outline, .btn-primary, .btn-danger, .tab-btn, .icon-btn, .nav-item, .etapa-chip-mobile, .config-sidebar-item,
+.opcao-membro, .rel-visao-btn, .a11y-tamanho, .bottom-nav-item, .fab-novo-lead, .col-menu-item, .lead-card-mobile, .equipe-cartao{
+  transition:background-color .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .12s ease, filter .18s ease, opacity .18s ease;
+}
+.btn-save:active, .btn-outline:active, .btn-primary:active, .btn-danger:active, .tab-btn:active, .etapa-chip-mobile:active,
+.opcao-membro:active, .rel-visao-btn:active, .fab-novo-lead:active, .lead-card-mobile:active, .equipe-cartao:active{ transform:scale(.97); }
+.switch .switch-knob{ transition:left .2s cubic-bezier(.4,0,.2,1); }
+.switch{ transition:background .2s ease; }
+.dash-panel-seta, .auditoria-toggle-seta, .tipo-pessoa-select-seta{ transition:transform .25s ease; }
+.metric-card, .dash-panel, .column, .card, .modal, .sidebar, .main-area, body{ transition-property:background-color, border-color, color; transition-duration:.25s; transition-timing-function:ease; }
+/* conteúdo que aparece ao abrir "Insights da IA" etc. já usa .anim-popup-entra */
+.error-banner, .mensagem-salvo{ animation-timing-function:ease-out; }
+
+@media (prefers-reduced-motion: reduce){
+  .tela-entra-sobe, .tela-entra-dir, .tela-entra-esq, .item-entra, .anim-popup-entra, .anim-entra, .anim-entra > .modal, .anim-saida{ animation:none !important; }
+}

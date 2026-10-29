@@ -157,6 +157,23 @@ async function abrir(browser, url, cenario, extra = {}) {
     await t.page.waitForTimeout(250);
     checar('pipeline: filtro de ordenar fica na linha das abas', (await t.page.locator('.tabs .pipeline-ordenar-row').count()) === 1);
 
+    console.log('Animações de transição');
+    await t.page.click('[data-action="nav"][data-page="dashboard"]');
+    await t.page.waitForTimeout(500);
+    await t.page.click('[data-action="nav"][data-page="leads"]');
+    await t.page.waitForTimeout(40);
+    checar('animação: trocar de tela faz o conteúdo entrar com fade/deslize', (await t.page.locator('.main-area > .tela-entra').count()) >= 1);
+    await t.page.waitForTimeout(600);
+    checar('animação: a classe de entrada é removida ao terminar', (await t.page.locator('.tela-entra').count()) === 0);
+    await t.page.click('[data-action="open-new-lead"]').catch(() => {});
+    await t.page.waitForTimeout(40);
+    checar('animação: janela abre com fade (classe anim-entra)', (await t.page.locator('#modal-root .overlay.anim-entra').count()) === 1);
+    await t.page.waitForTimeout(400);
+    await t.page.evaluate(() => { document.getElementById('modal-root').innerHTML = ''; });
+    await t.page.waitForTimeout(40);
+    checar('animação: ao fechar, uma cópia some com fade', (await t.page.locator('body > .overlay.anim-saida').count()) === 1);
+    await t.page.waitForTimeout(400);
+    checar('animação: a cópia que some é removida depois', (await t.page.locator('.anim-saida').count()) === 0);
     console.log('Equipe: lista de equipes (várias equipes)');
     await t.page.click('[data-action="nav"][data-page="equipe"]').catch(() => {});
     await t.page.waitForTimeout(400);

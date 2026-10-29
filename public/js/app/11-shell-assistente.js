@@ -216,6 +216,7 @@ function renderBarraInferior(){
 }
 function renderApp(){
   const app = document.getElementById('app');
+  if(typeof animarAntesDeRenderizar === 'function') animarAntesDeRenderizar();
   if(!loaded){ app.innerHTML = '<div class="loading">Carregando painel…</div>'; return; }
 
   let pageHtml = '';
@@ -284,6 +285,7 @@ function renderApp(){
   `;
 
   bindAppEvents();
+  if(typeof animarDepoisDeRenderizar === 'function') animarDepoisDeRenderizar();
 }
 
 const NAV_COMPLETO = [
